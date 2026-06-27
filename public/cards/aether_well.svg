@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 160" width="320" height="160">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#10302e"/><stop offset="1" stop-color="#0a1a22"/>
+    </linearGradient>
+    <radialGradient id="vig" cx="0.5" cy="0.42" r="0.75">
+      <stop offset="0.55" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.45"/>
+    </radialGradient>
+    <linearGradient id="acc" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6fd0c4"/><stop offset="1" stop-color="#f3e7c4"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="160" fill="url(#bg)"/>
+  <g fill="none" stroke="#6fd0c4" stroke-opacity="0.18">
+    <circle cx="160" cy="82" r="62"/><circle cx="160" cy="82" r="78"/>
+  </g>
+  
+    <polygon points="160,8 178,150 142,150" fill="#8fe6da" opacity="0.25"/>
+    <ellipse cx="160" cy="120" rx="54" ry="14" fill="none" stroke="url(#acc)" stroke-width="5"/>
+    <ellipse cx="160" cy="120" rx="34" ry="9" fill="#0a1a22"/>
+    <path d="M118 120 L128 150 H192 L202 120" fill="none" stroke="url(#acc)" stroke-width="5" stroke-linejoin="round"/>
+    <circle cx="160" cy="46" r="6" fill="#f3e7c4"/><circle cx="138" cy="64" r="3" fill="#f3e7c4"/><circle cx="184" cy="60" r="3" fill="#f3e7c4"/>
+  <rect width="320" height="160" fill="url(#vig)"/>
+  <rect x="4" y="4" width="312" height="152" rx="8" fill="none" stroke="#d9b65a" stroke-opacity="0.5" stroke-width="2"/>
+</svg>
