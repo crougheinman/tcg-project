@@ -24,6 +24,8 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 1,
     keywords: ['haste'],
     text: 'Haste.',
+    flavor:
+      'Born from the first sparks of a campfire, these mischievous sprites love a quick race before they fizzle out.',
   },
   swift_lancer: {
     id: 'swift_lancer',
@@ -34,6 +36,7 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 1,
     keywords: ['haste'],
     text: 'Haste.',
+    flavor: 'First to the charge, and gone before the dust settles.',
   },
   stoneback_cub: {
     id: 'stoneback_cub',
@@ -42,6 +45,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 2,
     power: 2,
     toughness: 2,
+    flavor: 'Its hide remembers every mountain it has slept against.',
   },
   sky_talon: {
     id: 'sky_talon',
@@ -52,6 +56,7 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 2,
     keywords: ['flying'],
     text: 'Flying.',
+    flavor: 'It hunts the wind itself.',
   },
   thornwood_brute: {
     id: 'thornwood_brute',
@@ -60,6 +65,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 3,
     power: 3,
     toughness: 3,
+    flavor: 'The forest walks when the forest is angry.',
   },
   granite_sentinel: {
     id: 'granite_sentinel',
@@ -68,6 +74,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 4,
     power: 3,
     toughness: 5,
+    flavor: 'Patient as the mountain, immovable as its roots.',
   },
   storm_drake: {
     id: 'storm_drake',
@@ -78,6 +85,7 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 4,
     keywords: ['flying'],
     text: 'Flying.',
+    flavor: 'Thunder is merely the sound of its wings.',
   },
   dread_maw: {
     id: 'dread_maw',
@@ -86,6 +94,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 5,
     power: 5,
     toughness: 4,
+    flavor: 'It does not hunt. It simply arrives, and the hunting is done.',
   },
 
   // --- Sorceries ---
@@ -123,11 +132,11 @@ export const CARDS: Record<string, CardDef> = {
   },
 };
 
-// Auto-wire art to /public/cards/<id>.svg. A missing file falls back to the
-// plain text frame (CardView hides broken images). Set `art` on a card above to
-// point somewhere else (e.g. a PNG).
+// Auto-wire art to /public/cards/<id>.png. CardView falls back to <id>.svg if the
+// PNG is missing, then to the plain text frame. Drop a PNG in to use it — no code
+// change needed. Set `art` on a card above to override entirely.
 for (const id of Object.keys(CARDS)) {
-  if (!CARDS[id].art) CARDS[id].art = `/cards/${id}.svg`;
+  if (!CARDS[id].art) CARDS[id].art = `/cards/${id}.png`;
 }
 
 export function getDef(id: string): CardDef {
