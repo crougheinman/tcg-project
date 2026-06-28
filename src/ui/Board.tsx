@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
+import { AnimatePresence, LayoutGroup, motion, useDragControls } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { getDef } from '../cards/cards';
 import { availableMana, canAttack, isCreature, isLand } from '../engine/rules';
@@ -9,6 +9,7 @@ import { CardView } from './CardView';
 import { CardPreview } from './CardPreview';
 import { HoverCtx } from './hover';
 import { PhaseBar } from './PhaseBar';
+import { Rulebook } from './Rulebook';
 import type { Burst } from './Vfx';
 
 // three.js is heavy — split it into its own chunk, loaded only in-game.
@@ -66,8 +67,43 @@ export function Board() {
         if (isCreature(c) && c.damage > (beforeDmg.get(c.iid) ?? 0))
           spawnAt(`[data-iid="${c.iid}"]`, '#ff5a4a', 18);
     if (add.length) setBursts((b) => [...b, ...add]);
+
+    // Combat strike animations: lunge each attacker toward its target.
+    if (before.phase === 'combat_block' && game.phase === 'end' && before.combat) {
+      const blockerByAtk: Record<string, string> = {};
+      for (const [blk, atk] of Object.entries(before.combat.blocks)) blockerByAtk[atk] = blk;
+      let faceHit = false;
+      for (const atk of before.combat.attackers) {
+        const atkEl = stackEl(atk);
+        const blk = blockerByAtk[atk];
+        if (blk) {
+          lungeTo(atkEl, stackEl(blk)); // clash with blocker
+          shakeEl(stackEl(blk));
+        } else {
+          faceHit = true;
+          lungeTo(atkEl, document.querySelector(`[data-player="${opponentOf(before.active)}"]`));
+        }
+      }
+      if (faceHit) {
+        document
+          .querySelector('.board')
+          ?.animate(
+            [
+              { transform: 'translateY(0)' },
+              { transform: 'translateY(6px)' },
+              { transform: 'translateY(-4px)' },
+              { transform: 'translateY(0)' },
+            ],
+            { duration: 260, easing: 'ease-out' },
+          );
+        setFaceFlash((f) => f + 1);
+      }
+    }
   }, [game]);
   const removeBurst = (id: number) => setBursts((b) => b.filter((x) => x.id !== id));
+
+  const [faceFlash, setFaceFlash] = useState(0);
+  const dragBounds = useRef<HTMLDivElement>(null);
 
   // Announce each new log entry as a transient center banner.
   const [announce, setAnnounce] = useState<{ id: number; text: string } | null>(null);
@@ -247,6 +283,9 @@ export function Board() {
         </button>
         <PhaseBar game={game} myId={myId} />
         {mode === 'pvp' && <span className="role">You are {myId}</span>}
+        <div className="topbar-right">
+          <Rulebook label={false} />
+        </div>
       </header>
 
       {/* Opponent */}
@@ -316,7 +355,10 @@ export function Board() {
         )}
       </AnimatePresence>
 
-      <ActionLog log={game.log} myId={myId} />
+      <div ref={dragBounds} className="drag-layer" />
+      <ActionLog log={game.log} myId={myId} boundsRef={dragBounds} />
+
+      {faceFlash > 0 && <div key={faceFlash} className="face-flash" />}
 
       {error && (
         <div className="toast" onClick={clearError}>
@@ -397,6 +439,39 @@ function hpColor(pct: number): string {
   return '#e0573e';
 }
 
+// --- combat strike animation helpers (imperative, conflict-free with framer) ---
+function stackEl(iid: string): HTMLElement | null {
+  return document.querySelector(`[data-iid="${iid}"]`)?.closest('.stack') ?? null;
+}
+function lungeTo(from: HTMLElement | null, to: Element | null) {
+  if (!from || !to) return;
+  const a = from.getBoundingClientRect();
+  const b = to.getBoundingClientRect();
+  const dx = b.left + b.width / 2 - (a.left + a.width / 2);
+  const dy = b.top + b.height / 2 - (a.top + a.height / 2);
+  from.animate(
+    [
+      { transform: 'translate(0,0)' },
+      { transform: `translate(${dx * 0.45}px, ${dy * 0.45}px)`, offset: 0.4 },
+      { transform: 'translate(0,0)' },
+    ],
+    { duration: 360, easing: 'cubic-bezier(.3,.85,.3,1)' },
+  );
+}
+function shakeEl(el: HTMLElement | null) {
+  if (!el) return;
+  el.animate(
+    [
+      { transform: 'translate(0,0)' },
+      { transform: 'translate(-4px,2px)' },
+      { transform: 'translate(4px,-2px)' },
+      { transform: 'translate(-2px,1px)' },
+      { transform: 'translate(0,0)' },
+    ],
+    { duration: 260, easing: 'ease-out' },
+  );
+}
+
 // Rewrite engine log lines (which use 'A'/'B') from the local player's view.
 function humanize(s: string, myId: PlayerId): string {
   const opp = opponentOf(myId);
@@ -410,11 +485,37 @@ function humanize(s: string, myId: PlayerId): string {
     .replace(/\bYou (plays|casts|attacks|blocks|decks)\b/g, (_m, v) => 'You ' + v.slice(0, -1));
 }
 
-function ActionLog({ log, myId }: { log: string[]; myId: PlayerId }) {
+function ActionLog({
+  log,
+  myId,
+  boundsRef,
+}: {
+  log: string[];
+  myId: PlayerId;
+  boundsRef: React.RefObject<HTMLDivElement>;
+}) {
+  const controls = useDragControls();
   const recent = log.slice(-40).reverse(); // newest first
   return (
-    <div className="action-log">
-      <div className="action-log-head">Activity</div>
+    <motion.div
+      className="action-log"
+      drag
+      dragListener={false}
+      dragControls={controls}
+      dragConstraints={boundsRef}
+      dragMomentum={false}
+      dragElastic={0.12}
+    >
+      <div
+        className="action-log-head"
+        onPointerDown={(e) => controls.start(e)}
+        style={{ touchAction: 'none' }}
+      >
+        <span className="grip" aria-hidden>
+          ⠿
+        </span>
+        Activity
+      </div>
       <div className="action-log-body">
         {recent.map((line, i) => (
           <div key={log.length - i} className="log-line">
@@ -422,6 +523,6 @@ function ActionLog({ log, myId }: { log: string[]; myId: PlayerId }) {
           </div>
         ))}
       </div>
-    </div>
+    </motion.div>
   );
 }

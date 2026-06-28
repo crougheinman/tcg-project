@@ -110,6 +110,8 @@ input {
 }
 .topbar { display: flex; align-items: center; gap: 16px; }
 .role { margin-left: auto; color: var(--muted); font-size: 13px; }
+.topbar-right { margin-left: auto; }
+.topbar-right ~ .topbar-right, .role + .topbar-right { margin-left: 8px; }
 
 .phasebar { display: flex; gap: 16px; align-items: center; font-size: 14px; }
 .phasebar .turn { color: var(--muted); }
@@ -378,9 +380,13 @@ input {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); overflow: hidden;
 }
 .action-log-head {
+  display: flex; align-items: center; gap: 6px; cursor: grab;
   font-family: 'Cinzel', serif; font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
   color: var(--gold); padding: 6px 10px; border-bottom: 1px solid #2c3645;
 }
+.action-log-head:active { cursor: grabbing; }
+.action-log-head .grip { color: #6c7787; font-size: 13px; letter-spacing: -2px; }
+.drag-layer { position: fixed; inset: 0; z-index: 54; pointer-events: none; }
 .action-log-body { overflow-y: auto; padding: 6px 10px; display: flex; flex-direction: column; gap: 3px; }
 .log-line { font-size: 12px; line-height: 1.3; color: #c2c9d4; }
 .log-line:first-child { color: #fff; font-weight: 600; } /* newest */
@@ -388,6 +394,72 @@ input {
 @media (max-width: 720px) {
   .action-log { width: 150px; max-height: 130px; font-size: 11px; }
   .announce { font-size: 15px; padding: 8px 16px; }
+}
+
+/* ---- rulebook (reusable book button + animated scroll) ---- */
+.book-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: linear-gradient(180deg, #f3e6c6, #e2cda0);
+  color: var(--inkbrown); border: 1.5px solid var(--frame-dk);
+  border-radius: 8px; padding: 6px 12px; font-family: 'Cinzel', serif; font-weight: 700;
+  box-shadow: 0 0 0 1px var(--frame), 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.book-btn:hover { border-color: var(--gold); }
+.book-ico { font-size: 16px; }
+
+.book-backdrop {
+  position: fixed; inset: 0; z-index: 120;
+  background: rgba(8, 10, 14, 0.72);
+  display: grid; place-items: start center; padding: 5vh 12px;
+}
+.scroll {
+  width: min(640px, 94vw); max-height: 88vh; display: flex; flex-direction: column;
+  filter: drop-shadow(0 24px 50px rgba(0, 0, 0, 0.6));
+}
+.scroll-rod {
+  position: relative; height: 18px; flex: none; border-radius: 9px;
+  background: linear-gradient(180deg, #7a542b, #3a2614);
+  box-shadow: inset 0 2px 2px rgba(255, 220, 150, 0.25);
+}
+.scroll-rod::before, .scroll-rod::after {
+  content: ''; position: absolute; top: -3px; width: 20px; height: 24px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #b98c4e, #5e3f1f);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+.scroll-rod::before { left: -9px; }
+.scroll-rod::after { right: -9px; }
+.scroll-body {
+  overflow-y: auto; padding: 18px 24px;
+  background:
+    radial-gradient(120% 60% at 50% 0%, #fbf3dd, transparent 60%),
+    linear-gradient(180deg, #f6edd5, #ece0bf);
+  border-left: 2px solid var(--frame); border-right: 2px solid var(--frame);
+  color: var(--inkbrown); font-family: Georgia, 'Times New Roman', serif;
+}
+.scroll-title {
+  margin: 0 0 14px; text-align: center;
+  font-family: 'Grenze Gotisch', Georgia, serif; font-weight: 700; font-size: 30px;
+  color: var(--title); text-shadow: 1px 1px 0 rgba(90, 40, 10, 0.3);
+}
+.scroll-sec { margin-bottom: 14px; }
+.scroll-sec h3 {
+  margin: 0 0 4px; font-family: 'Cinzel', serif; font-size: 15px; letter-spacing: 1px;
+  text-transform: uppercase; color: #6b4a25; border-bottom: 1px solid #c9ad79; padding-bottom: 3px;
+}
+.scroll-sec ul { margin: 6px 0 0; padding-left: 20px; }
+.scroll-sec li { font-size: 14px; line-height: 1.45; margin-bottom: 3px; }
+.scroll-close { display: block; margin: 8px auto 0; }
+
+/* ---- face-hit flash (direct attack) ---- */
+.face-flash {
+  position: fixed; inset: 0; z-index: 65; pointer-events: none;
+  background: radial-gradient(120% 90% at 50% 50%, transparent 55%, rgba(224, 60, 40, 0.55));
+  animation: flashfade 450ms ease-out forwards;
+}
+@keyframes flashfade {
+  0% { opacity: 0; }
+  25% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 /* ---- overlays ---- */

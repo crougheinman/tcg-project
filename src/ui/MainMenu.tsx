@@ -1,5 +1,6 @@
 import { useGame } from '../store/gameStore';
 import { hasSupabase } from '../net/supabase';
+import { Rulebook } from './Rulebook';
 
 export function MainMenu({ onOnline }: { onOnline: () => void }) {
   const startAI = useGame((s) => s.startAI);
@@ -15,6 +16,7 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
         <button onClick={onOnline} disabled={!hasSupabase}>
           Online PvP{!hasSupabase ? ' (set Supabase keys)' : ''}
         </button>
+        <Rulebook />
       </div>
       {!hasSupabase && (
         <p className="hint">
