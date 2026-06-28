@@ -8,7 +8,7 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
 
   return (
     <div className="menu">
-      <h1 className="logo">ARCANUM</h1>
+      <h1 className="logo">LEAF WAR</h1>
       <p className="tagline">a tiny trading card game</p>
       <div className="menu-buttons">
         <button onClick={startAI}>Play vs AI</button>

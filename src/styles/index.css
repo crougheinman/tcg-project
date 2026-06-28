@@ -160,7 +160,19 @@ input {
 .bar-label.small { font-size: 10px; }
 .counts { color: var(--muted); font-size: 12px; }
 
-.battlefield { display: flex; flex-direction: column; gap: 4px; min-height: calc(var(--card-h) + 12px); }
+.battlefield {
+  display: flex; flex-direction: column; gap: 4px; min-height: calc(var(--card-h) + 12px);
+  border-radius: 10px; transition: box-shadow 0.2s, background 0.2s;
+}
+.battlefield.drop-active {
+  background: rgba(127, 212, 106, 0.1);
+  box-shadow: inset 0 0 0 2px var(--good), 0 0 18px rgba(84, 201, 138, 0.5);
+  animation: dropglow 1.1s ease-in-out infinite;
+}
+@keyframes dropglow {
+  0%, 100% { box-shadow: inset 0 0 0 2px var(--good), 0 0 14px rgba(84, 201, 138, 0.4); }
+  50% { box-shadow: inset 0 0 0 2px var(--good), 0 0 26px rgba(84, 201, 138, 0.75); }
+}
 .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; min-height: 24px; }
 .row.lands .card { --card-w: 70px; --card-h: 44px; }
 .empty { color: var(--muted); font-size: 12px; font-style: italic; }
@@ -256,6 +268,34 @@ input {
 }
 .card-pt.damaged { color: #ff9a8a; }
 .badge.sick { color: #b5531f; font-size: 9px; }
+
+/* battlefield creature token: image only + floating P/T shield */
+.card.arena { padding: 0; overflow: visible; }
+.arena-art {
+  position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+  object-fit: cover; object-position: center; border-radius: 7px;
+}
+.arena-pt {
+  position: absolute; right: -7px; bottom: -9px; z-index: 3;
+  width: 32px; height: 36px; display: grid; place-items: center;
+  background: var(--gold);
+  clip-path: polygon(50% 0, 100% 14%, 100% 60%, 50% 100%, 0 60%, 0 14%);
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.75)); /* float in front */
+}
+.arena-pt::before {
+  content: ''; position: absolute; inset: 2px;
+  clip-path: polygon(50% 0, 100% 14%, 100% 60%, 50% 100%, 0 60%, 0 14%);
+  background: linear-gradient(180deg, #3a4350, #1f2630);
+}
+.arena-pt span {
+  position: relative; z-index: 1; padding-bottom: 4px;
+  font-family: 'Cinzel', serif; font-weight: 700; font-size: 12px; color: #f3e7c4;
+}
+.arena-pt.damaged span { color: #ff9a8a; }
+.arena-sick {
+  position: absolute; top: 3px; right: 4px; z-index: 3;
+  background: rgba(0, 0, 0, 0.55); border-radius: 4px; padding: 0 3px;
+}
 
 /* ---- hover preview ---- */
 .card-preview-wrap {
@@ -479,6 +519,12 @@ input {
 .result h2 { color: var(--gold); margin-top: 0; }
 
 @media (max-width: 640px) {
-  :root { --card-w: 74px; --card-h: 104px; }
+  :root { --card-w: 78px; --card-h: 140px; }
   .logo { font-size: 44px; }
+  /* tight cards: drop rules text (full text is on hold-to-preview) and shrink labels */
+  .card-text { display: none; }
+  .card-name { font-size: 10px; line-height: 1.05; max-height: 21px; overflow: hidden; }
+  .card-type { font-size: 7px; }
+  .card-cost { width: 17px; height: 17px; font-size: 10px; }
+  .hand { gap: 4px; }
 }

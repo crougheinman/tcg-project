@@ -103,7 +103,7 @@ export function Rulebook({ label = true }: { label?: boolean }) {
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.18 }}
               >
-                <h2 className="scroll-title">Arcanum — How to Play</h2>
+                <h2 className="scroll-title">Leaf War — How to Play</h2>
                 {SECTIONS.map((s) => (
                   <section key={s.title} className="scroll-sec">
                     <h3>{s.title}</h3>

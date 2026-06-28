@@ -105,6 +105,21 @@ export function Board() {
   const [faceFlash, setFaceFlash] = useState(0);
   const dragBounds = useRef<HTMLDivElement>(null);
 
+  // Drag a hand card onto the battlefield to play it.
+  const [dragActive, setDragActive] = useState(false);
+  const myFieldRef = useRef<HTMLDivElement>(null);
+  function dropPlay(inst: CardInstance, point: { x: number; y: number }) {
+    const field = myFieldRef.current;
+    if (!field) return;
+    const r = field.getBoundingClientRect();
+    const inside = point.x >= r.left && point.x <= r.right && point.y >= r.top && point.y <= r.bottom;
+    if (!inside) return;
+    const def = getDef(inst.def);
+    if (def.type === 'land') dispatch({ type: 'playLand', iid: inst.iid });
+    else if (def.type === 'creature') dispatch({ type: 'castCreature', iid: inst.iid });
+    // sorceries need a target — keep using click/targeting for those
+  }
+
   // Announce each new log entry as a transient center banner.
   const [announce, setAnnounce] = useState<{ id: number; text: string } | null>(null);
   const prevLogLen = useRef(game.log.length);
@@ -180,20 +195,24 @@ export function Board() {
 
   // ---- render helpers ----
 
-  function permanents(pid: PlayerId, side: PlayerId) {
+  function permanents(pid: PlayerId, side: PlayerId, mine = false) {
     const p = game.players[pid];
     const lands = p.battlefield.filter(isLand);
     const creatures = p.battlefield.filter(isCreature);
     const blockerOf = (atkIid: string) =>
       Object.entries(blocks).find(([, a]) => a === atkIid)?.[0];
     return (
-      <div className="battlefield">
+      <div
+        className={'battlefield' + (mine && dragActive ? ' drop-active' : '')}
+        ref={mine ? myFieldRef : undefined}
+      >
         <div className="row creatures">
           <AnimatePresence>
             {creatures.map((c) => (
               <div key={c.iid} className="stack">
                 <CardView
                   inst={c}
+                  arena
                   selected={attackers.has(c.iid) || pendingBlocker === c.iid || !!blocks[c.iid]}
                   targetable={!!sorceryIid}
                   onClick={() => creatureClick(c, side)}
@@ -311,7 +330,7 @@ export function Board() {
 
       {/* Me */}
       <section className="player-zone me">
-        {permanents(localId, localId)}
+        {permanents(localId, localId, true)}
         <PlayerBar
           p={me}
           side={localId}
@@ -328,6 +347,13 @@ export function Board() {
                 inst={c}
                 onClick={() => handHclick(c)}
                 dim={game.phase !== 'main1' || !myTurnToAct}
+                draggable={
+                  myTurnToAct &&
+                  game.phase === 'main1' &&
+                  getDef(c.def).type !== 'sorcery'
+                }
+                onDragChange={setDragActive}
+                onDrop={(point) => dropPlay(c, point)}
               />
             ))}
           </AnimatePresence>
