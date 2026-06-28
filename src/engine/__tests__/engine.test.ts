@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialState } from '../state';
 import { applyAction } from '../reducer';
-import { isLand } from '../rules';
+import { isLand, power, toughness } from '../rules';
 import type { Action, CardInstance, GameState } from '../types';
 import { DECK_EMBERWOOD, DECK_SKYWARD } from '../../cards/decks';
 
@@ -16,6 +16,7 @@ function inst(def: string, over: Partial<CardInstance> = {}): CardInstance {
     damage: 0,
     buffP: 0,
     buffT: 0,
+    blitz: false,
     ...over,
   };
 }
@@ -180,6 +181,103 @@ describe('spells and win conditions', () => {
     const buffed = g.players.A.battlefield.find((c) => c.iid === cub.iid)!;
     expect(buffed.buffP).toBe(2);
     expect(buffed.buffT).toBe(2);
+  });
+});
+
+describe('Beast Blitz aura (Kunoichi)', () => {
+  it('summoning Kunoichi gives allied targets +1/+1, not others or enemies', () => {
+    const s = fresh();
+    const myCub = inst('stoneback_cub');
+    const myBrute = inst('thornwood_brute'); // not a target
+    const enemyCub = inst('stoneback_cub', { owner: 'B' });
+    s.players.A.battlefield = [inst('aether_well'), inst('aether_well'), myCub, myBrute];
+    s.players.B.battlefield = [enemyCub];
+    s.players.A.hand = [inst('kunoichi')];
+
+    const g = applyAction(s, { type: 'castCreature', iid: s.players.A.hand[0].iid });
+    const cub = g.players.A.battlefield.find((c) => c.iid === myCub.iid)!;
+    expect([power(cub), toughness(cub)]).toEqual([3, 3]);
+    expect(cub.blitz).toBe(true);
+    const brute = g.players.A.battlefield.find((c) => c.iid === myBrute.iid)!;
+    expect([power(brute), toughness(brute)]).toEqual([3, 3]); // unaffected
+    const eCub = g.players.B.battlefield.find((c) => c.iid === enemyCub.iid)!;
+    expect([power(eCub), toughness(eCub)]).toEqual([2, 2]); // enemy unaffected
+  });
+
+  it('a target entering after Kunoichi also gets the buff', () => {
+    const s = fresh();
+    s.players.A.battlefield = [inst('aether_well'), inst('aether_well'), inst('kunoichi')];
+    const lancer = inst('swift_lancer');
+    s.players.A.battlefield.push(lancer); // added while Kunoichi present
+    const g = applyAction(s, { type: 'advance' }); // any action triggers recompute
+    const l = g.players.A.battlefield.find((c) => c.iid === lancer.iid)!;
+    expect([power(l), toughness(l)]).toEqual([3, 2]); // base 2/1 +1/+1
+  });
+
+  it('removing Kunoichi deactivates the buff', () => {
+    const s = fresh();
+    const cub = inst('stoneback_cub');
+    const k = inst('kunoichi');
+    s.players.A.battlefield = [inst('aether_well'), cub, k];
+    s.players.A.hand = [inst('aether_well'), inst('cinderbolt')];
+    let g = applyAction(s, { type: 'playLand', iid: s.players.A.hand[0].iid }); // aura on
+    expect(toughness(g.players.A.battlefield.find((c) => c.iid === cub.iid)!)).toBe(3);
+    const bolt = g.players.A.hand.find((c) => c.def === 'cinderbolt')!;
+    g = applyAction(g, { type: 'castSorcery', iid: bolt.iid, target: { kind: 'creature', iid: k.iid } });
+    expect(g.players.A.battlefield.some((c) => c.iid === k.iid)).toBe(false); // Kunoichi dead
+    const c2 = g.players.A.battlefield.find((c) => c.iid === cub.iid)!;
+    expect([power(c2), toughness(c2)]).toEqual([2, 2]);
+    expect(c2.blitz).toBe(false);
+  });
+
+  it('Wild Growth buff survives after Beast Blitz ends', () => {
+    const s = fresh();
+    const cub = inst('stoneback_cub', { buffP: 2, buffT: 2 }); // already pumped to 4/4
+    const k = inst('kunoichi');
+    s.players.A.battlefield = [inst('aether_well'), cub, k];
+    s.players.A.hand = [inst('aether_well'), inst('cinderbolt')];
+    let g = applyAction(s, { type: 'playLand', iid: s.players.A.hand[0].iid }); // aura on -> 5/5
+    expect(toughness(g.players.A.battlefield.find((c) => c.iid === cub.iid)!)).toBe(5);
+    const bolt = g.players.A.hand.find((c) => c.def === 'cinderbolt')!;
+    g = applyAction(g, { type: 'castSorcery', iid: bolt.iid, target: { kind: 'creature', iid: k.iid } });
+    const c2 = g.players.A.battlefield.find((c) => c.iid === cub.iid)!;
+    expect([power(c2), toughness(c2)]).toEqual([4, 4]); // Wild Growth kept, aura removed
+  });
+});
+
+describe('Whipflash (Thornwood Brute ETB)', () => {
+  function withLands() {
+    const s = fresh();
+    s.players.A.battlefield = [inst('aether_well'), inst('aether_well'), inst('aether_well')];
+    s.players.A.hand = [inst('thornwood_brute')];
+    return s;
+  }
+
+  it('summoning sets a pending trigger; resolving deals 1 damage', () => {
+    const s = withLands();
+    const enemy = inst('ember_sprite', { owner: 'B' }); // 1/1
+    s.players.B.battlefield = [enemy];
+    const g = applyAction(s, { type: 'castCreature', iid: s.players.A.hand[0].iid });
+    expect(g.pending?.kind).toBe('whipflash');
+    const g2 = applyAction(g, { type: 'whipflash', target: enemy.iid });
+    expect(g2.pending).toBeNull();
+    expect(g2.players.B.battlefield.find((c) => c.iid === enemy.iid)).toBeUndefined(); // 1/1 died
+  });
+
+  it('fizzles with no other creature on the board', () => {
+    const s = withLands(); // B empty; only Thornwood will be on field
+    const g = applyAction(s, { type: 'castCreature', iid: s.players.A.hand[0].iid });
+    expect(g.pending).toBeNull();
+    expect(g.log.some((l) => l.includes('fizzles'))).toBe(true);
+  });
+
+  it('blocks other actions until resolved', () => {
+    const s = withLands();
+    s.players.B.battlefield = [inst('stoneback_cub', { owner: 'B' })];
+    const g = applyAction(s, { type: 'castCreature', iid: s.players.A.hand[0].iid });
+    expect(g.pending?.kind).toBe('whipflash');
+    expect(() => applyAction(g, { type: 'advance' })).toThrow();
+    expect(() => applyAction(g, { type: 'whipflash', target: g.pending!.source })).toThrow(); // not self
   });
 });
 

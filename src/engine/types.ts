@@ -44,8 +44,9 @@ export interface CardInstance {
   tapped: boolean;
   summoningSick: boolean; // can't attack/tap the turn it entered (unless haste)
   damage: number; // damage marked this turn (cleared at cleanup)
-  buffP: number; // permanent +power from buffs
-  buffT: number; // permanent +toughness from buffs
+  buffP: number; // +power from buffs (Wild Growth counters AND active auras)
+  buffT: number; // +toughness from buffs
+  blitz: boolean; // currently receiving the Beast Blitz aura (+1/+1)
 }
 
 export interface PlayerState {
@@ -69,6 +70,12 @@ export interface CombatState {
   blocks: Record<string, string>; // blockerIid -> attackerIid (1:1 for MVP)
 }
 
+/** A triggered ability waiting on the controller to choose a target. */
+export interface PendingTrigger {
+  kind: 'whipflash';
+  source: string; // iid of the creature whose trigger this is
+}
+
 export interface GameState {
   seed: number;
   rngState: number; // current PRNG state — advances deterministically
@@ -77,6 +84,7 @@ export interface GameState {
   phase: Phase;
   players: Record<PlayerId, PlayerState>;
   combat: CombatState | null;
+  pending: PendingTrigger | null; // must be resolved before any other action
   nextIid: number; // counter for deterministic instance ids
   winner: PlayerId | 'draw' | null;
   log: string[];
@@ -88,6 +96,7 @@ export type Action =
   | { type: 'castSorcery'; iid: string; target?: Target }
   | { type: 'declareAttackers'; attackers: string[] }
   | { type: 'declareBlockers'; blocks: Record<string, string> }
+  | { type: 'whipflash'; target: string } // resolve Thornwood Brute's ETB
   | { type: 'advance' }; // main1 -> combat, or end -> next turn
 
 export const opponentOf = (p: PlayerId): PlayerId => (p === 'A' ? 'B' : 'A');

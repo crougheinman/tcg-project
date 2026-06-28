@@ -85,6 +85,7 @@ export function CardView({
     'card',
     `card-${def.type}`,
     inst.tapped ? 'tapped' : '',
+    inst.blitz ? 'blitzed' : '',
     selected ? 'selected' : '',
     targetable ? 'targetable' : '',
     dim ? 'dim' : '',

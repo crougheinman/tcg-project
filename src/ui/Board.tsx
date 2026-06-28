@@ -150,7 +150,7 @@ export function Board() {
   // ---- click handlers ----
 
   function handHclick(c: CardInstance) {
-    if (!myTurnToAct || game.phase !== 'main1') return;
+    if (!myTurnToAct || game.phase !== 'main1' || game.pending) return;
     const def = getDef(c.def);
     if (def.type === 'land') dispatch({ type: 'playLand', iid: c.iid });
     else if (def.type === 'creature') dispatch({ type: 'castCreature', iid: c.iid });
@@ -161,7 +161,12 @@ export function Board() {
   }
 
   function creatureClick(c: CardInstance, side: PlayerId) {
-    // Targeting a spell takes priority.
+    // Resolving a pending Whipflash takes priority.
+    if (game.pending?.kind === 'whipflash' && myTurnToAct) {
+      if (c.iid !== game.pending.source) dispatch({ type: 'whipflash', target: c.iid });
+      return;
+    }
+    // Targeting a spell next.
     if (sorceryIid) {
       dispatch({ type: 'castSorcery', iid: sorceryIid, target: { kind: 'creature', iid: c.iid } });
       setSorceryIid(null);
@@ -214,7 +219,10 @@ export function Board() {
                   inst={c}
                   arena
                   selected={attackers.has(c.iid) || pendingBlocker === c.iid || !!blocks[c.iid]}
-                  targetable={!!sorceryIid}
+                  targetable={
+                    !!sorceryIid ||
+                    (game.pending?.kind === 'whipflash' && c.iid !== game.pending.source)
+                  }
                   onClick={() => creatureClick(c, side)}
                 />
                 {attackingIids.has(c.iid) && <span className="combat-tag atk">ATK</span>}
@@ -236,6 +244,15 @@ export function Board() {
   }
 
   function actionButtons() {
+    if (game.pending?.kind === 'whipflash') {
+      return myTurnToAct ? (
+        <div className="actions">
+          <span className="prompt">✦ Whipflash — click a creature to deal 1 damage</span>
+        </div>
+      ) : (
+        <div className="waiting">Opponent resolving Whipflash…</div>
+      );
+    }
     if (!myTurnToAct) {
       const who = mode === 'ai' ? 'AI is thinking…' : 'Waiting for opponent…';
       return <div className="waiting">{game.winner ? '' : who}</div>;
@@ -346,10 +363,11 @@ export function Board() {
                 key={c.iid}
                 inst={c}
                 onClick={() => handHclick(c)}
-                dim={game.phase !== 'main1' || !myTurnToAct}
+                dim={game.phase !== 'main1' || !myTurnToAct || !!game.pending}
                 draggable={
                   myTurnToAct &&
                   game.phase === 'main1' &&
+                  !game.pending &&
                   getDef(c.def).type !== 'sorcery'
                 }
                 onDragChange={setDragActive}
@@ -370,7 +388,7 @@ export function Board() {
         {announce && (
           <motion.div
             key={announce.id}
-            className="announce"
+            className={'announce' + (announce.text.includes('✦') ? ' skill' : '')}
             initial={{ opacity: 0, scale: 0.8, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 1.1 }}

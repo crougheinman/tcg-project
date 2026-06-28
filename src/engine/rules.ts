@@ -115,9 +115,23 @@ export function legalTargets(
 
 export function validateAction(state: GameState, action: Action): void {
   if (state.winner) throw new Error('game is over');
+  // A pending trigger must be resolved before anything else.
+  if (state.pending && action.type !== 'whipflash') {
+    throw new Error('resolve the pending trigger first');
+  }
+  if (!state.pending && action.type === 'whipflash') {
+    throw new Error('no trigger to resolve');
+  }
   const active = state.players[state.active];
 
   switch (action.type) {
+    case 'whipflash': {
+      if (state.pending?.kind !== 'whipflash') throw new Error('no whipflash pending');
+      if (action.target === state.pending.source) throw new Error('cannot target the source');
+      const found = findCreature(state, action.target);
+      if (!found) throw new Error('target creature not found');
+      return;
+    }
     case 'playLand': {
       requirePhase(state, 'main1');
       const c = inHand(active, action.iid);

@@ -17,11 +17,13 @@ import {
 
 export function aiShouldAct(state: GameState, ai: PlayerId): boolean {
   if (state.winner) return false;
+  if (state.pending) return state.active === ai; // the caster resolves their trigger
   if (state.phase === 'combat_block') return state.active !== ai; // AI is defender
   return state.active === ai;
 }
 
 export function pickAction(state: GameState, ai: PlayerId): Action {
+  if (state.pending?.kind === 'whipflash') return pickWhipflash(state, ai);
   if (state.phase === 'combat_block' && state.active !== ai) return pickBlocks(state, ai);
   switch (state.phase) {
     case 'main1':
@@ -95,6 +97,22 @@ function pickAttacks(state: GameState, ai: PlayerId): Action {
   // ponytail: ignores unfavorable trades; add board eval before attacking later.
   const attackers = me.battlefield.filter(canAttack).map((c) => c.iid);
   return { type: 'declareAttackers', attackers };
+}
+
+function pickWhipflash(state: GameState, ai: PlayerId): Action {
+  const src = state.pending!.source;
+  const oppId = opponentOf(ai);
+  const candidates = [...state.players.A.battlefield, ...state.players.B.battlefield].filter(
+    (c) => isCreature(c) && c.iid !== src,
+  );
+  const enemies = state.players[oppId].battlefield.filter(
+    (c) => isCreature(c) && c.iid !== src,
+  );
+  // Prefer to kill an enemy (1 toughness left), else weakest enemy, else weakest anything.
+  const kill = enemies.filter((c) => toughness(c) - c.damage <= 1).sort((a, b) => power(b) - power(a));
+  const pool = enemies.length ? enemies : candidates;
+  const target = kill[0] ?? pool.slice().sort((a, b) => toughness(a) - toughness(b))[0] ?? candidates[0];
+  return { type: 'whipflash', target: target.iid };
 }
 
 function pickBlocks(state: GameState, ai: PlayerId): Action {

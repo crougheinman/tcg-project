@@ -14,6 +14,7 @@ function makeInstance(defId: string, owner: PlayerId, iid: number): CardInstance
     damage: 0,
     buffP: 0,
     buffT: 0,
+    blitz: false,
   };
 }
 
@@ -59,6 +60,7 @@ export function createInitialState(
     phase: 'main1', // A is on the play: untap/draw skipped on turn 1
     players,
     combat: null,
+    pending: null,
     nextIid: iid,
     winner: null,
     log: ['Game start. A is on the play.'],

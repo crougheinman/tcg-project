@@ -232,6 +232,16 @@ input {
   cursor: crosshair;
 }
 .card.dim { opacity: 0.55; }
+.card.blitzed { animation: blitzglow 1.4s ease-in-out infinite; }
+@keyframes blitzglow {
+  0%, 100% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px #e8a13a, 0 0 12px rgba(232, 161, 58, 0.6); }
+  50% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px #ffd36a, 0 0 24px rgba(255, 211, 106, 0.95); }
+}
+.card.arena.blitzed { animation: blitzglowArena 1.4s ease-in-out infinite; }
+@keyframes blitzglowArena {
+  0%, 100% { box-shadow: 0 0 8px 2px rgba(232, 161, 58, 0.6); }
+  50% { box-shadow: 0 0 18px 5px rgba(255, 211, 106, 0.95); }
+}
 .card-back {
   background: repeating-linear-gradient(45deg, #3a2a16, #3a2a16 6px, #4d3a1f 6px, #4d3a1f 12px);
   box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px var(--wood), 0 4px 10px rgba(0, 0, 0, 0.4);
@@ -415,6 +425,18 @@ input {
   font-family: 'Cinzel', serif; font-weight: 700; font-size: 19px; letter-spacing: 0.5px;
   color: #f3e7c4; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+}
+.announce.skill {
+  font-family: 'Grenze Gotisch', 'Cinzel', serif; font-size: 30px; letter-spacing: 1px;
+  padding: 14px 40px; color: #ffe8a8;
+  background: linear-gradient(180deg, rgba(74, 40, 23, 0.97), rgba(40, 22, 10, 0.97));
+  border: 2px solid #ffd36a;
+  box-shadow: 0 0 30px rgba(255, 211, 106, 0.7), 0 12px 36px rgba(0, 0, 0, 0.6);
+  animation: skillpulse 0.9s ease-in-out infinite;
+}
+@keyframes skillpulse {
+  0%, 100% { box-shadow: 0 0 24px rgba(255, 211, 106, 0.55), 0 12px 36px rgba(0, 0, 0, 0.6); }
+  50% { box-shadow: 0 0 46px rgba(255, 211, 106, 1), 0 12px 36px rgba(0, 0, 0, 0.6); }
 }
 
 /* ---- activity log (bottom-right) ---- */

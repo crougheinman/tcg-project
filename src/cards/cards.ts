@@ -65,6 +65,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 3,
     power: 3,
     toughness: 3,
+    text: 'Whipflash — when it enters, deal 1 damage to a creature.',
     flavor: 'The forest walks when the forest is angry.',
   },
   granite_sentinel: {
@@ -95,6 +96,17 @@ export const CARDS: Record<string, CardDef> = {
     power: 5,
     toughness: 4,
     flavor: 'It does not hunt. It simply arrives, and the hunting is done.',
+  },
+
+  kunoichi: {
+    id: 'kunoichi',
+    name: 'Kunoichi',
+    type: 'creature',
+    cost: 2,
+    power: 2,
+    toughness: 1,
+    text: 'Beast Blitz — your Swift Lancer, Sky Talon, and Stoneback Cub get +1/+1.',
+    flavor: 'One whistle, and the wild answers.',
   },
 
   // --- Sorceries ---

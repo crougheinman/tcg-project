@@ -39,6 +39,25 @@ export function applyAction(state: GameState, action: Action): GameState {
       c.summoningSick = !hasKeyword(c, 'haste');
       active.battlefield.push(c);
       s.log.push(`${s.active} casts ${getDef(c.def).name}`);
+      if (c.def === 'kunoichi') s.log.push(`✦ Beast Blitz activated!`);
+      if (c.def === 'thornwood_brute') {
+        const targets = allCreatures(s).filter((x) => x.iid !== c.iid);
+        if (targets.length) {
+          s.pending = { kind: 'whipflash', source: c.iid };
+          s.log.push(`✦ Whipflash! Choose a creature.`);
+        } else {
+          s.log.push(`Whipflash fizzles — no target.`);
+        }
+      }
+      break;
+    }
+    case 'whipflash': {
+      const found = findCreature(s, action.target);
+      if (found) {
+        found.card.damage += 1;
+        s.log.push(`Whipflash hits ${getDef(found.card.def).name} for 1`);
+      }
+      s.pending = null;
       break;
     }
     case 'castSorcery': {
@@ -82,10 +101,38 @@ export function applyAction(state: GameState, action: Action): GameState {
   }
 
   checkDeaths(s);
+  recomputeAura(s); // (re)apply / remove Beast Blitz
+  checkDeaths(s); // aura toughness loss may make a creature lethal
   return s;
 }
 
 // ---- internals ----
+
+function allCreatures(s: GameState) {
+  return [...s.players.A.battlefield, ...s.players.B.battlefield].filter(isCreature);
+}
+
+// Beast Blitz: while a player controls Kunoichi, their listed creatures get +1/+1.
+const BLITZ_TARGETS = ['swift_lancer', 'sky_talon', 'stoneback_cub'];
+
+function recomputeAura(s: GameState): void {
+  for (const pid of ['A', 'B'] as PlayerId[]) {
+    const p = s.players[pid];
+    const hasKunoichi = p.battlefield.some((c) => c.def === 'kunoichi');
+    for (const c of p.battlefield) {
+      const should = hasKunoichi && BLITZ_TARGETS.includes(c.def);
+      if (should && !c.blitz) {
+        c.buffP += 1;
+        c.buffT += 1;
+        c.blitz = true;
+      } else if (!should && c.blitz) {
+        c.buffP -= 1;
+        c.buffT -= 1;
+        c.blitz = false;
+      }
+    }
+  }
+}
 
 function name(iid: string, s: GameState): string {
   for (const pid of ['A', 'B'] as PlayerId[]) {
@@ -216,9 +263,13 @@ function checkDeaths(s: GameState): void {
         c.damage = 0;
         c.buffP = 0;
         c.buffT = 0;
+        c.blitz = false;
         c.summoningSick = true;
         s.players[c.owner].graveyard.push(c);
         s.log.push(`${getDef(c.def).name} dies`);
+        if (c.def === 'kunoichi' && !p.battlefield.some((x) => x.def === 'kunoichi')) {
+          s.log.push(`Beast Blitz fades.`);
+        }
       }
     }
   }
