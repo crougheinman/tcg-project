@@ -70,6 +70,11 @@ input {
 }
 
 /* ---- menu ---- */
+.home-bg {
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: url('/cards/home_animation.gif') center / cover no-repeat;
+  opacity: 0.15;
+}
 .menu {
   max-width: 520px;
   margin: 8vh auto;

@@ -8,6 +8,7 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
 
   return (
     <div className="menu">
+      <div className="home-bg" aria-hidden />
       <h1 className="logo">LEAF WAR</h1>
       <p className="tagline">a tiny trading card game</p>
       <div className="menu-buttons">
