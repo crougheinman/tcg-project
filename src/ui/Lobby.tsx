@@ -1,16 +1,24 @@
 import { useState } from 'react';
 import { useGame } from '../store/gameStore';
 import { createMatch, joinMatch } from '../net/match';
+import { DeckSelect } from './DeckSelect';
+import { deckById } from '../cards/decks';
 
 export function Lobby({ onBack }: { onBack: () => void }) {
   const startPvp = useGame((s) => s.startPvp);
+  const [deck, setDeck] = useState<string | null>(null);
   const [hostCode, setHostCode] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState('');
   const [status, setStatus] = useState<string>('');
 
+  // Pick a deck first; it's exchanged in the handshake.
+  if (!deck) {
+    return <DeckSelect title="Choose your deck — Online PvP" onPick={setDeck} onBack={onBack} />;
+  }
+
   function host() {
     setStatus('Creating room…');
-    const { roomId } = createMatch((conn) => startPvp(conn));
+    const { roomId } = createMatch(deck!, (conn) => startPvp(conn));
     setHostCode(roomId);
     setStatus('Share this code. Waiting for opponent…');
   }
@@ -19,12 +27,18 @@ export function Lobby({ onBack }: { onBack: () => void }) {
     const code = joinCode.trim().toUpperCase();
     if (!code) return;
     setStatus('Joining…');
-    joinMatch(code, (conn) => startPvp(conn));
+    joinMatch(code, deck!, (conn) => startPvp(conn));
   }
 
   return (
     <div className="menu">
       <h2>Online PvP</h2>
+      <p className="hint">
+        Deck: <strong>{deckById(deck).name}</strong> ·{' '}
+        <button className="link" onClick={() => setDeck(null)}>
+          change
+        </button>
+      </p>
       <div className="lobby">
         <div className="lobby-col">
           <button onClick={host} disabled={!!hostCode}>

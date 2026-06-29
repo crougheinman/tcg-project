@@ -57,7 +57,7 @@ export function CardView({
   }
   function endPress() {
     clearTimeout(pressTimer.current);
-    if (longPressed.current) setHover(null);
+    setHover(null); // finger lifted -> always dismiss the preview (drag or long-press)
   }
   function handleClick() {
     if (longPressed.current) {

@@ -95,6 +95,73 @@ input {
 .tagline { color: var(--muted); margin-top: -10px; }
 .menu-buttons { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 320px; }
 .hint { color: var(--muted); font-size: 13px; max-width: 360px; line-height: 1.5; }
+
+/* deck selection */
+.deck-title {
+  font-family: 'Grenze Gotisch', serif; color: var(--gold); font-size: 30px; margin-bottom: 4px;
+}
+.deck-list {
+  display: grid; grid-template-columns: repeat(3, 220px); gap: 18px;
+  justify-content: center; max-width: 720px;
+}
+.deck-card {
+  width: 220px; text-align: left; cursor: pointer; position: relative;
+  display: flex; flex-direction: column; gap: 6px; padding: 12px;
+  background: linear-gradient(180deg, #f6edd5, var(--parch-lo)); color: var(--inkbrown);
+  border: 2px solid var(--wood); border-radius: 12px;
+  box-shadow: 0 0 0 4px var(--frame), 0 6px 16px rgba(0, 0, 0, 0.45);
+  transition: transform 0.1s, box-shadow 0.15s;
+}
+.deck-card:hover { transform: translateY(-4px); box-shadow: 0 0 0 4px var(--gold), 0 10px 22px rgba(0, 0, 0, 0.55); }
+.deck-card:disabled { cursor: default; }
+.deck-card.taken { opacity: 0.45; filter: grayscale(0.85); }
+.deck-card.taken:hover { transform: none; box-shadow: 0 0 0 4px var(--frame), 0 6px 16px rgba(0, 0, 0, 0.45); }
+.deck-taken-tag {
+  align-self: flex-end; font-family: 'Cinzel', serif; font-weight: 700; font-size: 12px;
+  color: #fff; background: #6b4a25; border: 1px solid var(--wood); border-radius: 6px; padding: 3px 12px;
+}
+.deck-card.selected {
+  transform: translateY(-4px);
+  animation: deckglow 1s ease-in-out infinite;
+}
+@keyframes deckglow {
+  0%, 100% { box-shadow: 0 0 0 4px var(--gold), 0 0 16px rgba(255, 211, 106, 0.7); }
+  50% { box-shadow: 0 0 0 5px #ffe08a, 0 0 36px rgba(255, 211, 106, 1); }
+}
+
+/* 3s fade transition into the battlefield */
+.deck-fade {
+  position: fixed; inset: 0; z-index: 200; display: grid; place-items: center;
+  background: radial-gradient(circle at 50% 50%, #1b1206, #060403);
+}
+.deck-fade-text {
+  font-family: 'Grenze Gotisch', serif; font-size: 30px; color: var(--gold);
+  letter-spacing: 1px; text-shadow: 0 0 18px rgba(217, 182, 90, 0.6);
+}
+.board { animation: boardin 0.6s ease both; }
+@keyframes boardin { from { opacity: 0; } to { opacity: 1; } }
+
+@media (max-width: 720px) {
+  .deck-list { grid-template-columns: repeat(2, 46vw); max-width: 96vw; }
+}
+@media (max-width: 440px) {
+  .deck-list { grid-template-columns: 1fr; }
+}
+.deck-art {
+  width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 8px;
+  border: 1px solid #9a7b46; background: #fbf4e2; image-rendering: auto;
+}
+.deck-name { font-family: 'Grenze Gotisch', serif; font-size: 22px; color: var(--title); }
+.deck-style {
+  font-family: 'Cinzel', serif; font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+  color: #6b4a25;
+}
+.deck-desc { font-size: 13px; line-height: 1.4; color: #3a2c1a; flex: 1; }
+.deck-go {
+  align-self: flex-end; font-family: 'Cinzel', serif; font-weight: 700; font-size: 13px;
+  color: #1a140a; background: linear-gradient(180deg, #e6c873, #c79a3a);
+  border: 1px solid var(--gold); border-radius: 6px; padding: 3px 12px;
+}
 .hint code { color: var(--gold); }
 .lobby { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; }
 .lobby-col { display: flex; flex-direction: column; gap: 10px; align-items: center; }
@@ -147,6 +214,9 @@ input {
   gap: 6px;
 }
 .player-zone.opp { border-top: 2px solid var(--danger); }
+/* opponent: hide face-down hand + lands to save space (counts shown on the badge) */
+.player-zone.opp .opp-hand { display: none; }
+.player-zone.opp .row.lands { display: none; }
 .player-zone.me { border-bottom: 2px solid var(--good); }
 
 /* compact, centered player badge: shield w/ user icon, stacked life + mana below */
@@ -168,7 +238,12 @@ input {
 .shield-avatar.targetable { filter: drop-shadow(0 0 8px var(--accent)); cursor: crosshair; }
 .pstats { display: flex; flex-direction: column; align-items: center; line-height: 1.1; margin-top: -2px; }
 .playerbar .life { color: var(--danger); font-weight: 700; font-size: 15px; }
-.playerbar .mana { color: var(--accent); font-weight: 700; font-size: 12px; }
+.playerbar .mana { color: var(--accent); font-weight: 700; font-size: 12px; display: inline-block; }
+.playerbar .mana.pulse { animation: manapulse 0.5s ease-in-out 4; }
+@keyframes manapulse {
+  0%, 100% { transform: scale(1); color: var(--accent); text-shadow: none; }
+  50% { transform: scale(1.4); color: #bfe0ff; text-shadow: 0 0 10px rgba(106, 169, 255, 0.9); }
+}
 .playerbar .counts { color: var(--muted); font-size: 10px; }
 
 .dmg-float {
@@ -206,13 +281,56 @@ input {
   background: linear-gradient(180deg, #34281b 0%, #20180f 55%, #130d07 100%);
   border-top: 2px solid #6b4a25;
   box-shadow: 0 -8px 18px rgba(0, 0, 0, 0.55), inset 0 2px 0 rgba(255, 220, 150, 0.14);
-  pointer-events: none;
+  pointer-events: auto; /* block hover/clicks from reaching cards tucked behind it */
 }
 .player-platform::before {
   content: ''; position: absolute; left: 0; right: 0; top: -2px; height: 2px;
   background: linear-gradient(90deg, transparent, rgba(217, 182, 90, 0.6), transparent);
 }
 .player-platform .playerbar { pointer-events: auto; margin-top: -24px; }
+.zone-btn {
+  position: absolute; bottom: 10px; pointer-events: auto;
+  background: linear-gradient(180deg, #3a2817, #20160d); color: var(--gold);
+  border: 1px solid #6b4a25; border-radius: 8px; padding: 6px 12px;
+  font-family: 'Cinzel', serif; font-weight: 700; font-size: 13px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+.zone-btn:hover { border-color: var(--gold); }
+.zone-btn.left { left: 4%; }
+.zone-btn.right { right: 4%; }
+
+/* deck / graveyard viewer modal */
+.zone-overlay {
+  position: fixed; inset: 0; z-index: 115; background: rgba(8, 10, 14, 0.78);
+  display: grid; place-items: center; padding: 4vh 12px;
+}
+.zone-modal {
+  width: min(880px, 95vw); max-height: 88vh; display: flex; flex-direction: column;
+  background: linear-gradient(180deg, #f6edd5, var(--parch-lo));
+  border: 2px solid var(--wood); border-radius: 14px;
+  box-shadow: 0 0 0 6px var(--frame), 0 0 0 8px var(--wood), 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+.zone-head {
+  display: flex; align-items: center; gap: 12px; padding: 12px 18px;
+  border-bottom: 1px solid #b6975f;
+}
+.zone-title {
+  font-family: 'Grenze Gotisch', serif; font-weight: 700; font-size: 24px; color: var(--title);
+}
+.zone-total { color: #6a5238; font-size: 13px; }
+.zone-close { margin-left: auto; color: var(--inkbrown); font-size: 18px; }
+.zone-grid {
+  display: flex; flex-wrap: wrap; gap: 12px; padding: 16px; overflow-y: auto;
+  justify-content: center;
+}
+.zone-card { position: relative; }
+.zone-x {
+  position: absolute; top: -6px; right: -6px; z-index: 6;
+  background: var(--wood); color: #f3e7c4; border: 1.5px solid var(--gold); border-radius: 50%;
+  min-width: 24px; height: 24px; padding: 0 4px; display: grid; place-items: center;
+  font-family: 'Cinzel', serif; font-weight: 700; font-size: 12px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+}
 .player-platform .shield-avatar { filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.6)); }
 .opp-hand .card-back { --card-w: 54px; --card-h: 76px; }
 
@@ -244,6 +362,11 @@ input {
   border: 1.5px solid #ff6a5a; border-radius: 0 0 7px 7px;
   box-shadow: 0 0 10px rgba(224, 57, 43, 0.8);
 }
+.ready-box.block {
+  background: linear-gradient(180deg, #2f6fb0, #1d4a86);
+  border-color: #6aa9ff; box-shadow: 0 0 10px rgba(106, 169, 255, 0.8);
+}
+.attack-sword.block { filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 8px rgba(150, 200, 255, 0.6)); }
 
 .card {
   width: var(--card-w);
@@ -364,7 +487,19 @@ input {
 /* ---- hover preview ---- */
 .preview-overlay {
   position: fixed; inset: 0; z-index: 60; pointer-events: none;
-  display: grid; place-items: center;
+  display: grid; align-items: center; justify-items: center;
+}
+.preview-overlay.side-left { justify-items: start; padding-left: 2.5vw; }
+.preview-overlay.side-right { justify-items: end; padding-right: 2.5vw; }
+
+@media (max-width: 640px) {
+  /* on mobile: top-centre with a top padding (side-shift doesn't fit a narrow screen) */
+  .preview-overlay,
+  .preview-overlay.side-left,
+  .preview-overlay.side-right {
+    align-items: start; justify-items: center;
+    padding: 7vh 0 0 0;
+  }
 }
 .pcard {
   width: 292px; position: relative;
@@ -461,9 +596,12 @@ input {
 .pcard-land .pcard-pip { color: #3f7d39; }
 
 /* ---- action announcement (center flash) ---- */
+.announce-wrap {
+  position: fixed; inset: 0; z-index: 70; pointer-events: none;
+  display: grid; place-items: center;
+}
 .announce {
-  position: fixed; left: 50%; top: 46%; transform: translateX(-50%);
-  z-index: 70; pointer-events: none;
+  pointer-events: none;
   padding: 10px 26px; border-radius: 12px;
   background: linear-gradient(180deg, rgba(58, 40, 23, 0.96), rgba(34, 23, 13, 0.96));
   border: 2px solid var(--gold);
@@ -561,6 +699,50 @@ input {
 .scroll-sec ul { margin: 6px 0 0; padding-left: 20px; }
 .scroll-sec li { font-size: 14px; line-height: 1.45; margin-bottom: 3px; }
 .scroll-close { display: block; margin: 8px auto 0; }
+
+/* ---- sorcery spritesheet effect (3s, centered) ---- */
+.spellfx-overlay { position: fixed; inset: 0; z-index: 68; pointer-events: none; }
+.spellfx {
+  position: absolute; transform: translate(-50%, -50%);
+  width: 200px; height: 200px;
+  background-repeat: no-repeat;
+  background-size: calc(200px * var(--frames)) 200px;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 22px rgba(255, 180, 90, 0.55));
+  animation: spritefx var(--dur) steps(var(--frames)) infinite;
+}
+@keyframes spritefx {
+  from { background-position-x: 0; }
+  to { background-position-x: calc(-200px * var(--frames)); }
+}
+@media (max-width: 640px) {
+  .spellfx { width: 150px; height: 150px; background-size: calc(150px * var(--frames)) 150px; }
+  @keyframes spritefx { from { background-position-x: 0; } to { background-position-x: calc(-150px * var(--frames)); } }
+}
+
+/* ---- destruction sequence on a dying card (grid sprite, 160px frames) ---- */
+.destroyfx {
+  position: fixed; transform: translate(-50%, -50%); z-index: 69; pointer-events: none;
+  width: 160px; height: 160px; background-repeat: no-repeat; image-rendering: pixelated;
+  filter: drop-shadow(0 0 14px rgba(255, 110, 50, 0.65));
+  animation: destroyX calc(var(--dur) / var(--rows)) steps(var(--cols)) infinite,
+             destroyY var(--dur) steps(var(--rows)) infinite;
+}
+@keyframes destroyX { from { background-position-x: 0; } to { background-position-x: calc(-160px * var(--cols)); } }
+@keyframes destroyY { from { background-position-y: 0; } to { background-position-y: calc(-160px * var(--rows)); } }
+
+/* ---- slash effect on attacked target (slash.png is a 5x2 grid) ---- */
+.slashfx {
+  position: fixed; transform: translate(-50%, -50%); z-index: 69; pointer-events: none;
+  width: 120px; height: 120px;
+  background: url(/effects/slash.png) no-repeat;
+  background-size: calc(120px * 5) calc(120px * 2);
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.5));
+  animation: slashX 0.2s steps(5) 2, slashY 0.4s steps(2) 1;
+}
+@keyframes slashX { from { background-position-x: 0; } to { background-position-x: calc(-120px * 5); } }
+@keyframes slashY { from { background-position-y: 0; } to { background-position-y: calc(-120px * 2); } }
 
 /* ---- face-hit flash (direct attack) ---- */
 .face-flash {

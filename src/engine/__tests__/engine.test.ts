@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialState } from '../state';
 import { applyAction } from '../reducer';
-import { isLand, power, toughness } from '../rules';
+import { isLand, isCreature, canAttack, availableMana, power, toughness } from '../rules';
 import type { Action, CardInstance, GameState } from '../types';
 import { DECK_EMBERWOOD, DECK_SKYWARD } from '../../cards/decks';
 
@@ -278,6 +278,109 @@ describe('Whipflash (Thornwood Brute ETB)', () => {
     expect(g.pending?.kind).toBe('whipflash');
     expect(() => applyAction(g, { type: 'advance' })).toThrow();
     expect(() => applyAction(g, { type: 'whipflash', target: g.pending!.source })).toThrow(); // not self
+  });
+});
+
+describe('new mechanics (heal / ramp / token / defender / spell-trigger)', () => {
+  it('Soothe gains 6 life', () => {
+    const s = fresh();
+    s.players.A.battlefield = [inst('aether_well'), inst('aether_well')];
+    s.players.A.hand = [inst('soothe')];
+    s.players.A.life = 14;
+    const g = applyAction(s, { type: 'castSorcery', iid: s.players.A.hand[0].iid });
+    expect(g.players.A.life).toBe(20);
+  });
+
+  it('Overgrowth ramps up to two lands from hand onto the battlefield', () => {
+    const s = fresh();
+    s.players.A.battlefield = [inst('aether_well'), inst('aether_well')]; // pay cost 2
+    const l1 = inst('aether_well');
+    const l2 = inst('aether_well');
+    s.players.A.hand = [inst('overgrowth'), l1, l2];
+    const g = applyAction(s, { type: 'castSorcery', iid: s.players.A.hand[0].iid });
+    expect(g.players.A.battlefield.filter(isLand)).toHaveLength(4); // 2 + 2 ramped
+    expect(availableMana(g.players.A)).toBe(2); // the 2 ramped lands are untapped
+    expect(g.players.A.hand.filter(isLand)).toHaveLength(0);
+  });
+
+  it('Call Wolves creates two 1/1 Wolf tokens', () => {
+    const s = fresh();
+    s.players.A.battlefield = [inst('aether_well'), inst('aether_well')];
+    s.players.A.hand = [inst('call_wolves')];
+    const g = applyAction(s, { type: 'castSorcery', iid: s.players.A.hand[0].iid });
+    const wolves = g.players.A.battlefield.filter((c) => c.def === 'wolf_token');
+    expect(wolves).toHaveLength(2);
+    expect(wolves.every((w) => w.summoningSick && power(w) === 1 && toughness(w) === 1)).toBe(true);
+  });
+
+  it('Defender cannot attack', () => {
+    const s = fresh();
+    const wall = inst('bulwark', { summoningSick: false });
+    s.players.A.battlefield = [wall];
+    expect(canAttack(wall)).toBe(false);
+    const g = applyAction(s, { type: 'advance' }); // -> combat_attack
+    expect(() => applyAction(g, { type: 'declareAttackers', attackers: [wall.iid] })).toThrow();
+  });
+
+  it('Pyre Adept deals 1 to the opponent on each sorcery cast', () => {
+    const s = fresh();
+    s.players.A.battlefield = [inst('aether_well'), inst('pyre_adept')];
+    s.players.A.hand = [inst('cinderbolt')];
+    s.players.B.life = 20;
+    const g = applyAction(s, {
+      type: 'castSorcery',
+      iid: s.players.A.hand[0].iid,
+      target: { kind: 'player', player: 'B' },
+    });
+    expect(g.players.B.life).toBe(16); // 3 (Cinderbolt) + 1 (Pyre Adept trigger)
+  });
+
+  it('Topple taps opponent creatures with toughness <= 2, leaves bigger ones', () => {
+    const s = fresh();
+    s.players.A.battlefield = [inst('aether_well'), inst('aether_well')];
+    s.players.A.hand = [inst('topple')];
+    const small = inst('ember_sprite', { owner: 'B' }); // 1/1
+    const cub = inst('stoneback_cub', { owner: 'B' }); // 2/2
+    const big = inst('granite_sentinel', { owner: 'B' }); // 3/5
+    s.players.B.battlefield = [small, cub, big];
+    const g = applyAction(s, { type: 'castSorcery', iid: s.players.A.hand[0].iid });
+    const bf = g.players.B.battlefield;
+    expect(bf.find((c) => c.iid === small.iid)!.tapped).toBe(true);
+    expect(bf.find((c) => c.iid === cub.iid)!.tapped).toBe(true);
+    expect(bf.find((c) => c.iid === big.iid)!.tapped).toBe(false); // toughness 5 > 2
+  });
+
+  it('Take Counter destroys a tapped creature, rejects an untapped one', () => {
+    const s = fresh();
+    s.players.A.battlefield = [inst('aether_well'), inst('aether_well')];
+    s.players.A.hand = [inst('take_counter')];
+    const tappedFoe = inst('stoneback_cub', { owner: 'B', tapped: true });
+    const untappedFoe = inst('dread_maw', { owner: 'B', tapped: false });
+    s.players.B.battlefield = [tappedFoe, untappedFoe];
+    // untapped target -> rejected
+    expect(() =>
+      applyAction(s, {
+        type: 'castSorcery',
+        iid: s.players.A.hand[0].iid,
+        target: { kind: 'creature', iid: untappedFoe.iid },
+      }),
+    ).toThrow();
+    // tapped target -> destroyed
+    const g = applyAction(s, {
+      type: 'castSorcery',
+      iid: s.players.A.hand[0].iid,
+      target: { kind: 'creature', iid: tappedFoe.iid },
+    });
+    expect(g.players.B.battlefield.some((c) => c.iid === tappedFoe.iid)).toBe(false);
+    expect(g.players.B.graveyard.some((c) => c.def === 'stoneback_cub')).toBe(true);
+  });
+
+  it('token / heal / ramp are valid without a target', () => {
+    const s = fresh();
+    s.players.A.battlefield = [inst('aether_well'), inst('aether_well')];
+    s.players.A.hand = [inst('soothe')];
+    // no target supplied -> must not throw
+    expect(() => applyAction(s, { type: 'castSorcery', iid: s.players.A.hand[0].iid })).not.toThrow();
   });
 });
 

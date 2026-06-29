@@ -6,6 +6,7 @@ import {
   findCreature,
   hasKeyword,
   isCreature,
+  isLand,
   power,
   toughness,
   availableMana,
@@ -70,11 +71,51 @@ function pickMain(state: GameState, ai: PlayerId): Action {
     }
   }
 
+  // 3b. Take Counter: destroy a tapped enemy creature (biggest first).
+  const destroyer = me.hand.find(
+    (c) => getDef(c.def).effect?.type === 'destroy' && getDef(c.def).cost <= mana,
+  );
+  if (destroyer) {
+    const tapped = enemyCreatures.filter((c) => c.tapped).sort((x, y) => power(y) - power(x));
+    if (tapped.length) {
+      return {
+        type: 'castSorcery',
+        iid: destroyer.iid,
+        target: { kind: 'creature', iid: tapped[0].iid },
+      };
+    }
+  }
+
+  // 3c. Topple: tap small attackers if it actually hits something.
+  const toppler = me.hand.find(
+    (c) => getDef(c.def).effect?.type === 'tapAll' && getDef(c.def).cost <= mana,
+  );
+  if (toppler) {
+    const maxT = (getDef(toppler.def).effect as { maxToughness: number }).maxToughness;
+    if (enemyCreatures.some((c) => !c.tapped && toughness(c) <= maxT)) {
+      return { type: 'castSorcery', iid: toppler.iid };
+    }
+  }
+
   // 4. Cast the biggest creature we can afford.
   const creatures = me.hand
     .filter((c) => getDef(c.def).type === 'creature' && getDef(c.def).cost <= mana)
     .sort((x, y) => getDef(y.def).cost - getDef(x.def).cost);
   if (creatures.length) return { type: 'castCreature', iid: creatures[0].iid };
+
+  // 4b. Utility: tokens (board), ramp (if a land is in hand), heal (only when low).
+  const tokener = me.hand.find(
+    (c) => getDef(c.def).effect?.type === 'token' && getDef(c.def).cost <= mana,
+  );
+  if (tokener) return { type: 'castSorcery', iid: tokener.iid };
+  const ramper = me.hand.find(
+    (c) => getDef(c.def).effect?.type === 'ramp' && getDef(c.def).cost <= mana,
+  );
+  if (ramper && me.hand.some(isLand)) return { type: 'castSorcery', iid: ramper.iid };
+  const healer = me.hand.find(
+    (c) => getDef(c.def).effect?.type === 'heal' && getDef(c.def).cost <= mana,
+  );
+  if (healer && me.life < 12) return { type: 'castSorcery', iid: healer.iid };
 
   // 5. Buff our best creature.
   const buff = me.hand.find((c) => getDef(c.def).effect?.type === 'buff');

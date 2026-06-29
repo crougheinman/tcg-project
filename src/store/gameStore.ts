@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { createInitialState } from '../engine/state';
 import { applyAction } from '../engine/reducer';
 import type { Action, GameState, PlayerId } from '../engine/types';
-import { DECK_EMBERWOOD, DECK_SKYWARD } from '../cards/decks';
+import { deckById, randomDeck } from '../cards/decks';
 import { aiShouldAct, pickAction } from '../ai/ai';
 import type { MatchConnection } from '../net/match';
 
@@ -16,8 +16,8 @@ interface Store {
   net: MatchConnection | null;
   error: string | null;
 
-  startAI: () => void;
-  startHotseat: () => void;
+  startAI: (deckId: string) => void;
+  startHotseat: (deckA: string, deckB: string) => void;
   startPvp: (net: MatchConnection) => void;
   dispatch: (action: Action) => void; // local human action
   toMenu: () => void;
@@ -54,7 +54,7 @@ export const useGame = create<Store>((set, get) => {
     net: null,
     error: null,
 
-    startAI: () => {
+    startAI: (deckId) => {
       const seed = Math.floor(Math.random() * 0x7fffffff);
       set({
         mode: 'ai',
@@ -62,12 +62,13 @@ export const useGame = create<Store>((set, get) => {
         aiId: 'B',
         net: null,
         error: null,
-        game: createInitialState(seed, DECK_EMBERWOOD, DECK_SKYWARD),
+        // AI plays a random deck from the pool.
+        game: createInitialState(seed, deckById(deckId).cards, randomDeck().cards),
       });
       scheduleAi(); // in case AI ever goes first (it doesn't on turn 1, but safe)
     },
 
-    startHotseat: () => {
+    startHotseat: (deckA, deckB) => {
       const seed = Math.floor(Math.random() * 0x7fffffff);
       set({
         mode: 'hotseat',
@@ -75,7 +76,7 @@ export const useGame = create<Store>((set, get) => {
         aiId: null,
         net: null,
         error: null,
-        game: createInitialState(seed, DECK_EMBERWOOD, DECK_SKYWARD),
+        game: createInitialState(seed, deckById(deckA).cards, deckById(deckB).cards),
       });
     },
 
@@ -95,7 +96,7 @@ export const useGame = create<Store>((set, get) => {
         aiId: null,
         net,
         error: null,
-        game: createInitialState(net.seed, DECK_EMBERWOOD, DECK_SKYWARD),
+        game: createInitialState(net.seed, deckById(net.deckA).cards, deckById(net.deckB).cards),
       });
     },
 

@@ -7,7 +7,7 @@ import type {
   PlayerState,
   Target,
 } from './types';
-import { opponentOf } from './types';
+import { needsTarget, opponentOf } from './types';
 
 // ---- Stat helpers (effective power/toughness include permanent buffs) ----
 
@@ -35,7 +35,7 @@ export function availableMana(p: PlayerState): number {
 }
 
 export function canAttack(c: CardInstance): boolean {
-  return isCreature(c) && !c.tapped && !c.summoningSick;
+  return isCreature(c) && !c.tapped && !c.summoningSick && !hasKeyword(c, 'defender');
 }
 
 /** Find a creature on either battlefield by instance id. */
@@ -76,11 +76,22 @@ export function legalActions(state: GameState, player: PlayerId): Action[] {
         actions.push({ type: 'castCreature', iid: c.iid });
       } else if (def.type === 'sorcery' && def.cost <= mana && def.effect) {
         const eff = def.effect;
-        if (eff.type === 'draw') {
-          actions.push({ type: 'castSorcery', iid: c.iid });
-        } else {
+        if (!needsTarget(eff)) {
+          if (eff.type !== 'ramp' || p.hand.some(isLand)) {
+            actions.push({ type: 'castSorcery', iid: c.iid });
+          }
+        } else if (eff.type === 'damage' || eff.type === 'buff') {
           for (const t of legalTargets(state, player, eff.targets)) {
             actions.push({ type: 'castSorcery', iid: c.iid, target: t });
+          }
+        } else if (eff.type === 'destroy') {
+          // only tapped creatures are valid targets
+          for (const pid of ['A', 'B'] as PlayerId[]) {
+            for (const cc of state.players[pid].battlefield) {
+              if (isCreature(cc) && cc.tapped) {
+                actions.push({ type: 'castSorcery', iid: c.iid, target: { kind: 'creature', iid: cc.iid } });
+              }
+            }
           }
         }
       }
@@ -153,9 +164,16 @@ export function validateAction(state: GameState, action: Action): void {
       const def = getDef(c.def);
       if (!def.effect) throw new Error('sorcery has no effect');
       if (def.cost > availableMana(active)) throw new Error('not enough mana');
-      if (def.effect.type !== 'draw') {
+      if (needsTarget(def.effect)) {
         if (!action.target) throw new Error('target required');
-        validateTarget(state, def.effect.targets, action.target);
+        if (def.effect.type === 'damage' || def.effect.type === 'buff') {
+          validateTarget(state, def.effect.targets, action.target);
+        } else if (def.effect.type === 'destroy') {
+          if (action.target.kind !== 'creature') throw new Error('must target a creature');
+          const found = findCreature(state, action.target.iid);
+          if (!found) throw new Error('creature not found');
+          if (!found.card.tapped) throw new Error('target must be tapped');
+        }
       }
       return;
     }

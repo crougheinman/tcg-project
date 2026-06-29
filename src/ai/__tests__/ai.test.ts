@@ -4,11 +4,15 @@ import { applyAction } from '../../engine/reducer';
 import { pickAction } from '../ai';
 import { opponentOf, type GameState } from '../../engine/types';
 import { isLand } from '../../engine/rules';
-import { DECK_EMBERWOOD, DECK_SKYWARD } from '../../cards/decks';
+import { DECK_EMBERWOOD, DECK_SKYWARD, DECK_LIST } from '../../cards/decks';
 
 // Drive a full AI-vs-AI game. Both sides use the heuristic AI.
-function playOut(seed: number): { g: GameState; steps: number; maxLands: number } {
-  let g = createInitialState(seed, DECK_EMBERWOOD, DECK_SKYWARD);
+function playOut(seed: number, deckA = DECK_EMBERWOOD, deckB = DECK_SKYWARD): {
+  g: GameState;
+  steps: number;
+  maxLands: number;
+} {
+  let g = createInitialState(seed, deckA, deckB);
   let steps = 0;
   let maxLands = 0;
   while (!g.winner && steps < 4000) {
@@ -42,5 +46,15 @@ describe('AI plays a full game', () => {
       if (loserLife <= 0) sawRealDamage = true;
     }
     expect(sawRealDamage).toBe(true);
+  });
+
+  it('every deck pairing plays to completion without errors (new mechanics included)', () => {
+    for (let i = 0; i < DECK_LIST.length; i++) {
+      const a = DECK_LIST[i].cards;
+      const b = DECK_LIST[(i + 1) % DECK_LIST.length].cards;
+      const { g, steps } = playOut(909 + i, a, b);
+      expect(steps).toBeLessThan(4000); // ramp/token/heal don't stall the AI
+      expect(g.winner).not.toBeNull();
+    }
   });
 });

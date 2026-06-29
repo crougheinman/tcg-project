@@ -13,13 +13,13 @@ function artFallback(e: React.SyntheticEvent<HTMLImageElement>) {
   else img.style.visibility = 'hidden';
 }
 
-export function CardPreview({ inst }: { inst: CardInstance }) {
+export function CardPreview({ inst, side = 'left' }: { inst: CardInstance; side?: 'left' | 'right' }) {
   const def = getDef(inst.def);
   const isCreature = def.type === 'creature';
   const subtype = isCreature ? `Creature — ${creatureSubtype(def.id)}` : def.type;
 
   return (
-    <div className="preview-overlay">
+    <div className={`preview-overlay side-${side}`}>
       <motion.div
         className="pcard-pop"
         initial={{ opacity: 0, scale: 0.85 }}

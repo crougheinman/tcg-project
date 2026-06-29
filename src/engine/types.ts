@@ -6,7 +6,7 @@ export type PlayerId = 'A' | 'B';
 
 export type CardType = 'land' | 'creature' | 'sorcery';
 
-export type Keyword = 'haste' | 'flying';
+export type Keyword = 'haste' | 'flying' | 'defender';
 
 /** What a creature can be targeted as / what an effect targets. */
 export type TargetSpec = 'any' | 'creature' | 'player';
@@ -19,7 +19,17 @@ export type Target =
 export type Effect =
   | { type: 'damage'; amount: number; targets: TargetSpec }
   | { type: 'draw'; amount: number }
-  | { type: 'buff'; power: number; toughness: number; targets: 'creature' };
+  | { type: 'buff'; power: number; toughness: number; targets: 'creature' }
+  | { type: 'heal'; amount: number }
+  | { type: 'ramp'; amount: number } // put up to N lands from hand onto the battlefield
+  | { type: 'token'; token: string; count: number } // create N token creatures
+  | { type: 'tapAll'; maxToughness: number } // tap all opponent creatures with toughness <= N
+  | { type: 'destroy'; targets: 'creature' }; // destroy target (tapped) creature
+
+/** Which effects need the player to pick a target. */
+export function needsTarget(effect: Effect): boolean {
+  return effect.type === 'damage' || effect.type === 'buff' || effect.type === 'destroy';
+}
 
 /** Static card definition (the "printed" card). */
 export interface CardDef {
@@ -31,6 +41,7 @@ export interface CardDef {
   toughness?: number; // creatures
   keywords?: Keyword[];
   effect?: Effect; // sorceries
+  spellTrigger?: Effect; // creature: fires whenever its controller casts a sorcery
   text?: string;
   flavor?: string;
   art?: string; // image path served from /public, e.g. '/cards/ember_sprite.png'

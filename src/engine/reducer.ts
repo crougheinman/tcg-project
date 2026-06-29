@@ -1,5 +1,5 @@
 import { getDef } from '../cards/cards';
-import type { Action, Effect, GameState, PlayerId, PlayerState, Target } from './types';
+import type { Action, CardInstance, Effect, GameState, PlayerId, PlayerState, Target } from './types';
 import { opponentOf } from './types';
 import {
   availableMana,
@@ -67,6 +67,14 @@ export function applyAction(state: GameState, action: Action): GameState {
       active.graveyard.push(c);
       s.log.push(`${s.active} casts ${def.name}`);
       applyEffect(s, s.active, def.effect!, action.target);
+      // creatures that trigger on your sorcery casts (e.g. Pyre Adept)
+      for (const cr of active.battlefield) {
+        const trig = getDef(cr.def).spellTrigger;
+        if (trig) {
+          s.log.push(`✦ ${getDef(cr.def).name} triggers`);
+          applyEffect(s, s.active, trig, { kind: 'player', player: opponentOf(s.active) });
+        }
+      }
       break;
     }
     case 'declareAttackers': {
@@ -196,7 +204,67 @@ function applyEffect(s: GameState, controller: PlayerId, effect: Effect, target?
       }
       break;
     }
+    case 'heal': {
+      s.players[controller].life += effect.amount;
+      break;
+    }
+    case 'ramp': {
+      const p = s.players[controller];
+      let moved = 0;
+      for (let i = p.hand.length - 1; i >= 0 && moved < effect.amount; i--) {
+        if (isLand(p.hand[i])) {
+          const land = p.hand.splice(i, 1)[0];
+          land.tapped = false;
+          p.battlefield.push(land);
+          moved++;
+        }
+      }
+      if (moved) s.log.push(`${controller} ramps ${moved} land${moved > 1 ? 's' : ''}`);
+      break;
+    }
+    case 'token': {
+      const p = s.players[controller];
+      for (let i = 0; i < effect.count; i++) p.battlefield.push(makeToken(s, effect.token, controller));
+      s.log.push(`${controller} creates ${effect.count} ${getDef(effect.token).name}`);
+      break;
+    }
+    case 'tapAll': {
+      const enemy = s.players[opponentOf(controller)];
+      let n = 0;
+      for (const c of enemy.battlefield) {
+        if (isCreature(c) && !c.tapped && toughness(c) <= effect.maxToughness) {
+          c.tapped = true;
+          n++;
+        }
+      }
+      s.log.push(`${controller} topples ${n} creature${n === 1 ? '' : 's'}`);
+      break;
+    }
+    case 'destroy': {
+      if (target?.kind === 'creature') {
+        const found = findCreature(s, target.iid);
+        if (found) {
+          found.card.damage += 9999; // lethal -> checkDeaths removes it (+ destroy VFX)
+          s.log.push(`${getDef(found.card.def).name} is destroyed`);
+        }
+      }
+      break;
+    }
   }
+}
+
+function makeToken(s: GameState, defId: string, owner: PlayerId): CardInstance {
+  return {
+    iid: `c${s.nextIid++}`,
+    def: defId,
+    owner,
+    tapped: false,
+    summoningSick: true,
+    damage: 0,
+    buffP: 0,
+    buffT: 0,
+    blitz: false,
+  };
 }
 
 function resolveCombat(s: GameState): void {

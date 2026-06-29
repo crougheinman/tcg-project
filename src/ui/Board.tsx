@@ -1,15 +1,17 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { AnimatePresence, LayoutGroup, motion, useDragControls } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { getDef } from '../cards/cards';
 import { availableMana, canAttack, isCreature, isLand } from '../engine/rules';
 import type { CardInstance, GameState, PlayerId } from '../engine/types';
-import { opponentOf } from '../engine/types';
+import { needsTarget, opponentOf } from '../engine/types';
 import { CardView } from './CardView';
 import { CardPreview } from './CardPreview';
 import { HoverCtx } from './hover';
 import { PhaseBar } from './PhaseBar';
 import { Rulebook } from './Rulebook';
+import { ZoneViewer } from './ZoneViewer';
+import { DestroyFx } from './DestroyFx';
 import type { Burst } from './Vfx';
 
 // three.js is heavy — split it into its own chunk, loaded only in-game.
@@ -39,6 +41,11 @@ export function Board() {
     setHovered(null); // hovered card may have left play
   }, [game.phase, game.turn, game.active]);
 
+  // Hide the hover preview while choosing a spell/trigger target (it blocks the prompt).
+  useEffect(() => {
+    if (sorceryIid || game.pending) setHovered(null);
+  }, [sorceryIid, game.pending]);
+
   // Spawn three.js particle bursts on damage (face + surviving creatures).
   const [bursts, setBursts] = useState<Burst[]>([]);
   const prevGame = useRef<GameState>(game);
@@ -54,9 +61,11 @@ export function Board() {
       const r = el.getBoundingClientRect();
       add.push({ id: burstId.current++, x: r.left + r.width / 2, y: r.top + r.height / 2, color, n });
     };
+    let dmgTargetSel: string | null = null; // who/what just took damage (for the spell fx)
     for (const pid of ['A', 'B'] as PlayerId[]) {
       const d = before.players[pid].life - game.players[pid].life;
       if (d > 0) {
+        dmgTargetSel = `[data-player="${pid}"]`;
         spawnAt(`[data-player="${pid}"]`, '#ff7a33', Math.min(48, 14 + d * 3));
         const el = document.querySelector(`[data-player="${pid}"]`);
         if (el) {
@@ -75,25 +84,75 @@ export function Board() {
         if (isCreature(c)) beforeDmg.set(c.iid, c.damage);
     for (const pid of ['A', 'B'] as PlayerId[])
       for (const c of game.players[pid].battlefield)
-        if (isCreature(c) && c.damage > (beforeDmg.get(c.iid) ?? 0))
+        if (isCreature(c) && c.damage > (beforeDmg.get(c.iid) ?? 0)) {
+          if (!dmgTargetSel) dmgTargetSel = `[data-iid="${c.iid}"]`;
           spawnAt(`[data-iid="${c.iid}"]`, '#ff5a4a', 18);
+        }
     if (add.length) setBursts((b) => [...b, ...add]);
+
+    // A sorcery just hit a graveyard -> play its spritesheet spell effect (3s),
+    // centered on whoever/whatever took the damage (else screen centre).
+    const graveBefore = new Set(
+      [...before.players.A.graveyard, ...before.players.B.graveyard].map((c) => c.iid),
+    );
+    for (const pid of ['A', 'B'] as PlayerId[]) {
+      for (const c of game.players[pid].graveyard) {
+        if (!graveBefore.has(c.iid) && getDef(c.def).type === 'sorcery') {
+          const fx = SPELL_FX[c.def] ?? SPELL_FX.default;
+          const el = dmgTargetSel ? document.querySelector(dmgTargetSel) : null;
+          const r = el?.getBoundingClientRect();
+          const x = r ? r.left + r.width / 2 : window.innerWidth / 2;
+          const y = r ? r.top + r.height / 2 : window.innerHeight / 2;
+          setSpellFx({ id: dmgId.current++, sheet: fx.sheet, frames: fx.frames, x, y });
+        }
+      }
+    }
+
+    // A land was just played -> rejuvenate effect on the caster's icon.
+    const battleBefore = new Set(
+      [...before.players.A.battlefield, ...before.players.B.battlefield].map((c) => c.iid),
+    );
+    for (const pid of ['A', 'B'] as PlayerId[]) {
+      for (const c of game.players[pid].battlefield) {
+        if (!battleBefore.has(c.iid) && isLand(c)) {
+          const el = document.querySelector(`[data-player="${pid}"]`);
+          const r = el?.getBoundingClientRect();
+          const x = r ? r.left + r.width / 2 : window.innerWidth / 2;
+          const y = r ? r.top + r.height / 2 : window.innerHeight / 2;
+          setSpellFx({ id: dmgId.current++, sheet: LAND_FX.sheet, frames: LAND_FX.frames, x, y });
+        }
+      }
+    }
 
     // Combat strike animations: lunge each attacker toward its target.
     if (before.phase === 'combat_block' && game.phase === 'end' && before.combat) {
       const blockerByAtk: Record<string, string> = {};
       for (const [blk, atk] of Object.entries(before.combat.blocks)) blockerByAtk[atk] = blk;
       let faceHit = false;
+      const defenderShield = document.querySelector(`[data-player="${opponentOf(before.active)}"]`);
+      const newSlashes: { id: number; x: number; y: number }[] = [];
+      const slashAt = (el: Element | null) => {
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        newSlashes.push({ id: dmgId.current++, x: r.left + r.width / 2, y: r.top + r.height / 2 });
+      };
       for (const atk of before.combat.attackers) {
         const atkEl = stackEl(atk);
         const blk = blockerByAtk[atk];
         if (blk) {
           lungeTo(atkEl, stackEl(blk)); // clash with blocker
           shakeEl(stackEl(blk));
+          slashAt(stackEl(blk)); // slash the blocker
         } else {
           faceHit = true;
-          lungeTo(atkEl, document.querySelector(`[data-player="${opponentOf(before.active)}"]`));
+          lungeTo(atkEl, defenderShield);
+          slashAt(defenderShield); // slash the defending player
         }
+      }
+      if (newSlashes.length) {
+        setSlashes((s) => [...s, ...newSlashes]);
+        const ids = new Set(newSlashes.map((n) => n.id));
+        setTimeout(() => setSlashes((s) => s.filter((n) => !ids.has(n.id))), 600);
       }
       if (faceHit) {
         document
@@ -110,13 +169,60 @@ export function Board() {
         setFaceFlash((f) => f + 1);
       }
     }
+
+    // A creature left the battlefield (destroyed) -> 2.5s destruction sequence at
+    // its last known position (captured before this render).
+    const aliveNow = new Set(
+      [...game.players.A.battlefield, ...game.players.B.battlefield].map((c) => c.iid),
+    );
+    const newDestroys: { id: number; x: number; y: number }[] = [];
+    for (const pid of ['A', 'B'] as PlayerId[]) {
+      for (const c of before.players[pid].battlefield) {
+        if (isCreature(c) && !aliveNow.has(c.iid)) {
+          const r = creatureRects.current[c.iid];
+          if (r) newDestroys.push({ id: dmgId.current++, x: r.x, y: r.y });
+        }
+      }
+    }
+    if (newDestroys.length) setDestroys((d) => [...d, ...newDestroys]);
+
+    // Record current creature positions for next time (used when they die).
+    const rects: Record<string, { x: number; y: number }> = {};
+    for (const pid of ['A', 'B'] as PlayerId[]) {
+      for (const c of game.players[pid].battlefield) {
+        if (!isCreature(c)) continue;
+        const el = document.querySelector(`[data-iid="${c.iid}"]`);
+        if (el) {
+          const b = el.getBoundingClientRect();
+          rects[c.iid] = { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+        }
+      }
+    }
+    creatureRects.current = rects;
   }, [game]);
   const removeBurst = (id: number) => setBursts((b) => b.filter((x) => x.id !== id));
+  const removeDestroy = (id: number) => setDestroys((d) => d.filter((x) => x.id !== id));
 
   const [faceFlash, setFaceFlash] = useState(0);
   const [dmgNums, setDmgNums] = useState<{ id: number; x: number; y: number; amt: number }[]>([]);
+  const [slashes, setSlashes] = useState<{ id: number; x: number; y: number }[]>([]);
+  const [destroys, setDestroys] = useState<{ id: number; x: number; y: number }[]>([]);
+  const creatureRects = useRef<Record<string, { x: number; y: number }>>({});
   const dmgId = useRef(0);
   const dragBounds = useRef<HTMLDivElement>(null);
+
+  // Spritesheet effect played for 3s when a sorcery is cast, centered on its target.
+  const [spellFx, setSpellFx] = useState<
+    { id: number; sheet: string; frames: number; x: number; y: number } | null
+  >(null);
+  useEffect(() => {
+    if (!spellFx) return;
+    const t = setTimeout(() => setSpellFx(null), 3000);
+    return () => clearTimeout(t);
+  }, [spellFx]);
+
+  // Deck / graveyard viewer.
+  const [zone, setZone] = useState<'deck' | 'graveyard' | null>(null);
 
   // Drag a hand card onto the battlefield to play it.
   const [dragActive, setDragActive] = useState(false);
@@ -184,6 +290,15 @@ export function Board() {
 
   // ---- click handlers ----
 
+  // While a spell awaits a target, which creatures are valid to click?
+  function sorceryTargetable(c: CardInstance): boolean {
+    if (!sorceryIid) return false;
+    const card = me.hand.find((h) => h.iid === sorceryIid);
+    const eff = card ? getDef(card.def).effect : undefined;
+    if (eff?.type === 'destroy') return c.tapped; // Take Counter: tapped only
+    return true; // damage / buff: any creature
+  }
+
   // Is this hand card playable right now (turn, phase, mana, land-drop, targets)?
   function canPlay(c: CardInstance): boolean {
     if (!myTurnToAct || game.phase !== 'main1' || game.pending) return false;
@@ -197,18 +312,30 @@ export function Board() {
       if (def.effect?.type === 'buff') {
         return me.battlefield.some(isCreature) || opp.battlefield.some(isCreature);
       }
+      if (def.effect?.type === 'ramp') return me.hand.some(isLand); // needs a land to ramp
+      if (def.effect?.type === 'destroy') {
+        return me.battlefield.concat(opp.battlefield).some((c) => isCreature(c) && c.tapped);
+      }
       return true;
     }
     return false;
   }
 
+  // Put the hover preview on the side opposite the hovered card so it never covers it.
+  function previewSide(iid: string): 'left' | 'right' {
+    const el = document.querySelector(`[data-iid="${iid}"]`);
+    if (!el) return 'right';
+    const r = el.getBoundingClientRect();
+    return r.left + r.width / 2 < window.innerWidth / 2 ? 'right' : 'left';
+  }
+
   function handHclick(c: CardInstance) {
-    if (!myTurnToAct || game.phase !== 'main1' || game.pending) return;
+    if (!canPlay(c)) return; // greyed/unplayable cards are fully disabled
     const def = getDef(c.def);
     if (def.type === 'land') dispatch({ type: 'playLand', iid: c.iid });
     else if (def.type === 'creature') dispatch({ type: 'castCreature', iid: c.iid });
     else if (def.type === 'sorcery') {
-      if (def.effect?.type === 'draw') dispatch({ type: 'castSorcery', iid: c.iid });
+      if (def.effect && !needsTarget(def.effect)) dispatch({ type: 'castSorcery', iid: c.iid });
       else setSorceryIid(c.iid);
     }
   }
@@ -221,6 +348,7 @@ export function Board() {
     }
     // Targeting a spell next.
     if (sorceryIid) {
+      if (!sorceryTargetable(c)) return; // e.g. Take Counter needs a tapped creature
       dispatch({ type: 'castSorcery', iid: sorceryIid, target: { kind: 'creature', iid: c.iid } });
       setSorceryIid(null);
       return;
@@ -267,13 +395,18 @@ export function Board() {
         <div className="row creatures">
           <AnimatePresence>
             {creatures.map((c) => (
-              <div key={c.iid} className="stack">
+              <motion.div
+                key={c.iid}
+                className="stack"
+                initial={false}
+                exit={{ opacity: 0, scale: 0.85, transition: { duration: 1.8, ease: 'easeIn' } }}
+              >
                 <CardView
                   inst={c}
                   arena
                   selected={attackers.has(c.iid) || pendingBlocker === c.iid || !!blocks[c.iid]}
                   targetable={
-                    !!sorceryIid ||
+                    sorceryTargetable(c) ||
                     (game.pending?.kind === 'whipflash' && c.iid !== game.pending.source)
                   }
                   onClick={() => creatureClick(c, side)}
@@ -305,9 +438,32 @@ export function Board() {
                         Ready to attack
                       </motion.span>,
                     ]}
+                    {(pendingBlocker === c.iid || !!blocks[c.iid]) && [
+                      <motion.img
+                        key="shield"
+                        className="attack-sword block"
+                        src="/ui/shield.png"
+                        alt="blocking"
+                        draggable={false}
+                        initial={{ opacity: 0, y: 28, scale: 0.6 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 28, scale: 0.6 }}
+                        transition={{ type: 'spring', stiffness: 420, damping: 20 }}
+                      />,
+                      <motion.span
+                        key="rblock"
+                        className="ready-box block"
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 12 }}
+                        transition={{ type: 'spring', stiffness: 480, damping: 24 }}
+                      >
+                        Ready to block
+                      </motion.span>,
+                    ]}
                   </AnimatePresence>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </AnimatePresence>
           {creatures.length === 0 && <span className="empty">no creatures</span>}
@@ -446,6 +602,13 @@ export function Board() {
           </AnimatePresence>
         </div>
         <div className="player-platform">
+          <button
+            className="zone-btn left"
+            onClick={() => setZone('graveyard')}
+            title="View graveyard"
+          >
+            ⚰ {me.graveyard.length}
+          </button>
           <PlayerBar
             p={me}
             side={localId}
@@ -454,6 +617,9 @@ export function Board() {
             targetable={!!sorceryIid}
             self
           />
+          <button className="zone-btn right" onClick={() => setZone('deck')} title="View deck">
+            🂠 {me.library.length}
+          </button>
         </div>
         </div>
       </section>
@@ -462,27 +628,77 @@ export function Board() {
         <VfxCanvas bursts={bursts} onDone={removeBurst} />
       </Suspense>
 
-      <AnimatePresence>{hovered && <CardPreview key={hovered.iid} inst={hovered} />}</AnimatePresence>
-
       <AnimatePresence>
-        {announce && (
-          <motion.div
-            key={announce.id}
-            className={'announce' + (announce.text.includes('✦') ? ' skill' : '')}
-            initial={{ opacity: 0, scale: 0.8, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 1.1 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 26 }}
-          >
-            {announce.text}
-          </motion.div>
+        {hovered && !sorceryIid && !game.pending && (
+          <CardPreview key={hovered.iid} inst={hovered} side={previewSide(hovered.iid)} />
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {zone && (
+          <ZoneViewer
+            key={zone}
+            title={zone === 'deck' ? 'Your Deck' : 'Graveyard'}
+            cards={zone === 'deck' ? me.library : me.graveyard}
+            onClose={() => setZone(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <div className="announce-wrap">
+        <AnimatePresence>
+          {announce && (
+            <motion.div
+              key={announce.id}
+              className={'announce' + (announce.text.includes('✦') ? ' skill' : '')}
+              initial={{ opacity: 0, scale: 0.8, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 1.1 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 26 }}
+            >
+              {announce.text}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       <div ref={dragBounds} className="drag-layer" />
       <ActionLog log={game.log} myId={myId} boundsRef={dragBounds} />
 
       {faceFlash > 0 && <div key={faceFlash} className="face-flash" />}
+
+      {slashes.map((s) => (
+        <div key={s.id} className="slashfx" style={{ left: s.x, top: s.y }} />
+      ))}
+
+      {destroys.map((d) => (
+        <DestroyFx key={d.id} x={d.x} y={d.y} onDone={() => removeDestroy(d.id)} />
+      ))}
+
+      <AnimatePresence>
+        {spellFx && (
+          <motion.div
+            key={spellFx.id}
+            className="spellfx-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <div
+              className="spellfx"
+              style={
+                {
+                  left: spellFx.x,
+                  top: spellFx.y,
+                  backgroundImage: `url(${spellFx.sheet})`,
+                  '--frames': spellFx.frames,
+                  '--dur': `${(spellFx.frames * 0.08).toFixed(2)}s`,
+                } as CSSProperties
+              }
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {dmgNums.map((n) => (
@@ -537,6 +753,16 @@ function PlayerBar({
   targetable?: boolean;
   self?: boolean;
 }) {
+  // Pulse the mana readout for 2s whenever it changes (cast / land / untap).
+  const [manaPulse, setManaPulse] = useState(false);
+  const prevAvail = useRef(mana.avail);
+  useEffect(() => {
+    if (prevAvail.current === mana.avail) return;
+    prevAvail.current = mana.avail;
+    setManaPulse(true);
+    const t = setTimeout(() => setManaPulse(false), 2000);
+    return () => clearTimeout(t);
+  }, [mana.avail]);
   return (
     <div className={'playerbar' + (self ? ' me' : '')}>
       <span
@@ -554,7 +780,10 @@ function PlayerBar({
         <span className="life" title="Life — you lose when this hits 0">
           ♥ {p.life}
         </span>
-        <span className="mana" title="Mana — untapped lands / total. Lands tap to pay card costs">
+        <span
+          className={'mana' + (manaPulse ? ' pulse' : '')}
+          title="Mana — untapped lands / total. Lands tap to pay card costs"
+        >
           ◈ {mana.avail}/{mana.total}
         </span>
         <span className="counts" title="Cards in hand · cards left in deck">
@@ -564,6 +793,16 @@ function PlayerBar({
     </div>
   );
 }
+
+// Sorcery -> spritesheet (single-row strips in public/effects; frames = width/height).
+const SPELL_FX: Record<string, { sheet: string; frames: number }> = {
+  cinderbolt: { sheet: '/effects/fire-bomb.png', frames: 14 },
+  scorch: { sheet: '/effects/explosion.png', frames: 18 },
+  insight: { sheet: '/effects/star-caller.png', frames: 7 },
+  wild_growth: { sheet: '/effects/green-aura.png', frames: 8 },
+  default: { sheet: '/effects/lightning.png', frames: 5 },
+};
+const LAND_FX = { sheet: '/effects/green-aura.png', frames: 8 }; // rejuvenate on land play
 
 // --- combat strike animation helpers (imperative, conflict-free with framer) ---
 function stackEl(iid: string): HTMLElement | null {
@@ -608,7 +847,7 @@ function humanize(s: string, myId: PlayerId): string {
     .replace(new RegExp(`\\b${opp}\\b`, 'g'), 'Opponent')
     // first-person verb agreement for the local player
     .replace(/\bYou is\b/g, 'You are')
-    .replace(/\bYou (plays|casts|attacks|blocks|decks)\b/g, (_m, v) => 'You ' + v.slice(0, -1));
+    .replace(/\bYou (plays|casts|attacks|blocks|decks|creates|ramps|gains|heals)\b/g, (_m, v) => 'You ' + v.slice(0, -1));
 }
 
 function ActionLog({
