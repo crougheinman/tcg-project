@@ -118,11 +118,24 @@ input {
 .topbar-right { margin-left: auto; }
 .topbar-right ~ .topbar-right, .role + .topbar-right { margin-left: 8px; }
 
-.phasebar { display: flex; gap: 16px; align-items: center; font-size: 14px; }
+.phasebar { display: flex; gap: 14px; align-items: center; font-size: 13px; }
 .phasebar .turn { color: var(--muted); }
 .phasebar .active.you { color: var(--good); font-weight: 700; }
 .phasebar .active.them { color: var(--danger); }
-.phasebar .phase { color: var(--gold); }
+.phase-steps { display: flex; align-items: center; gap: 0; }
+.pstep {
+  position: relative; padding: 3px 12px; font-size: 12px; font-family: 'Cinzel', serif;
+  letter-spacing: 0.5px; color: var(--muted); background: var(--bg2);
+  border: 1px solid #2c3645; border-right: none;
+}
+.pstep:first-child { border-radius: 12px 0 0 12px; }
+.pstep:last-child { border-radius: 0 12px 12px 0; border-right: 1px solid #2c3645; }
+.pstep.done { color: #8a93a3; background: #1a2230; }
+.pstep.on {
+  color: #1a140a; font-weight: 700;
+  background: linear-gradient(180deg, #e6c873, #c79a3a); border-color: var(--gold);
+  box-shadow: 0 0 10px rgba(217, 182, 90, 0.5);
+}
 
 .player-zone {
   background: var(--bg2);
@@ -136,34 +149,33 @@ input {
 .player-zone.opp { border-top: 2px solid var(--danger); }
 .player-zone.me { border-bottom: 2px solid var(--good); }
 
-.playerbar { display: flex; align-items: center; gap: 14px; font-size: 14px; }
-.avatar {
-  background: var(--panel); padding: 4px 10px; border-radius: var(--radius);
-  border: 1px solid #2c3645;
+/* compact, centered player badge: shield w/ user icon, stacked life + mana below */
+.playerbar { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.shield-avatar {
+  position: relative; width: 46px; height: 52px; display: grid; place-items: center;
+  background: linear-gradient(180deg, #e6c873, #a9842f);
+  clip-path: polygon(50% 0, 100% 16%, 100% 62%, 50% 100%, 0 62%, 0 16%);
 }
-.avatar.targetable { border-color: var(--accent); box-shadow: 0 0 12px var(--accent); cursor: crosshair; }
-.bars { display: flex; flex-direction: column; gap: 4px; flex: 1; max-width: 260px; }
-.bar {
-  position: relative; height: 16px; border-radius: 8px; overflow: hidden;
-  background: #11161e; border: 1px solid #2c3645;
+.shield-avatar::before {
+  content: ''; position: absolute; inset: 2px;
+  clip-path: polygon(50% 0, 100% 16%, 100% 62%, 50% 100%, 0 62%, 0 16%);
+  background: linear-gradient(180deg, #2c3440, #1b2129);
 }
-.bar-fill { position: absolute; left: 0; top: 0; bottom: 0; transition: width 0.3s ease, background 0.3s; }
-.bar-label {
-  position: relative; z-index: 1; font-size: 11px; font-weight: 700;
-  line-height: 16px; padding-left: 8px; color: #fff; text-shadow: 0 1px 2px #000;
+.shield-avatar .user-ico {
+  position: relative; z-index: 1; width: 24px; height: 24px;
+  fill: none; stroke: #f3e7c4; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
 }
-.manabar { display: flex; align-items: center; gap: 3px; height: 16px; }
-.pip {
-  width: 11px; height: 11px; border-radius: 3px;
-  background: #1b2230; border: 1px solid #2c3645;
+.shield-avatar.targetable { filter: drop-shadow(0 0 8px var(--accent)); cursor: crosshair; }
+.pstats { display: flex; flex-direction: column; align-items: center; line-height: 1.1; margin-top: -2px; }
+.playerbar .life { color: var(--danger); font-weight: 700; font-size: 15px; }
+.playerbar .mana { color: var(--accent); font-weight: 700; font-size: 12px; }
+.playerbar .counts { color: var(--muted); font-size: 10px; }
+
+.dmg-float {
+  position: fixed; z-index: 70; pointer-events: none; transform: translateX(-50%);
+  font-family: 'Cinzel', serif; font-weight: 800; font-size: 24px; color: #ff5a4a;
+  text-shadow: 0 2px 4px #000, 0 0 10px rgba(224, 60, 40, 0.7);
 }
-.pip.on {
-  background: linear-gradient(180deg, #8fc1ff, #3b6fd6); border-color: #6aa9ff;
-  box-shadow: 0 0 6px rgba(106, 169, 255, 0.6);
-}
-.manabar .bar-label { color: var(--accent); padding-left: 4px; text-shadow: none; }
-.bar-label.small { font-size: 10px; }
-.counts { color: var(--muted); font-size: 12px; }
 
 .battlefield {
   display: flex; flex-direction: column; gap: 4px; min-height: calc(var(--card-h) + 12px);
@@ -183,6 +195,25 @@ input {
 .empty { color: var(--muted); font-size: 12px; font-style: italic; }
 
 .hand { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; padding-top: 4px; }
+
+/* bottom dock: a wooden gutter holding the player badge; the hand tucks ~40%
+   behind it so cards look like they rest on the platform's back. */
+.player-dock { position: relative; display: flex; flex-direction: column; align-items: center; margin-top: auto; }
+.player-dock .hand { position: relative; z-index: 1; margin-bottom: calc(var(--card-h) * -0.4); }
+.player-platform {
+  position: relative; z-index: 3; width: 100%;
+  display: flex; justify-content: center; padding: 8px 0 6px;
+  background: linear-gradient(180deg, #34281b 0%, #20180f 55%, #130d07 100%);
+  border-top: 2px solid #6b4a25;
+  box-shadow: 0 -8px 18px rgba(0, 0, 0, 0.55), inset 0 2px 0 rgba(255, 220, 150, 0.14);
+  pointer-events: none;
+}
+.player-platform::before {
+  content: ''; position: absolute; left: 0; right: 0; top: -2px; height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(217, 182, 90, 0.6), transparent);
+}
+.player-platform .playerbar { pointer-events: auto; margin-top: -24px; }
+.player-platform .shield-avatar { filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.6)); }
 .opp-hand .card-back { --card-w: 54px; --card-h: 76px; }
 
 .center { display: flex; justify-content: center; align-items: center; min-height: 56px; }
@@ -198,6 +229,21 @@ input {
 }
 .combat-tag.atk { background: var(--danger); color: #fff; }
 .combat-tag.blk { background: var(--accent); color: #06101f; }
+
+/* drawn sword overlaid on a creature selected to attack (unsheathe / sheathe) */
+.attack-overlay { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 4; overflow: visible; }
+.attack-sword {
+  width: 78%; height: auto; object-fit: contain;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 8px rgba(255, 230, 160, 0.55));
+}
+.ready-box {
+  position: absolute; left: 0; right: 0; bottom: 0; text-align: center; z-index: 5;
+  font-family: 'Cinzel', serif; font-weight: 700; font-size: 8.5px; letter-spacing: 0.5px;
+  text-transform: uppercase; color: #fff; padding: 3px 2px;
+  background: linear-gradient(180deg, #e0392b, #a51d12);
+  border: 1.5px solid #ff6a5a; border-radius: 0 0 7px 7px;
+  box-shadow: 0 0 10px rgba(224, 57, 43, 0.8);
+}
 
 .card {
   width: var(--card-w);
@@ -231,7 +277,8 @@ input {
   box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px var(--accent), 0 0 12px var(--accent);
   cursor: crosshair;
 }
-.card.dim { opacity: 0.55; }
+.card.dim { opacity: 0.9; filter: grayscale(0.9) brightness(0.5) contrast(0.9); }
+.card.dim.clickable:hover { filter: grayscale(0.9) brightness(0.5); } /* stay greyed on hover */
 .card.blitzed { animation: blitzglow 1.4s ease-in-out infinite; }
 @keyframes blitzglow {
   0%, 100% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px #e8a13a, 0 0 12px rgba(232, 161, 58, 0.6); }
@@ -271,6 +318,7 @@ input {
   width: 100%; aspect-ratio: 4 / 3; flex: none;
   object-fit: cover; object-position: center;
   border-radius: 4px; background: #fbf4e2; border: 1px solid #b89a63;
+  pointer-events: none; -webkit-user-drag: none; user-select: none;
 }
 .row.lands .card-art { display: none; }
 .card-text { color: #3a2c1a; font-size: 9px; line-height: 1.15; max-height: 22px; overflow: hidden; }
@@ -289,6 +337,7 @@ input {
 .arena-art {
   position: absolute; inset: 0; width: 100%; height: 100%; display: block;
   object-fit: cover; object-position: center; border-radius: 7px;
+  pointer-events: none; -webkit-user-drag: none; user-select: none;
 }
 .arena-pt {
   position: absolute; right: -7px; bottom: -9px; z-index: 3;
@@ -313,9 +362,9 @@ input {
 }
 
 /* ---- hover preview ---- */
-.card-preview-wrap {
-  position: fixed; left: 28px; top: 50%; transform: translateY(-50%);
-  z-index: 60; pointer-events: none;
+.preview-overlay {
+  position: fixed; inset: 0; z-index: 60; pointer-events: none;
+  display: grid; place-items: center;
 }
 .pcard {
   width: 292px; position: relative;
@@ -389,10 +438,6 @@ input {
 }
 .pcard-shield span.damaged { color: #ff9a8a; }
 
-@media (max-width: 720px) {
-  /* no hover on touch — shown via press-and-hold, centered */
-  .card-preview-wrap { left: 50%; transform: translate(-50%, -50%); }
-}
 
 /* ---- type colour identity: creature warm (default), sorcery blue, land green ---- */
 .card-sorcery { background: linear-gradient(180deg, #eaf0fb, #d2ddef); }

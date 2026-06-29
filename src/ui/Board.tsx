@@ -56,7 +56,18 @@ export function Board() {
     };
     for (const pid of ['A', 'B'] as PlayerId[]) {
       const d = before.players[pid].life - game.players[pid].life;
-      if (d > 0) spawnAt(`[data-player="${pid}"]`, '#ff7a33', Math.min(48, 14 + d * 3));
+      if (d > 0) {
+        spawnAt(`[data-player="${pid}"]`, '#ff7a33', Math.min(48, 14 + d * 3));
+        const el = document.querySelector(`[data-player="${pid}"]`);
+        if (el) {
+          const r = el.getBoundingClientRect();
+          setDmgNums((n) => [
+            ...n,
+            { id: dmgId.current++, x: r.left + r.width / 2, y: r.top, amt: d },
+          ]);
+          shakeEl(el as HTMLElement);
+        }
+      }
     }
     const beforeDmg = new Map<string, number>();
     for (const pid of ['A', 'B'] as PlayerId[])
@@ -103,6 +114,8 @@ export function Board() {
   const removeBurst = (id: number) => setBursts((b) => b.filter((x) => x.id !== id));
 
   const [faceFlash, setFaceFlash] = useState(0);
+  const [dmgNums, setDmgNums] = useState<{ id: number; x: number; y: number; amt: number }[]>([]);
+  const dmgId = useRef(0);
   const dragBounds = useRef<HTMLDivElement>(null);
 
   // Drag a hand card onto the battlefield to play it.
@@ -121,7 +134,7 @@ export function Board() {
   }
 
   // Announce each new log entry as a transient center banner.
-  const [announce, setAnnounce] = useState<{ id: number; text: string } | null>(null);
+  const [announce, setAnnounce] = useState<{ id: number; text: string; ms?: number } | null>(null);
   const prevLogLen = useRef(game.log.length);
   const announceId = useRef(0);
   useEffect(() => {
@@ -133,9 +146,31 @@ export function Board() {
   }, [game, myId]);
   useEffect(() => {
     if (!announce) return;
-    const t = setTimeout(() => setAnnounce(null), 1800);
+    const t = setTimeout(() => setAnnounce(null), announce.ms ?? 1800);
     return () => clearTimeout(t);
   }, [announce]);
+
+  // Auto-skip your combat when no creature can attack — notify with the reason,
+  // hold the banner ~3s, then advance past combat.
+  const autoSkipRef = useRef<string>('');
+  useEffect(() => {
+    const myTurn = !game.winner && (mode === 'hotseat' || game.active === myId);
+    if (game.phase !== 'combat_attack' || !myTurn || game.pending) return;
+    const creatures = game.players[game.active].battlefield.filter(isCreature);
+    if (creatures.filter(canAttack).length > 0) return; // a reason to attack — let the player choose
+    const key = `${game.turn}-${game.active}`;
+    if (autoSkipRef.current === key) return; // only once per combat
+    autoSkipRef.current = key;
+    const reason =
+      creatures.length === 0
+        ? 'no creatures to attack with'
+        : 'your creatures are not ready (summoning sick)';
+    setAnnounce({ id: announceId.current++, text: `⚔ Combat skipped — ${reason}`, ms: 3000 });
+    const t = setTimeout(() => {
+      if (useGame.getState().game?.phase === 'combat_attack') dispatch({ type: 'advance' });
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [game, myId, mode, dispatch]);
 
   const actor: PlayerId = game.phase === 'combat_block' ? opponentOf(game.active) : game.active;
   const localId: PlayerId = mode === 'hotseat' ? actor : myId;
@@ -148,6 +183,24 @@ export function Board() {
   const attackingIids = new Set(game.combat?.attackers ?? []);
 
   // ---- click handlers ----
+
+  // Is this hand card playable right now (turn, phase, mana, land-drop, targets)?
+  function canPlay(c: CardInstance): boolean {
+    if (!myTurnToAct || game.phase !== 'main1' || game.pending) return false;
+    const def = getDef(c.def);
+    const mana = availableMana(me);
+    if (def.type === 'land') return !me.landPlayedThisTurn;
+    if (def.type === 'creature') return def.cost <= mana;
+    if (def.type === 'sorcery') {
+      if (def.cost > mana) return false;
+      // a "buff" sorcery needs a creature on the board to target
+      if (def.effect?.type === 'buff') {
+        return me.battlefield.some(isCreature) || opp.battlefield.some(isCreature);
+      }
+      return true;
+    }
+    return false;
+  }
 
   function handHclick(c: CardInstance) {
     if (!myTurnToAct || game.phase !== 'main1' || game.pending) return;
@@ -227,6 +280,33 @@ export function Board() {
                 />
                 {attackingIids.has(c.iid) && <span className="combat-tag atk">ATK</span>}
                 {blockerOf(c.iid) && <span className="combat-tag blk">blocked</span>}
+                <div className="attack-overlay">
+                  <AnimatePresence>
+                    {attackers.has(c.iid) && [
+                      <motion.img
+                        key="sword"
+                        className="attack-sword"
+                        src="/ui/sword.png"
+                        alt="attacking"
+                        draggable={false}
+                        initial={{ opacity: 0, x: -22, y: 26, rotate: -75, scale: 0.7 }}
+                        animate={{ opacity: 1, x: 0, y: 0, rotate: -26, scale: 1 }}
+                        exit={{ opacity: 0, x: -22, y: 26, rotate: -75, scale: 0.7 }}
+                        transition={{ type: 'spring', stiffness: 420, damping: 20 }}
+                      />,
+                      <motion.span
+                        key="ready"
+                        className="ready-box"
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 12 }}
+                        transition={{ type: 'spring', stiffness: 480, damping: 24 }}
+                      >
+                        Ready to attack
+                      </motion.span>,
+                    ]}
+                  </AnimatePresence>
+                </div>
               </div>
             ))}
           </AnimatePresence>
@@ -277,6 +357,7 @@ export function Board() {
       case 'combat_attack':
         return (
           <div className="actions">
+            <span className="prompt">⚔ Select creatures to attack</span>
             <button
               className="primary"
               onClick={() => dispatch({ type: 'declareAttackers', attackers: [...attackers] })}
@@ -348,14 +429,7 @@ export function Board() {
       {/* Me */}
       <section className="player-zone me">
         {permanents(localId, localId, true)}
-        <PlayerBar
-          p={me}
-          side={localId}
-          mana={{ avail: availableMana(me), total: me.battlefield.filter(isLand).length }}
-          onFace={() => faceClick(localId)}
-          targetable={!!sorceryIid}
-          self
-        />
+        <div className="player-dock">
         <div className="hand">
           <AnimatePresence>
             {me.hand.map((c) => (
@@ -363,18 +437,24 @@ export function Board() {
                 key={c.iid}
                 inst={c}
                 onClick={() => handHclick(c)}
-                dim={game.phase !== 'main1' || !myTurnToAct || !!game.pending}
-                draggable={
-                  myTurnToAct &&
-                  game.phase === 'main1' &&
-                  !game.pending &&
-                  getDef(c.def).type !== 'sorcery'
-                }
+                dim={!canPlay(c)}
+                draggable={canPlay(c) && getDef(c.def).type !== 'sorcery'}
                 onDragChange={setDragActive}
                 onDrop={(point) => dropPlay(c, point)}
               />
             ))}
           </AnimatePresence>
+        </div>
+        <div className="player-platform">
+          <PlayerBar
+            p={me}
+            side={localId}
+            mana={{ avail: availableMana(me), total: me.battlefield.filter(isLand).length }}
+            onFace={() => faceClick(localId)}
+            targetable={!!sorceryIid}
+            self
+          />
+        </div>
         </div>
       </section>
 
@@ -403,6 +483,22 @@ export function Board() {
       <ActionLog log={game.log} myId={myId} boundsRef={dragBounds} />
 
       {faceFlash > 0 && <div key={faceFlash} className="face-flash" />}
+
+      <AnimatePresence>
+        {dmgNums.map((n) => (
+          <motion.div
+            key={n.id}
+            className="dmg-float"
+            style={{ left: n.x, top: n.y }}
+            initial={{ opacity: 0, y: 0, scale: 0.6 }}
+            animate={{ opacity: [0, 1, 1, 0], y: -46, scale: 1, x: [0, -5, 5, -3, 0] }}
+            transition={{ duration: 0.9, times: [0, 0.15, 0.7, 1] }}
+            onAnimationComplete={() => setDmgNums((d) => d.filter((x) => x.id !== n.id))}
+          >
+            -{n.amt}
+          </motion.div>
+        ))}
+      </AnimatePresence>
 
       {error && (
         <div className="toast" onClick={clearError}>
@@ -441,46 +537,32 @@ function PlayerBar({
   targetable?: boolean;
   self?: boolean;
 }) {
-  const hpPct = Math.max(0, Math.min(100, (p.life / MAX_LIFE) * 100));
   return (
-    <div className="playerbar">
+    <div className={'playerbar' + (self ? ' me' : '')}>
       <span
-        className={'avatar ' + (targetable ? 'targetable' : '')}
+        className={'shield-avatar ' + (targetable ? 'targetable' : '')}
         data-player={side}
         onClick={onFace}
-        title={targetable ? 'Target this player' : undefined}
+        title={(self ? 'You' : 'Opponent') + (targetable ? ' — target' : '')}
       >
-        {self ? 'You' : 'Opp'} ({side})
+        <svg className="user-ico" viewBox="0 0 24 24" aria-hidden>
+          <circle cx="12" cy="8" r="3.6" />
+          <path d="M5 20c0-4 3.5-6 7-6s7 2 7 6" />
+        </svg>
       </span>
-      <div className="bars">
-        <div className="bar health" title={`${p.life} / ${MAX_LIFE} life`}>
-          <div
-            className="bar-fill"
-            style={{ width: hpPct + '%', background: hpColor(hpPct) }}
-          />
-          <span className="bar-label">♥ {p.life}</span>
-        </div>
-        <div className="manabar" title="Available mana (untapped lands / total)">
-          {Array.from({ length: mana.total }, (_, i) => (
-            <span key={i} className={'pip' + (i < mana.avail ? ' on' : '')} />
-          ))}
-          <span className="bar-label small">
-            ◈ {mana.avail}/{mana.total}
-          </span>
-        </div>
+      <div className="pstats">
+        <span className="life" title="Life — you lose when this hits 0">
+          ♥ {p.life}
+        </span>
+        <span className="mana" title="Mana — untapped lands / total. Lands tap to pay card costs">
+          ◈ {mana.avail}/{mana.total}
+        </span>
+        <span className="counts" title="Cards in hand · cards left in deck">
+          {p.hand.length} ✋ · {p.library.length} 🂠
+        </span>
       </div>
-      <span className="counts">
-        hand {p.hand.length} · deck {p.library.length}
-      </span>
     </div>
   );
-}
-
-const MAX_LIFE = 20;
-function hpColor(pct: number): string {
-  if (pct > 50) return '#54c98a';
-  if (pct > 25) return '#d9b65a';
-  return '#e0573e';
 }
 
 // --- combat strike animation helpers (imperative, conflict-free with framer) ---

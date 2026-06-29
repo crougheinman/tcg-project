@@ -19,14 +19,15 @@ export function CardPreview({ inst }: { inst: CardInstance }) {
   const subtype = isCreature ? `Creature — ${creatureSubtype(def.id)}` : def.type;
 
   return (
-    <motion.div
-      className="card-preview-wrap"
-      initial={{ opacity: 0, x: -40, scale: 0.85 }}
-      animate={{ opacity: 1, x: 0, scale: 1 }}
-      exit={{ opacity: 0, x: -40, scale: 0.85 }}
-      transition={spring}
-    >
-      <div className={`pcard pcard-${def.type}`}>
+    <div className="preview-overlay">
+      <motion.div
+        className="pcard-pop"
+        initial={{ opacity: 0, scale: 0.85 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.85 }}
+        transition={spring}
+      >
+        <div className={`pcard pcard-${def.type}`}>
         <div className="pcard-banner">
           <span className="pcard-name">{def.name}</span>
         </div>
@@ -55,8 +56,9 @@ export function CardPreview({ inst }: { inst: CardInstance }) {
             </span>
           </div>
         )}
-      </div>
-    </motion.div>
+        </div>
+      </motion.div>
+    </div>
   );
 }
 

@@ -97,6 +97,12 @@ export function CardView({
   const isCreature = def.type === 'creature';
   const pwr = power(inst);
   const tuf = toughness(inst);
+  const titleText =
+    def.type === 'land'
+      ? `${def.name} — Land. Tap for 1 mana.`
+      : `${def.name} — ${def.type}, cost ${def.cost}` +
+        (isCreature ? `, ${pwr}/${tuf}` : '') +
+        (def.text ? `. ${def.text}` : '');
   const arenaToken = arena && isCreature;
   const finalCls = arenaToken ? cls + ' arena' : cls;
 
@@ -111,7 +117,7 @@ export function CardView({
       onTouchEnd={endPress}
       onTouchCancel={endPress}
       onTouchMove={() => clearTimeout(pressTimer.current)}
-      title={def.text}
+      title={titleText}
       layout
       initial={{ opacity: 0, scale: 0.7 }}
       animate={{ opacity: 1, scale: 1, rotate: inst.tapped ? 90 : 0 }}
@@ -139,7 +145,9 @@ export function CardView({
     >
       {arenaToken ? (
         <>
-          {def.art && <img className="arena-art" src={def.art} alt="" onError={artFallback} />}
+          {def.art && (
+            <img className="arena-art" src={def.art} alt="" draggable={false} onError={artFallback} />
+          )}
           <div className={'arena-pt' + (inst.damage > 0 ? ' damaged' : '')}>
             <span>
               {pwr}/{tuf - inst.damage}
@@ -158,7 +166,9 @@ export function CardView({
             {def.type !== 'land' && <span className="card-cost">{def.cost}</span>}
           </div>
           <div className="card-type">{def.type}</div>
-          {def.art && <img className="card-art" src={def.art} alt="" onError={artFallback} />}
+          {def.art && (
+            <img className="card-art" src={def.art} alt="" draggable={false} onError={artFallback} />
+          )}
           {def.text && <div className="card-text">{def.text}</div>}
           <div className="card-bottom">
             {isCreature && (
