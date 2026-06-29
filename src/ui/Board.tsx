@@ -278,6 +278,24 @@ export function Board() {
     return () => clearTimeout(t);
   }, [game, myId, mode, dispatch]);
 
+  // Auto-resolve blocks when the defender has nothing that can block — no reason
+  // to defend, so let the damage through after a brief notice.
+  const autoBlockRef = useRef<string>('');
+  useEffect(() => {
+    const defender = opponentOf(game.active);
+    const myTurn = !game.winner && (mode === 'hotseat' || defender === myId);
+    if (game.phase !== 'combat_block' || !myTurn || game.pending) return;
+    if (game.players[defender].battlefield.some((c) => isCreature(c) && !c.tapped)) return; // can block
+    const key = `${game.turn}-${defender}`;
+    if (autoBlockRef.current === key) return;
+    autoBlockRef.current = key;
+    setAnnounce({ id: announceId.current++, text: '🛡 No blockers — damage goes through', ms: 2200 });
+    const t = setTimeout(() => {
+      if (useGame.getState().game?.phase === 'combat_block') dispatch({ type: 'declareBlockers', blocks: {} });
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [game, myId, mode, dispatch]);
+
   const actor: PlayerId = game.phase === 'combat_block' ? opponentOf(game.active) : game.active;
   const localId: PlayerId = mode === 'hotseat' ? actor : myId;
   const oppId = opponentOf(localId);
@@ -287,6 +305,12 @@ export function Board() {
   const me = game.players[localId];
   const opp = game.players[oppId];
   const attackingIids = new Set(game.combat?.attackers ?? []);
+
+  // Is there any reason to show combat option buttons? Hide them otherwise.
+  const canAnyAttack = game.players[game.active].battlefield.filter(isCreature).some(canAttack);
+  const canAnyBlock = game.players[opponentOf(game.active)].battlefield.some(
+    (c) => isCreature(c) && !c.tapped,
+  );
 
   // ---- click handlers ----
 
@@ -511,6 +535,14 @@ export function Board() {
           </div>
         );
       case 'combat_attack':
+        // No creature can attack → no buttons; the auto-skip effect advances combat.
+        if (!canAnyAttack) {
+          return (
+            <div className="actions">
+              <span className="prompt">⚔ No creatures ready to attack…</span>
+            </div>
+          );
+        }
         return (
           <div className="actions">
             <span className="prompt">⚔ Select creatures to attack</span>
@@ -524,6 +556,14 @@ export function Board() {
           </div>
         );
       case 'combat_block':
+        // Nothing can block → no buttons; the auto-resolve effect lets damage through.
+        if (!canAnyBlock) {
+          return (
+            <div className="actions">
+              <span className="prompt">🛡 No blockers available…</span>
+            </div>
+          );
+        }
         return (
           <div className="actions">
             <span className="prompt">
