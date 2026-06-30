@@ -60,6 +60,7 @@ export function createInitialState(
     phase: 'main1', // A is on the play: untap/draw skipped on turn 1
     players,
     combat: null,
+    lastCombat: null,
     pending: null,
     nextIid: iid,
     winner: null,

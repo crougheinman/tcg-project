@@ -269,6 +269,9 @@ function makeToken(s: GameState, defId: string, owner: PlayerId): CardInstance {
 
 function resolveCombat(s: GameState): void {
   const combat = s.combat!;
+  // Snapshot what actually happened so the UI can animate/announce it — `combat`
+  // itself is cleared by toEnd() below, and blocks never persist in `combat_block`.
+  s.lastCombat = { attackers: [...combat.attackers], blocks: { ...combat.blocks } };
   const defender = s.players[opponentOf(s.active)];
   const blockersByAttacker: Record<string, string[]> = {};
   for (const [blk, atk] of Object.entries(combat.blocks)) {

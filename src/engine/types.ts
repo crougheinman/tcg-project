@@ -95,6 +95,7 @@ export interface GameState {
   phase: Phase;
   players: Record<PlayerId, PlayerState>;
   combat: CombatState | null;
+  lastCombat: CombatState | null; // the most recently resolved combat (for UI fx/announce; not rules)
   pending: PendingTrigger | null; // must be resolved before any other action
   nextIid: number; // counter for deterministic instance ids
   winner: PlayerId | 'draw' | null;

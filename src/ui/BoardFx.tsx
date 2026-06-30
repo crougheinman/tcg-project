@@ -22,6 +22,7 @@ export function BoardFx({ game }: { game: GameState }) {
   const [faceFlash, setFaceFlash] = useState(0);
   const [dmgNums, setDmgNums] = useState<{ id: number; x: number; y: number; amt: number }[]>([]);
   const [slashes, setSlashes] = useState<{ id: number; x: number; y: number }[]>([]);
+  const [blockFx, setBlockFx] = useState<{ id: number; x: number; y: number }[]>([]);
   const [destroys, setDestroys] = useState<{ id: number; x: number; y: number }[]>([]);
   const [spellFx, setSpellFx] = useState<
     { id: number; sheet: string; frames: number; x: number; y: number } | null
@@ -107,25 +108,35 @@ export function BoardFx({ game }: { game: GameState }) {
       }
     }
 
-    // Combat strike animations: lunge each attacker toward its target.
-    if (before.phase === 'combat_block' && game.phase === 'end' && before.combat) {
+    // Combat strike animations: lunge each attacker toward its target. Read the
+    // *resolved* combat (lastCombat) — blocks never persist in `combat` during the
+    // combat_block phase, so before.combat.blocks would always look empty.
+    const resolved = game.lastCombat;
+    if (before.phase === 'combat_block' && game.phase === 'end' && resolved) {
       const blockerByAtk: Record<string, string> = {};
-      for (const [blk, atk] of Object.entries(before.combat.blocks)) blockerByAtk[atk] = blk;
+      for (const [blk, atk] of Object.entries(resolved.blocks)) blockerByAtk[atk] = blk;
       let faceHit = false;
       const defenderShield = document.querySelector(`[data-player="${opponentOf(before.active)}"]`);
       const newSlashes: { id: number; x: number; y: number }[] = [];
+      const newBlocks: { id: number; x: number; y: number }[] = [];
       const slashAt = (el: Element | null) => {
         if (!el) return;
         const r = el.getBoundingClientRect();
         newSlashes.push({ id: dmgId.current++, x: r.left + r.width / 2, y: r.top + r.height / 2 });
       };
-      for (const atk of before.combat.attackers) {
+      const blockAt = (el: Element | null) => {
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        newBlocks.push({ id: dmgId.current++, x: r.left + r.width / 2, y: r.top + r.height / 2 });
+      };
+      for (const atk of resolved.attackers) {
         const atkEl = stackEl(atk);
         const blk = blockerByAtk[atk];
         if (blk) {
           lungeTo(atkEl, stackEl(blk)); // clash with blocker
           shakeEl(stackEl(blk));
           slashAt(stackEl(blk)); // slash the blocker
+          blockAt(stackEl(blk)); // shield-pop on the blocker so the block reads clearly
         } else {
           faceHit = true;
           lungeTo(atkEl, defenderShield);
@@ -137,6 +148,7 @@ export function BoardFx({ game }: { game: GameState }) {
         const ids = new Set(newSlashes.map((n) => n.id));
         setTimeout(() => setSlashes((s) => s.filter((n) => !ids.has(n.id))), 600);
       }
+      if (newBlocks.length) setBlockFx((b) => [...b, ...newBlocks]);
       if (faceHit) {
         document
           .querySelector('.board')
@@ -203,6 +215,22 @@ export function BoardFx({ game }: { game: GameState }) {
 
       {slashes.map((s) => (
         <div key={s.id} className="slashfx" style={{ left: s.x, top: s.y }} />
+      ))}
+
+      {blockFx.map((b) => (
+        <motion.img
+          key={b.id}
+          className="block-fx"
+          src="/ui/shield.png"
+          alt=""
+          draggable={false}
+          // x/y stay -50% (centering) so framer's transform doesn't break it; scale/opacity animate.
+          style={{ left: b.x, top: b.y }}
+          initial={{ opacity: 0, scale: 0.3, x: '-50%', y: '-50%' }}
+          animate={{ opacity: [0, 1, 1, 0], scale: [0.3, 1.35, 1.1, 1], x: '-50%', y: '-50%' }}
+          transition={{ duration: 0.7, times: [0, 0.25, 0.6, 1], ease: 'easeOut' }}
+          onAnimationComplete={() => setBlockFx((f) => f.filter((x) => x.id !== b.id))}
+        />
       ))}
 
       {destroys.map((d) => (

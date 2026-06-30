@@ -130,6 +130,27 @@ export function Board() {
     return () => clearTimeout(t);
   }, [game, myId, mode, dispatch]);
 
+  // Announce when an attack gets blocked — easy to miss otherwise, especially for
+  // the attacker (the engine resolves the block silently). Runs after the
+  // log-announce effect so the block banner wins for that frame.
+  const prevForBlock = useRef(game);
+  useEffect(() => {
+    const before = prevForBlock.current;
+    prevForBlock.current = game;
+    if (before === game) return;
+    if (before.phase !== 'combat_block' || game.phase !== 'end') return;
+    const n = Object.keys(game.lastCombat?.blocks ?? {}).length; // resolved blocks
+    if (n === 0) return; // nothing was blocked
+    const suffix = n > 1 ? `${n} attackers` : 'the attack';
+    const text =
+      mode === 'hotseat'
+        ? `🛡 ${suffix.charAt(0).toUpperCase() + suffix.slice(1)} blocked`
+        : before.active === myId
+        ? `🛡 Your attack was blocked!`
+        : `🛡 You blocked ${suffix}!`;
+    setAnnounce({ id: announceId.current++, text, ms: 2400 });
+  }, [game, myId, mode]);
+
   const actor: PlayerId = game.phase === 'combat_block' ? opponentOf(game.active) : game.active;
   const localId: PlayerId = mode === 'hotseat' ? actor : myId;
   const oppId = opponentOf(localId);
@@ -222,7 +243,27 @@ export function Board() {
       });
     } else if (game.phase === 'combat_block') {
       if (side === localId) {
-        if (isCreature(c) && !c.tapped) setPendingBlocker(c.iid);
+        if (!isCreature(c) || c.tapped) return;
+        const atks = game.combat?.attackers ?? [];
+        // One attacker -> no ambiguity: tapping your blocker assigns it right away
+        // (tap again to unassign). This avoids the "selected a blocker but damage
+        // still went through" trap of the two-step flow.
+        if (atks.length === 1) {
+          const atk = game.players[game.active].battlefield.find((x) => x.iid === atks[0]);
+          const flyer = atk ? (getDef(atk.def).keywords ?? []).includes('flying') : false;
+          const blockerFlies = (getDef(c.def).keywords ?? []).includes('flying');
+          if (atk && (!flyer || blockerFlies)) {
+            setBlocks((prev) => {
+              const next = { ...prev };
+              if (next[c.iid]) delete next[c.iid];
+              else next[c.iid] = atk.iid;
+              return next;
+            });
+            setPendingBlocker(null);
+            return;
+          }
+        }
+        setPendingBlocker(c.iid); // multiple attackers: pick which one to block next
       } else if (pendingBlocker && attackingIids.has(c.iid)) {
         setBlocks((prev) => ({ ...prev, [pendingBlocker]: c.iid }));
         setPendingBlocker(null);
@@ -310,13 +351,13 @@ export function Board() {
                       />,
                       <motion.span
                         key="rblock"
-                        className="ready-box block"
+                        className={'ready-box block' + (blocks[c.iid] ? '' : ' pending')}
                         initial={{ opacity: 0, y: 12 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 12 }}
                         transition={{ type: 'spring', stiffness: 480, damping: 24 }}
                       >
-                        Ready to block
+                        {blocks[c.iid] ? 'Blocking' : 'Pick a target…'}
                       </motion.span>,
                     ]}
                   </AnimatePresence>
@@ -403,7 +444,22 @@ export function Board() {
             <span className="prompt">
               {pendingBlocker ? 'Click an attacker to block' : 'Click your blocker, then its target'}
             </span>
-            <button className="primary" onClick={() => dispatch({ type: 'declareBlockers', blocks })}>
+            <button
+              className="primary"
+              onClick={() => {
+                // A blocker is selected but not yet pointed at an attacker — don't
+                // silently let the attack through; nudge the player to finish (or cancel).
+                if (pendingBlocker) {
+                  setAnnounce({
+                    id: announceId.current++,
+                    text: '⚠ Tap an attacker for your selected blocker (or tap it again to cancel)',
+                    ms: 2600,
+                  });
+                  return;
+                }
+                dispatch({ type: 'declareBlockers', blocks });
+              }}
+            >
               Confirm Blocks
             </button>
             <button onClick={() => dispatch({ type: 'declareBlockers', blocks: {} })}>No Blocks</button>

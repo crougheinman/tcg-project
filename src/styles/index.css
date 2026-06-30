@@ -374,6 +374,11 @@ input {
   background: linear-gradient(180deg, #2f6fb0, #1d4a86);
   border-color: #6aa9ff; box-shadow: 0 0 10px rgba(106, 169, 255, 0.8);
 }
+/* a blocker that's selected but not yet pointed at an attacker (won't block until assigned) */
+.ready-box.block.pending {
+  background: linear-gradient(180deg, #6b5a2a, #4a3c18);
+  border-color: var(--gold); box-shadow: 0 0 10px rgba(217, 182, 90, 0.7);
+}
 .attack-sword.block { filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 8px rgba(150, 200, 255, 0.6)); }
 
 .card {
@@ -803,6 +808,13 @@ input {
 }
 @keyframes slashX { from { background-position-x: 0; } to { background-position-x: calc(-120px * 5); } }
 @keyframes slashY { from { background-position-y: 0; } to { background-position-y: calc(-120px * 2); } }
+
+/* ---- block effect: a shield pops on the blocker when it stops an attacker ---- */
+.block-fx {
+  position: fixed; z-index: 69; pointer-events: none;
+  width: 64px; height: auto;
+  filter: drop-shadow(0 0 12px rgba(120, 180, 255, 0.95)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+}
 
 /* ---- face-hit flash (direct attack) ---- */
 .face-flash {
