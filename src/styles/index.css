@@ -224,8 +224,10 @@ input {
 .player-zone.opp { border-top: 2px solid var(--danger); overflow: hidden; }
 /* opponent: hide face-down hand + lands to save space (counts shown on the badge) */
 .player-zone.opp .opp-hand { display: none; }
-.player-zone.opp .row.lands { display: none; }
 .player-zone.me { border-bottom: 2px solid var(--good); }
+/* lands are "consumed" into the mana readout (◈) — they vaporize into the avatar on
+   entry (see LandAbsorbFx) and aren't kept on the table, saving space for both sides. */
+.row.lands { display: none; }
 
 /* compact, centered player badge: shield w/ user icon, stacked life + mana below */
 .playerbar { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; }
@@ -814,6 +816,27 @@ input {
   position: fixed; z-index: 69; pointer-events: none;
   width: 64px; height: auto;
   filter: drop-shadow(0 0 12px rgba(120, 180, 255, 0.95)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+}
+
+/* ---- land -> mana: the land vaporizes and a blue orb flies to the avatar ---- */
+.land-vapor {
+  position: fixed; z-index: 66; pointer-events: none;
+  width: 72px; height: 46px; border-radius: 8px;
+  background-size: cover; background-position: center;
+  box-shadow: 0 0 18px rgba(106, 169, 255, 0.85);
+  filter: brightness(1.25) saturate(1.25);
+}
+.mana-orb {
+  position: fixed; z-index: 67; pointer-events: none;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #eaf4ff, #6aa9ff 55%, #2f6fb0);
+  box-shadow: 0 0 14px 5px rgba(106, 169, 255, 0.85);
+}
+/* "Mana +1" — floats near the mana readout as the orb merges in, then drifts down */
+.mana-float {
+  position: fixed; z-index: 71; pointer-events: none; white-space: nowrap;
+  font-family: 'Cinzel', serif; font-weight: 800; font-size: 15px;
+  color: #8ec3ff; text-shadow: 0 2px 4px #000, 0 0 10px rgba(106, 169, 255, 0.9);
 }
 
 /* ---- face-hit flash (direct attack) ---- */

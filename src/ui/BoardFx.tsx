@@ -5,6 +5,7 @@ import { isCreature, isLand } from '../engine/rules';
 import type { GameState, PlayerId } from '../engine/types';
 import { opponentOf } from '../engine/types';
 import { DestroyFx } from './DestroyFx';
+import { LandAbsorbFx, type LandAbsorb } from './LandAbsorbFx';
 import type { Burst } from './Vfx';
 
 // three.js is heavy — split it into its own chunk, loaded only in-game.
@@ -23,6 +24,7 @@ export function BoardFx({ game }: { game: GameState }) {
   const [dmgNums, setDmgNums] = useState<{ id: number; x: number; y: number; amt: number }[]>([]);
   const [slashes, setSlashes] = useState<{ id: number; x: number; y: number }[]>([]);
   const [blockFx, setBlockFx] = useState<{ id: number; x: number; y: number }[]>([]);
+  const [landAbsorbs, setLandAbsorbs] = useState<LandAbsorb[]>([]);
   const [destroys, setDestroys] = useState<{ id: number; x: number; y: number }[]>([]);
   const [spellFx, setSpellFx] = useState<
     { id: number; sheet: string; frames: number; x: number; y: number } | null
@@ -92,21 +94,35 @@ export function BoardFx({ game }: { game: GameState }) {
       }
     }
 
-    // A land was just played -> rejuvenate effect on the caster's icon.
+    // A land just entered -> it vaporizes into a blue mana orb that flies to its
+    // controller's avatar (the land card itself is hidden; the mana readout is it now).
     const battleBefore = new Set(
       [...before.players.A.battlefield, ...before.players.B.battlefield].map((c) => c.iid),
     );
+    const newLands: LandAbsorb[] = [];
     for (const pid of ['A', 'B'] as PlayerId[]) {
       for (const c of game.players[pid].battlefield) {
         if (!battleBefore.has(c.iid) && isLand(c)) {
-          const el = document.querySelector(`[data-player="${pid}"]`);
-          const r = el?.getBoundingClientRect();
-          const x = r ? r.left + r.width / 2 : window.innerWidth / 2;
-          const y = r ? r.top + r.height / 2 : window.innerHeight / 2;
-          setSpellFx({ id: dmgId.current++, sheet: LAND_FX.sheet, frames: LAND_FX.frames, x, y });
+          const avatar = document.querySelector(`[data-player="${pid}"]`);
+          const bf = avatar?.closest('.player-zone')?.querySelector('.battlefield') ?? null;
+          const fr = bf?.getBoundingClientRect();
+          const ar = avatar?.getBoundingClientRect();
+          if (!ar) continue;
+          const toX = ar.left + ar.width / 2;
+          const toY = ar.top + ar.height / 2;
+          newLands.push({
+            id: dmgId.current++,
+            fromX: fr ? fr.left + fr.width / 2 : toX,
+            fromY: fr ? fr.top + fr.height / 2 : toY - 80,
+            toX,
+            toY,
+            art: getDef(c.def).art,
+            pid,
+          });
         }
       }
     }
+    if (newLands.length) setLandAbsorbs((la) => [...la, ...newLands]);
 
     // Combat strike animations: lunge each attacker toward its target. Read the
     // *resolved* combat (lastCombat) — blocks never persist in `combat` during the
@@ -204,6 +220,7 @@ export function BoardFx({ game }: { game: GameState }) {
 
   const removeBurst = (id: number) => setBursts((b) => b.filter((x) => x.id !== id));
   const removeDestroy = (id: number) => setDestroys((d) => d.filter((x) => x.id !== id));
+  const removeLandAbsorb = (id: number) => setLandAbsorbs((la) => la.filter((x) => x.id !== id));
 
   return (
     <>
@@ -235,6 +252,10 @@ export function BoardFx({ game }: { game: GameState }) {
 
       {destroys.map((d) => (
         <DestroyFx key={d.id} x={d.x} y={d.y} onDone={() => removeDestroy(d.id)} />
+      ))}
+
+      {landAbsorbs.map((fx) => (
+        <LandAbsorbFx key={fx.id} fx={fx} onDone={removeLandAbsorb} />
       ))}
 
       <AnimatePresence>
@@ -289,7 +310,6 @@ const SPELL_FX: Record<string, { sheet: string; frames: number }> = {
   wild_growth: { sheet: '/effects/green-aura.png', frames: 8 },
   default: { sheet: '/effects/lightning.png', frames: 5 },
 };
-const LAND_FX = { sheet: '/effects/green-aura.png', frames: 8 }; // rejuvenate on land play
 
 // --- combat strike animation helpers (imperative, conflict-free with framer) ---
 function stackEl(iid: string): HTMLElement | null {
