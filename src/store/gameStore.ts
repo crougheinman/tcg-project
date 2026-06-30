@@ -8,6 +8,12 @@ import type { MatchConnection } from '../net/match';
 
 export type Mode = 'menu' | 'ai' | 'hotseat' | 'pvp';
 
+/** A transient chat bubble shown over a player's avatar (PvP only). */
+export interface ChatBubble {
+  id: string;
+  text: string;
+}
+
 interface Store {
   mode: Mode;
   game: GameState | null;
@@ -15,16 +21,20 @@ interface Store {
   aiId: PlayerId | null;
   net: MatchConnection | null;
   error: string | null;
+  chat: Record<PlayerId, ChatBubble | null>; // current bubble per side (cosmetic)
 
   startAI: (deckId: string) => void;
   startHotseat: (deckA: string, deckB: string) => void;
   startPvp: (net: MatchConnection) => void;
   dispatch: (action: Action) => void; // local human action
+  sendChat: (text: string) => void; // local human chat (PvP only)
   toMenu: () => void;
   clearError: () => void;
 }
 
 const AI_DELAY_MS = 600;
+const BUBBLE_MS = 5000; // how long a chat bubble stays before fading
+const noChat = (): Record<PlayerId, ChatBubble | null> => ({ A: null, B: null });
 
 export const useGame = create<Store>((set, get) => {
   // Step the AI one action at a time so the human sees each move.
@@ -46,6 +56,18 @@ export const useGame = create<Store>((set, get) => {
     }, AI_DELAY_MS);
   }
 
+  // Show a chat bubble over `side`, replacing any current one. Auto-clears after
+  // BUBBLE_MS, but only if a newer message hasn't taken its place (id guard).
+  function showBubble(side: PlayerId, text: string) {
+    const clean = text.trim().slice(0, 120);
+    if (!clean) return;
+    const id = `${side}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    set((s) => ({ chat: { ...s.chat, [side]: { id, text: clean } } }));
+    setTimeout(() => {
+      set((s) => (s.chat[side]?.id === id ? { chat: { ...s.chat, [side]: null } } : s));
+    }, BUBBLE_MS);
+  }
+
   return {
     mode: 'menu',
     game: null,
@@ -53,6 +75,7 @@ export const useGame = create<Store>((set, get) => {
     aiId: null,
     net: null,
     error: null,
+    chat: noChat(),
 
     startAI: (deckId) => {
       const seed = Math.floor(Math.random() * 0x7fffffff);
@@ -90,12 +113,14 @@ export const useGame = create<Store>((set, get) => {
           set({ error: `desync: ${(e as Error).message}` });
         }
       });
+      net.onChat((m) => showBubble(m.from, m.text)); // opponent message -> their avatar
       set({
         mode: 'pvp',
         myId: net.role,
         aiId: null,
         net,
         error: null,
+        chat: noChat(),
         game: createInitialState(net.seed, deckById(net.deckA).cards, deckById(net.deckB).cards),
       });
     },
@@ -115,9 +140,18 @@ export const useGame = create<Store>((set, get) => {
       if (s.mode === 'ai') scheduleAi();
     },
 
+    sendChat: (text) => {
+      const s = get();
+      if (s.mode !== 'pvp' || !s.net) return; // PvP only
+      const clean = text.trim();
+      if (!clean) return;
+      showBubble(s.myId, clean); // local echo (self:false won't bounce it back)
+      s.net.sendChat(clean);
+    },
+
     toMenu: () => {
       get().net?.leave();
-      set({ mode: 'menu', game: null, net: null, aiId: null, error: null });
+      set({ mode: 'menu', game: null, net: null, aiId: null, error: null, chat: noChat() });
     },
 
     clearError: () => set({ error: null }),
