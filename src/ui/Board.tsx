@@ -32,6 +32,13 @@ export function Board() {
   const [pendingBlocker, setPendingBlocker] = useState<string | null>(null);
   const [hovered, setHovered] = useState<CardInstance | null>(null);
 
+  // Lock page scroll to this screen only — the board owns the viewport, while
+  // menus / deck-select / rulebook keep their normal scrolling.
+  useEffect(() => {
+    document.body.classList.add('in-game');
+    return () => document.body.classList.remove('in-game');
+  }, []);
+
   // Clear transient selection whenever the situation changes.
   useEffect(() => {
     setSorceryIid(null);
