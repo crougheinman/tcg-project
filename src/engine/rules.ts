@@ -74,7 +74,7 @@ export function legalActions(state: GameState, player: PlayerId): Action[] {
         actions.push({ type: 'playLand', iid: c.iid });
       } else if (def.type === 'creature' && def.cost <= mana) {
         actions.push({ type: 'castCreature', iid: c.iid });
-      } else if (def.type === 'sorcery' && def.cost <= mana && def.effect) {
+      } else if ((def.type === 'sorcery' || def.type === 'instant') && def.cost <= mana && def.effect) {
         const eff = def.effect;
         if (!needsTarget(eff)) {
           if (eff.type !== 'ramp' || p.hand.some(isLand)) {
@@ -158,12 +158,17 @@ export function validateAction(state: GameState, action: Action): void {
       return;
     }
     case 'castSorcery': {
-      requirePhase(state, 'main1');
-      const c = inHand(active, action.iid);
-      if (!c || getDef(c.def).type !== 'sorcery') throw new Error('not a sorcery in hand');
+      // Sorceries: your main phase only. Instants: any phase — cast by the active
+      // player on their turn, or by the defender during combat_block (off-turn).
+      const casterId = state.phase === 'combat_block' ? opponentOf(state.active) : state.active;
+      const caster = state.players[casterId];
+      const c = inHand(caster, action.iid);
+      const type = c && getDef(c.def).type;
+      if (!c || (type !== 'sorcery' && type !== 'instant')) throw new Error('not a spell in hand');
+      if (type === 'sorcery') requirePhase(state, 'main1');
       const def = getDef(c.def);
-      if (!def.effect) throw new Error('sorcery has no effect');
-      if (def.cost > availableMana(active)) throw new Error('not enough mana');
+      if (!def.effect) throw new Error('spell has no effect');
+      if (def.cost > availableMana(caster)) throw new Error('not enough mana');
       if (needsTarget(def.effect)) {
         if (!action.target) throw new Error('target required');
         if (def.effect.type === 'damage' || def.effect.type === 'buff') {

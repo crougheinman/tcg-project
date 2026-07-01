@@ -4,7 +4,7 @@
 
 export type PlayerId = 'A' | 'B';
 
-export type CardType = 'land' | 'creature' | 'sorcery';
+export type CardType = 'land' | 'creature' | 'sorcery' | 'instant';
 
 export type Keyword = 'haste' | 'flying' | 'defender';
 

@@ -61,18 +61,25 @@ export function applyAction(state: GameState, action: Action): GameState {
       break;
     }
     case 'castSorcery': {
-      const c = takeFromHand(active, action.iid);
+      // Handles both sorceries and instants. Instants can be cast off-turn by the
+      // defender during combat_block, so the caster is derived from the phase (same
+      // model as blocking) rather than always being the active player.
+      const casterId = s.phase === 'combat_block' ? opponentOf(s.active) : s.active;
+      const caster = s.players[casterId];
+      const c = takeFromHand(caster, action.iid);
       const def = getDef(c.def);
-      payMana(active, def.cost);
-      active.graveyard.push(c);
-      s.log.push(`${s.active} casts ${def.name}`);
-      applyEffect(s, s.active, def.effect!, action.target);
-      // creatures that trigger on your sorcery casts (e.g. Pyre Adept)
-      for (const cr of active.battlefield) {
-        const trig = getDef(cr.def).spellTrigger;
-        if (trig) {
-          s.log.push(`✦ ${getDef(cr.def).name} triggers`);
-          applyEffect(s, s.active, trig, { kind: 'player', player: opponentOf(s.active) });
+      payMana(caster, def.cost);
+      caster.graveyard.push(c);
+      s.log.push(`${casterId} casts ${def.name}`);
+      applyEffect(s, casterId, def.effect!, action.target);
+      // creatures that trigger on a *sorcery* cast (e.g. Pyre Adept) — not instants
+      if (def.type === 'sorcery') {
+        for (const cr of caster.battlefield) {
+          const trig = getDef(cr.def).spellTrigger;
+          if (trig) {
+            s.log.push(`✦ ${getDef(cr.def).name} triggers`);
+            applyEffect(s, casterId, trig, { kind: 'player', player: opponentOf(casterId) });
+          }
         }
       }
       break;

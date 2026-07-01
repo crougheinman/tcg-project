@@ -34,7 +34,8 @@ const SECTIONS: { title: string; items: string[] }[] = [
     items: [
       'Land — taps for mana.',
       'Creature — has power / toughness; can attack and block.',
-      'Sorcery — a one-time effect, then goes to the graveyard.',
+      'Sorcery — a one-time effect, cast only in your main phase.',
+      'Instant — like a sorcery, but castable any time you can act — during combat, or on defense while blocking.',
     ],
   },
   {

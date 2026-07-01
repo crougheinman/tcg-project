@@ -202,14 +202,19 @@ export function Board() {
 
   // Is this hand card playable right now (turn, phase, mana, land-drop, targets)?
   function canPlay(c: CardInstance): boolean {
-    if (!myTurnToAct || game.phase !== 'main1' || game.pending) return false;
+    if (!myTurnToAct || game.pending) return false;
     const def = getDef(c.def);
     const mana = availableMana(me);
-    if (def.type === 'land') return !me.landPlayedThisTurn;
-    if (def.type === 'creature') return def.cost <= mana;
-    if (def.type === 'sorcery') {
+    // Lands/creatures/sorceries are main-phase only; instants cast any time you may
+    // act (myTurnToAct already resolves to the active player in main1/combat_attack
+    // and to the defender during combat_block).
+    const sorcerySpeed = game.phase === 'main1';
+    if (def.type === 'land') return sorcerySpeed && !me.landPlayedThisTurn;
+    if (def.type === 'creature') return sorcerySpeed && def.cost <= mana;
+    if (def.type === 'sorcery' || def.type === 'instant') {
+      if (def.type === 'sorcery' && !sorcerySpeed) return false;
       if (def.cost > mana) return false;
-      // a "buff" sorcery needs a creature on the board to target
+      // a "buff" spell needs a creature on the board to target
       if (def.effect?.type === 'buff') {
         return me.battlefield.some(isCreature) || opp.battlefield.some(isCreature);
       }
@@ -235,7 +240,7 @@ export function Board() {
     const def = getDef(c.def);
     if (def.type === 'land') dispatch({ type: 'playLand', iid: c.iid });
     else if (def.type === 'creature') dispatch({ type: 'castCreature', iid: c.iid });
-    else if (def.type === 'sorcery') {
+    else if (def.type === 'sorcery' || def.type === 'instant') {
       if (def.effect && !needsTarget(def.effect)) dispatch({ type: 'castSorcery', iid: c.iid });
       else setSorceryIid(c.iid);
     }
@@ -546,7 +551,7 @@ export function Board() {
                 inst={c}
                 onClick={() => handHclick(c)}
                 dim={!canPlay(c)}
-                draggable={canPlay(c) && getDef(c.def).type !== 'sorcery'}
+                draggable={canPlay(c) && getDef(c.def).type !== 'sorcery' && getDef(c.def).type !== 'instant'}
                 onDragChange={setDragActive}
                 onDrop={(point) => dropPlay(c, point)}
               />

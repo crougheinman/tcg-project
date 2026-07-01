@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { createInitialState } from '../state';
+import { createInitialState, MAX_DECK_SIZE } from '../state';
 import { applyAction } from '../reducer';
 import { isLand, isCreature, canAttack, availableMana, power, toughness } from '../rules';
 import type { Action, CardInstance, GameState } from '../types';
-import { DECK_EMBERWOOD, DECK_SKYWARD } from '../../cards/decks';
+import { DECK_EMBERWOOD, DECK_SKYWARD, DECK_LIST } from '../../cards/decks';
 
 let counter = 0;
 function inst(def: string, over: Partial<CardInstance> = {}): CardInstance {
@@ -396,5 +396,69 @@ describe('determinism / replay', () => {
       return g;
     }
     expect(JSON.stringify(run())).toBe(JSON.stringify(run()));
+  });
+});
+
+describe('instants (flexible-timing spells)', () => {
+  // Give B two untapped lands + an instant in hand, then have A attack.
+  function combatWithBInstant(instantDef: string): GameState {
+    const s = fresh();
+    const attacker = inst('dread_maw', { summoningSick: false }); // 5/4
+    s.players.A.battlefield = [attacker];
+    s.players.B.battlefield = [inst('aether_well', { owner: 'B' }), inst('aether_well', { owner: 'B' })];
+    s.players.B.hand = [inst(instantDef, { owner: 'B' })];
+    let g = applyAction(s, { type: 'advance' }); // main1 -> combat_attack
+    g = applyAction(g, { type: 'declareAttackers', attackers: [attacker.iid] }); // -> combat_block
+    return g;
+  }
+
+  it('defender casts Take Counter during combat_block to kill a tapped attacker (no face damage)', () => {
+    let g = combatWithBInstant('take_counter');
+    expect(g.phase).toBe('combat_block');
+    const attackerIid = g.combat!.attackers[0];
+    const tc = g.players.B.hand.find((c) => c.def === 'take_counter')!;
+    g = applyAction(g, { type: 'castSorcery', iid: tc.iid, target: { kind: 'creature', iid: attackerIid } });
+    expect(g.players.A.battlefield.some((c) => c.iid === attackerIid)).toBe(false); // destroyed
+    expect(g.players.A.graveyard.some((c) => c.def === 'dread_maw')).toBe(true);
+    g = applyAction(g, { type: 'declareBlockers', blocks: {} }); // resolve — dead attacker deals nothing
+    expect(g.players.B.life).toBe(20);
+  });
+
+  it('defender casts Soothe during combat_block to gain life off-turn', () => {
+    let g = combatWithBInstant('soothe');
+    g.players.B.life = 14;
+    const so = g.players.B.hand.find((c) => c.def === 'soothe')!;
+    g = applyAction(g, { type: 'castSorcery', iid: so.iid });
+    expect(g.players.B.life).toBe(20); // 14 + 6
+    expect(g.phase).toBe('combat_block'); // still choosing blocks
+  });
+
+  it('the active player can cast an instant during combat_attack', () => {
+    const s = fresh();
+    s.players.A.battlefield = [inst('aether_well'), inst('aether_well')];
+    s.players.A.hand = [inst('soothe')];
+    s.players.A.life = 10;
+    const g = applyAction(s, { type: 'advance' }); // -> combat_attack
+    const g2 = applyAction(g, { type: 'castSorcery', iid: g.players.A.hand[0].iid });
+    expect(g2.players.A.life).toBe(16);
+    expect(g2.phase).toBe('combat_attack');
+  });
+
+  it('a sorcery still cannot be cast outside your main phase', () => {
+    const s = fresh();
+    s.players.A.battlefield = [inst('aether_well'), inst('aether_well')];
+    s.players.A.hand = [inst('insight')]; // sorcery
+    const g = applyAction(s, { type: 'advance' }); // -> combat_attack
+    expect(() => applyAction(g, { type: 'castSorcery', iid: g.players.A.hand[0].iid })).toThrow();
+  });
+});
+
+describe('deck size limit', () => {
+  it('rejects a deck larger than MAX_DECK_SIZE', () => {
+    const tooBig = Array.from({ length: MAX_DECK_SIZE + 1 }, () => 'aether_well');
+    expect(() => createInitialState(1, tooBig, DECK_SKYWARD)).toThrow();
+  });
+  it('every starter deck is within the limit', () => {
+    for (const d of DECK_LIST) expect(d.cards.length).toBeLessThanOrEqual(MAX_DECK_SIZE);
   });
 });

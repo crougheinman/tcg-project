@@ -3,6 +3,7 @@ import { shuffle } from './rng';
 
 const STARTING_LIFE = 20;
 const OPENING_HAND = 7;
+export const MAX_DECK_SIZE = 40; // a deck may hold at most this many cards
 
 function makeInstance(defId: string, owner: PlayerId, iid: number): CardInstance {
   return {
@@ -27,6 +28,9 @@ export function createInitialState(
   deckA: string[],
   deckB: string[],
 ): GameState {
+  if (deckA.length > MAX_DECK_SIZE || deckB.length > MAX_DECK_SIZE) {
+    throw new Error(`deck exceeds max size of ${MAX_DECK_SIZE}`);
+  }
   let iid = 0;
   let rngState = seed | 0;
 

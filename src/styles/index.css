@@ -11,6 +11,7 @@
   --land: #6b7a4a;
   --creature: #7a4a4a;
   --sorcery: #4a5a7a;
+  --instant: #1f8f88;
   --radius: 10px;
   --card-w: 110px;
   --card-h: 154px;
@@ -649,11 +650,13 @@ input {
 .pcard-shield span.damaged { color: #ff9a8a; }
 
 
-/* ---- type colour identity: creature warm (default), sorcery blue, land green ---- */
+/* ---- type colour identity: creature warm (default), sorcery blue, land green, instant teal ---- */
 .card-sorcery { background: linear-gradient(180deg, #eaf0fb, #d2ddef); }
 .card-land { background: linear-gradient(180deg, #ecf4e3, #d3e5c2); }
+.card-instant { background: linear-gradient(180deg, #e4f7f6, #c6ebe8); }
 .card-sorcery .card-name { color: #2f6fb0; }
 .card-land .card-name { color: #3f7d39; }
+.card-instant .card-name { color: #1f8f88; }
 
 .pcard-sorcery {
   background:
@@ -665,10 +668,17 @@ input {
     radial-gradient(130% 70% at 50% -10%, #f2faea, transparent 60%),
     linear-gradient(180deg, #ebf4e2, #d3e5c2);
 }
+.pcard-instant {
+  background:
+    radial-gradient(130% 70% at 50% -10%, #eafcfb, transparent 60%),
+    linear-gradient(180deg, #e2f6f5, #c6ebe8);
+}
 .pcard-sorcery .pcard-name { color: #5aa6e8; }
 .pcard-land .pcard-name { color: #7fc36a; }
+.pcard-instant .pcard-name { color: #2bb3a9; }
 .pcard-sorcery .pcard-pip { color: #2f6fb0; }
 .pcard-land .pcard-pip { color: #3f7d39; }
+.pcard-instant .pcard-pip { color: #1f8f88; }
 
 /* ---- action announcement (center flash) ---- */
 .announce-wrap {
