@@ -55,7 +55,7 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
         <button onClick={onOnline} disabled={!hasSupabase}>
           Online PvP{!hasSupabase ? ' (set Supabase keys)' : ''}
         </button>
-        <Rulebook />
+        <Rulebook icon={false} />
       </div>
       {!hasSupabase && (
         <p className="hint">

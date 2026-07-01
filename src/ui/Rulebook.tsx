@@ -64,11 +64,13 @@ const SECTIONS: { title: string; items: string[] }[] = [
 
 export function Rulebook({
   label = true,
+  icon = true,
   trigger = true,
   open: openProp,
   onOpenChange,
 }: {
   label?: boolean;
+  icon?: boolean; // render the 📖 glyph
   trigger?: boolean; // render the 📖 button (false = controlled externally)
   open?: boolean; // controlled open state
   onOpenChange?: (v: boolean) => void;
@@ -86,9 +88,11 @@ export function Rulebook({
           title="Rulebook"
           aria-label="Open rulebook"
         >
-          <span className="book-ico" aria-hidden>
-            📖
-          </span>
+          {icon && (
+            <span className="book-ico" aria-hidden>
+              📖
+            </span>
+          )}
           {label && <span>Rulebook</span>}
         </button>
       )}

@@ -81,13 +81,13 @@ input {
 }
 .menu {
   max-width: 520px;
-  margin: 8vh auto;
+  margin: 0 auto; /* padding (not margin) so it can't collapse through #root -> no overflow */
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 14px;
-  padding: 0 16px;
+  padding: 4vh 16px 3vh;
 }
 .logo {
   font-size: 64px;
@@ -98,12 +98,31 @@ input {
 }
 .tagline { color: var(--muted); margin-top: -10px; }
 .menu-buttons { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 320px; }
+/* home buttons share the rulebook's parchment look */
+.menu-buttons button {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 14px 18px; font-size: 16px;
+  font-family: 'Cinzel', serif; font-weight: 700; letter-spacing: 0.5px;
+  color: var(--inkbrown);
+  background: linear-gradient(180deg, #f3e6c6, #e2cda0);
+  border: 1.5px solid var(--frame-dk); border-radius: 10px;
+  box-shadow: 0 0 0 1px var(--frame), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.menu-buttons button:hover:not(:disabled) {
+  border-color: var(--gold); transform: translateY(-1px);
+  box-shadow: 0 0 0 1px var(--gold), 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+.menu-buttons button:disabled { opacity: 0.5; }
 .hint { color: var(--muted); font-size: 13px; max-width: 360px; line-height: 1.5; }
 
 /* deck selection */
 .deck-title {
   font-family: 'Grenze Gotisch', serif; color: var(--gold); font-size: 30px; margin-bottom: 4px;
 }
+/* deck-select: centre the picker in the viewport; Back pinned top-left.
+   `safe center` falls back to top-align if content is taller than the screen (no clipping). */
+.deck-select { min-height: 100dvh; justify-content: safe center; }
+.deck-back { position: fixed; top: 12px; left: 12px; z-index: 10; }
 .deck-list {
   display: grid; grid-template-columns: repeat(3, 220px); gap: 18px;
   justify-content: center; max-width: 720px;
@@ -133,6 +152,32 @@ input {
   50% { box-shadow: 0 0 0 5px #ffe08a, 0 0 36px rgba(255, 211, 106, 1); }
 }
 
+/* ---- mobile deck carousel (arrows + swipe, one deck at a time) ---- */
+.deck-carousel { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; }
+.carousel-stage {
+  position: relative; width: min(62vw, 260px); height: min(48vh, 360px);
+  overflow: hidden; display: grid; place-items: center; flex: 0 0 auto;
+}
+/* inset from the stage edges so the card's frame ring isn't clipped at rest
+   (the stage clips only while a card slides in/out) */
+.carousel-card {
+  position: absolute; top: 10px; left: 10px;
+  width: calc(100% - 20px); height: calc(100% - 20px);
+  cursor: pointer; overflow: hidden;
+}
+.carousel-card .deck-desc { overflow: hidden; }
+.carousel-arrow {
+  flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; padding: 0;
+  font-size: 24px; line-height: 1; display: grid; place-items: center;
+  color: var(--inkbrown); background: linear-gradient(180deg, #f3e6c6, #e2cda0);
+  border: 1.5px solid var(--frame-dk); box-shadow: 0 0 0 1px var(--frame), 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.carousel-arrow:hover:not(:disabled) { border-color: var(--gold); }
+.carousel-arrow:disabled { opacity: 0.35; }
+.carousel-dots { display: flex; gap: 7px; justify-content: center; margin-top: 12px; }
+.carousel-dots .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--wood); opacity: 0.5; }
+.carousel-dots .dot.on { background: var(--gold); opacity: 1; }
+
 /* 3s fade transition into the battlefield */
 .deck-fade {
   position: fixed; inset: 0; z-index: 200; display: grid; place-items: center;
@@ -147,6 +192,11 @@ input {
 
 @media (max-width: 720px) {
   .deck-list { grid-template-columns: repeat(2, 46vw); max-width: 96vw; }
+}
+@media (max-width: 640px) {
+  /* carousel screen: tighten spacing so the whole picker fits with no scroll */
+  .menu { padding: 3vh 16px; gap: 10px; }
+  .deck-title { font-size: 24px; }
 }
 @media (max-width: 440px) {
   .deck-list { grid-template-columns: 1fr; }
