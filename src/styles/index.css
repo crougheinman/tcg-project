@@ -1063,7 +1063,12 @@ input {
   /* opponent creatures: smaller cards, single row ~one card tall + padding (no scroll) */
   .player-zone.opp .card { --card-w: 60px; --card-h: 108px; }
   .player-zone.opp .battlefield { min-height: calc(var(--card-h) + 8px); }
-  .player-zone.opp .row.creatures { flex-wrap: nowrap; min-height: var(--card-h); overflow: hidden; }
+  .player-zone.opp .row.creatures { min-height: var(--card-h); }
+  /* Both boards: keep creatures on ONE row and let them shrink to fit rather than
+     overflow/clip — no card ever gets cut off, and no scrollbar appears. */
+  .player-zone .row.creatures { flex-wrap: nowrap; justify-content: center; }
+  .player-zone .row.creatures .stack { flex: 0 1 var(--card-w); min-width: 0; }
+  .player-zone .row.creatures .card.arena { width: 100%; }
 }
 
 /* Very narrow phones: overlap the hand more so all 7 cards stay fully on-screen. */
