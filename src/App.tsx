@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useGame } from './store/gameStore';
 import { MainMenu } from './ui/MainMenu';
 import { Lobby } from './ui/Lobby';
@@ -14,6 +15,26 @@ export default function App() {
   }, [mode]);
 
   if (mode !== 'menu' && game) return <Board />;
-  if (showLobby) return <Lobby onBack={() => setShowLobby(false)} />;
-  return <MainMenu onOnline={() => setShowLobby(true)} />;
+
+  // Slide/fade between the menu and the online lobby (same transition as home <-> deck).
+  return (
+    <div className="screen-stack">
+      <AnimatePresence initial={false}>
+        <motion.div
+          key={showLobby ? 'lobby' : 'menu'}
+          className="screen"
+          initial={{ opacity: 0, x: 60 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -60 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+        >
+          {showLobby ? (
+            <Lobby onBack={() => setShowLobby(false)} />
+          ) : (
+            <MainMenu onOnline={() => setShowLobby(true)} />
+          )}
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
 }
