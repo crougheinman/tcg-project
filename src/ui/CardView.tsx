@@ -7,6 +7,11 @@ import { useSetHover } from './hover';
 
 const LONG_PRESS_MS = 320;
 
+// Mobile: a tap fires a synthetic mouseenter right before click, which used to pop
+// the big preview over the board on every tap. Track the last touch so those
+// synthetic hovers are ignored — on touch, ONLY a long-press opens the preview.
+let lastTouchTs = 0;
+
 interface Props {
   inst: CardInstance;
   faceDown?: boolean;
@@ -51,6 +56,7 @@ export function CardView({
 
   // Touch: hold to preview; a long-press suppresses the tap-to-play that follows.
   function onTouchStart() {
+    lastTouchTs = Date.now();
     longPressed.current = false;
     pressTimer.current = setTimeout(() => {
       longPressed.current = true;
@@ -114,7 +120,11 @@ export function CardView({
       className={finalCls}
       data-iid={inst.iid}
       onClick={handleClick}
-      onMouseEnter={() => setHover(inst)}
+      // suppress the synthetic hover a touch tap generates — see lastTouchTs above
+      onMouseEnter={() => {
+        if (Date.now() - lastTouchTs < 700) return;
+        setHover(inst);
+      }}
       onMouseLeave={() => setHover(null)}
       onTouchStart={onTouchStart}
       onTouchEnd={endPress}
@@ -122,8 +132,12 @@ export function CardView({
       onTouchMove={() => clearTimeout(pressTimer.current)}
       title={titleText}
       layout
-      initial={{ opacity: 0, scale: 0.7 }}
-      animate={{ opacity: 1, scale: 1, rotate: inst.tapped ? 90 : 0 }}
+      // Battlefield creatures SLAM down from above (MTG Arena thunk); hand cards
+      // slide in from the deck side. Taps snap fast instead of springing.
+      initial={
+        arenaToken ? { opacity: 0, scale: 1.55, y: -30 } : { opacity: 0, scale: 0.7, x: 48 }
+      }
+      animate={{ opacity: 1, scale: 1, x: 0, y: 0, rotate: inst.tapped ? 90 : 0 }}
       exit={{ opacity: 0, scale: 0.5 }}
       whileHover={onClick && !draggable ? { y: -6 } : undefined}
       drag={draggable}
@@ -144,12 +158,30 @@ export function CardView({
           didDrag.current = false;
         }, 0);
       }}
-      transition={spring}
+      transition={
+        arenaToken
+          ? { type: 'spring', stiffness: 640, damping: 34, rotate: { duration: 0.18, ease: 'easeOut' } }
+          : { ...spring, rotate: { duration: 0.18, ease: 'easeOut' } }
+      }
     >
       {arenaToken ? (
         <>
           {def.art && (
             <img className="arena-art" src={def.art} alt="" draggable={false} onError={artFallback} />
+          )}
+          {(inst.buffP > 0 || inst.buffT > 0 || inst.blitz) && (
+            <motion.div
+              className="buff-crown"
+              title="Buffed"
+              initial={{ opacity: 0, y: 8, scale: 0.5 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ type: 'spring', stiffness: 420, damping: 18 }}
+            >
+              <span className="crown-glyph" aria-hidden>
+                👑
+              </span>
+              <span className="buff-eye" aria-hidden />
+            </motion.div>
           )}
           <div className={'arena-pt' + (inst.damage > 0 ? ' damaged' : '')}>
             <span>

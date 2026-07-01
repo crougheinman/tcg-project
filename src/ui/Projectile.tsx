@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react';
 
+import type { SpellTheme } from './ImpactFx';
+
 // A fast damage-spell bolt that flies from the caster's avatar to the exact target
-// (a creature or a player), shaking it on impact. onImpact fires the explosion
-// spritesheet at the target so it lands with the bolt.
+// (a creature or a player), shaking it on impact. onImpact fires the themed
+// framer-motion burst at the target so it lands with the bolt.
 //
 // Travel is driven imperatively via the Web Animations API (like the board's
 // lungeTo/shakeEl helpers) — reliable and conflict-free, unlike animating
@@ -14,8 +16,7 @@ export interface Projectile {
   toX: number;
   toY: number;
   targetSel: string; // DOM selector of the thing being hit (for the impact shake)
-  sheet: string;
-  frames: number;
+  theme: SpellTheme; // impact burst colors
 }
 
 const TRAVEL_MS = 340;

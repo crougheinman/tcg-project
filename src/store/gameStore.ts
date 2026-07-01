@@ -25,8 +25,12 @@ interface Store {
   // PvP meta win: opponent left the match (aborted / disconnected). Kept out of the
   // deterministic GameState — it's a network outcome, not a rules outcome.
   forfeit: { winner: PlayerId; reason: string } | null;
+  // Guided mode: contextual coach bubbles that teach the game. Persisted; ON by
+  // default so newcomers get help immediately.
+  guided: boolean;
+  setGuided: (v: boolean) => void;
 
-  startAI: (deckId: string) => void;
+  startAI: (deckId: string, oppDeckId?: string) => void; // oppDeckId: pre-picked (face-off shows it)
   startHotseat: (deckA: string, deckB: string) => void;
   startPvp: (net: MatchConnection) => void;
   dispatch: (action: Action) => void; // local human action
@@ -37,6 +41,7 @@ interface Store {
 }
 
 const AI_DELAY_MS = 600;
+const AI_DELAY_GUIDED_MS = 1600; // guided mode: slower, so learners can read each move
 const BUBBLE_MS = 5000; // how long a chat bubble stays before fading
 const noChat = (): Record<PlayerId, ChatBubble | null> => ({ A: null, B: null });
 
@@ -46,18 +51,21 @@ export const useGame = create<Store>((set, get) => {
     const st = get();
     if (st.mode !== 'ai' || !st.game || !st.aiId) return;
     if (!aiShouldAct(st.game, st.aiId)) return;
-    setTimeout(() => {
-      const s = get();
-      if (s.mode !== 'ai' || !s.game || !s.aiId || !aiShouldAct(s.game, s.aiId)) return;
-      try {
-        const next = applyAction(s.game, pickAction(s.game, s.aiId));
-        set({ game: next });
-      } catch (e) {
-        set({ error: `AI error: ${(e as Error).message}` });
-        return;
-      }
-      scheduleAi();
-    }, AI_DELAY_MS);
+    setTimeout(
+      () => {
+        const s = get();
+        if (s.mode !== 'ai' || !s.game || !s.aiId || !aiShouldAct(s.game, s.aiId)) return;
+        try {
+          const next = applyAction(s.game, pickAction(s.game, s.aiId));
+          set({ game: next });
+        } catch (e) {
+          set({ error: `AI error: ${(e as Error).message}` });
+          return;
+        }
+        scheduleAi();
+      },
+      st.guided ? AI_DELAY_GUIDED_MS : AI_DELAY_MS,
+    );
   }
 
   // Show a chat bubble over `side`, replacing any current one. Auto-clears after
@@ -81,9 +89,16 @@ export const useGame = create<Store>((set, get) => {
     error: null,
     chat: noChat(),
     forfeit: null,
+    guided: localStorage.getItem('guided') !== '0', // default ON
+    setGuided: (v) => {
+      localStorage.setItem('guided', v ? '1' : '0');
+      set({ guided: v });
+    },
 
-    startAI: (deckId) => {
+    startAI: (deckId, oppDeckId) => {
       const seed = Math.floor(Math.random() * 0x7fffffff);
+      // AI plays the pre-picked deck (shown in the face-off), else a random one.
+      const aiDeck = oppDeckId ? deckById(oppDeckId) : randomDeck();
       set({
         mode: 'ai',
         myId: 'A',
@@ -91,8 +106,7 @@ export const useGame = create<Store>((set, get) => {
         net: null,
         error: null,
         forfeit: null,
-        // AI plays a random deck from the pool.
-        game: createInitialState(seed, deckById(deckId).cards, randomDeck().cards),
+        game: createInitialState(seed, deckById(deckId).cards, aiDeck.cards),
       });
       scheduleAi(); // in case AI ever goes first (it doesn't on turn 1, but safe)
     },

@@ -22,7 +22,7 @@ function tally(p: PlayerState) {
 
 const listVariants = {
   hidden: {},
-  show: { transition: { staggerChildren: 0.08, delayChildren: 0.35 } },
+  show: { transition: { staggerChildren: 0.08, delayChildren: 0.95 } }, // 0.6 hold + 0.35
 };
 const rowVariants = {
   hidden: { opacity: 0, y: 12 },
@@ -62,19 +62,27 @@ export function ResultScreen({
 
   const title = outcome === 'win' ? 'Victory!' : outcome === 'lose' ? 'Defeat' : 'Draw';
 
+  // Hold a beat (~0.6s) before revealing — let the final blow land and breathe
+  // before the verdict slams in (MTG Arena pacing).
+  const HOLD = 0.6;
   return (
-    <div className="overlay">
+    <motion.div
+      className="overlay"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ delay: HOLD, duration: 0.3 }}
+    >
       <motion.div
         className={'result result-stats outcome-' + outcome}
         initial={{ scale: 0.85, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
-        transition={{ type: 'spring', stiffness: 260, damping: 22 }}
+        transition={{ type: 'spring', stiffness: 260, damping: 22, delay: HOLD }}
       >
         <motion.h2
           className="result-title"
           initial={{ scale: 0.5, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', stiffness: 300, damping: 14, delay: 0.15 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 14, delay: HOLD + 0.2 }}
         >
           {title}
         </motion.h2>
@@ -112,11 +120,11 @@ export function ResultScreen({
           onClick={onMenu}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.35 + rows.length * 0.08 + 0.1 }}
+          transition={{ delay: 0.95 + rows.length * 0.08 + 0.1 }}
         >
           Back to Menu
         </motion.button>
       </motion.div>
-    </div>
+    </motion.div>
   );
 }

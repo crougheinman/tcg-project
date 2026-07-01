@@ -14,6 +14,7 @@ import { ZoneViewer } from './ZoneViewer';
 import { BoardFx } from './BoardFx';
 import { PlayerBar } from './PlayerBar';
 import { ResultScreen } from './ResultScreen';
+import { CoachBubble, type Tip } from './GuideCoach';
 import { ActionLog } from './ActionLog';
 import { ChatDock } from './ChatDock';
 import { humanize } from './boardLog';
@@ -32,6 +33,9 @@ export function Board() {
   const [menuOpen, setMenuOpen] = useState(false); // burger menu modal
   const [confirmAbort, setConfirmAbort] = useState(false); // abort confirmation
   const [rulesOpen, setRulesOpen] = useState(false); // "How to Play" (controlled Rulebook)
+  const guided = useGame((s) => s.guided);
+  const setGuided = useGame((s) => s.setGuided);
+  const [hushed, setHushed] = useState<Set<string>>(new Set()); // per-session dismissed tips
   const [sorceryIid, setSorceryIid] = useState<string | null>(null);
   const [attackers, setAttackers] = useState<Set<string>>(new Set());
   const [blocks, setBlocks] = useState<Record<string, string>>({});
@@ -102,15 +106,23 @@ export function Board() {
   useEffect(() => {
     if (game.log.length > prevLogLen.current) {
       const last = game.log[game.log.length - 1];
-      setAnnounce({ id: announceId.current++, text: humanize(last, myId) });
+      // Land plays get no banner — the mana-orb animation already tells the story.
+      // Turn changes get a longer, bigger splash (see the .announce.turn style).
+      if (!/ plays /.test(last)) {
+        const isTurn = /^Turn \d+/.test(last);
+        setAnnounce({ id: announceId.current++, text: humanize(last, myId), ms: isTurn ? 2400 : undefined });
+      }
     }
     prevLogLen.current = game.log.length;
   }, [game, myId]);
   useEffect(() => {
     if (!announce) return;
-    const t = setTimeout(() => setAnnounce(null), announce.ms ?? 1800);
+    // Guided mode: hold every banner ~1.6x longer so learners can actually read
+    // what just happened (opponent attacks, spells, triggers, ...).
+    const hold = (announce.ms ?? 1800) * (guided ? 1.6 : 1);
+    const t = setTimeout(() => setAnnounce(null), hold);
     return () => clearTimeout(t);
-  }, [announce]);
+  }, [announce, guided]);
 
   // Auto-skip your combat when no creature can attack — notify with the reason,
   // hold the banner ~3s, then advance past combat.
@@ -128,11 +140,14 @@ export function Board() {
         ? 'no creatures to attack with'
         : 'your creatures are not ready (summoning sick)';
     setAnnounce({ id: announceId.current++, text: `⚔ Combat skipped — ${reason}`, ms: 3000 });
-    const t = setTimeout(() => {
-      if (useGame.getState().game?.phase === 'combat_attack') dispatch({ type: 'advance' });
-    }, 1500);
+    const t = setTimeout(
+      () => {
+        if (useGame.getState().game?.phase === 'combat_attack') dispatch({ type: 'advance' });
+      },
+      guided ? 2800 : 1500, // guided: linger so the learner sees why combat skipped
+    );
     return () => clearTimeout(t);
-  }, [game, myId, mode, dispatch]);
+  }, [game, myId, mode, dispatch, guided]);
 
   // Auto-resolve blocks when the defender has nothing that can block — no reason
   // to defend, so let the damage through after a brief notice.
@@ -150,11 +165,15 @@ export function Board() {
     if (autoBlockRef.current === key) return;
     autoBlockRef.current = key;
     setAnnounce({ id: announceId.current++, text: '🛡 No blockers — damage goes through', ms: 2200 });
-    const t = setTimeout(() => {
-      if (useGame.getState().game?.phase === 'combat_block') dispatch({ type: 'declareBlockers', blocks: {} });
-    }, 1500);
+    const t = setTimeout(
+      () => {
+        if (useGame.getState().game?.phase === 'combat_block')
+          dispatch({ type: 'declareBlockers', blocks: {} });
+      },
+      guided ? 2800 : 1500,
+    );
     return () => clearTimeout(t);
-  }, [game, myId, mode, dispatch]);
+  }, [game, myId, mode, dispatch, guided]);
 
   // Announce when an attack gets blocked — easy to miss otherwise, especially for
   // the attacker (the engine resolves the block silently). Runs after the
@@ -192,6 +211,90 @@ export function Board() {
   const canAnyBlock = game.players[opponentOf(game.active)].battlefield.some(
     (c) => isCreature(c) && !c.tapped,
   );
+
+  // Guided mode: pick the ONE tip that matches the current situation (priority order).
+  // Teaches core MTG-style flow: lands -> mana -> creatures -> attack -> block.
+  function coachTip(): Tip | null {
+    if (!guided || game.winner || forfeit) return null;
+    if (game.pending?.kind === 'whipflash' && myTurnToAct)
+      return {
+        key: 'whipflash',
+        sel: '.player-zone.opp .row.creatures',
+        text: '✦ Whipflash triggered! Tap an enemy creature to deal 1 damage to it.',
+        place: 'below',
+      };
+    if (sorceryIid)
+      return {
+        key: 'target',
+        sel: '.center',
+        text: 'Aim the spell: tap a glowing creature (or an avatar) to hit it. Tap Cancel to back out.',
+      };
+    if (!myTurnToAct)
+      return {
+        key: 'wait',
+        sel: '.player-zone.opp',
+        text: "Opponent's turn — watch their plays. If they attack, you'll be asked to block.",
+        place: 'below',
+      };
+    switch (game.phase) {
+      case 'main1': {
+        if (!me.landPlayedThisTurn && me.hand.some(isLand))
+          return {
+            key: 'land',
+            sel: '.player-dock .hand',
+            text: 'Play a land: tap one in your hand. Lands make mana ◈, and mana pays for cards. One land per turn.',
+          };
+        if (me.hand.some(canPlay))
+          return {
+            key: 'cast',
+            sel: '.player-dock .hand',
+            text: 'Cast a card: tap or drag it onto the battlefield. The orb number is its mana cost.',
+          };
+        return {
+          key: 'combatgo',
+          sel: '.center',
+          text: 'Nothing castable? Head to Combat to attack with your creatures.',
+        };
+      }
+      case 'combat_attack': {
+        if (!canAnyAttack) return null; // auto-skip banner already explains
+        if (attackers.size === 0)
+          return {
+            key: 'pick-attackers',
+            sel: '.player-zone.me .row.creatures',
+            text: 'Tap the creatures you want to attack with — attackers deal their ⚔ power to the opponent.',
+          };
+        return {
+          key: 'confirm-attack',
+          sel: '.center',
+          text: 'Ready! Press Attack to send them in. Unblocked attackers hit the opponent’s life.',
+        };
+      }
+      case 'combat_block': {
+        if (!canAnyBlock) return null; // auto-resolve banner already explains
+        if (pendingBlocker)
+          return {
+            key: 'pick-victim',
+            sel: '.player-zone.opp .row.creatures',
+            text: 'Now tap the attacking creature you want it to block.',
+            place: 'below',
+          };
+        return {
+          key: 'pick-blockers',
+          sel: '.player-zone.me .row.creatures',
+          text: 'Defend! Tap one of your creatures to block — it takes the hit instead of you.',
+        };
+      }
+      case 'end':
+        return {
+          key: 'end-turn',
+          sel: '.center',
+          text: 'Press End Turn. Next turn you untap, draw a card, and get fresh mana.',
+        };
+    }
+    return null;
+  }
+  const tip = coachTip();
   // During the block step: does the defender hold a castable instant? (drives the
   // "…or cast an instant" hint and the green card glow). canPlay is hoisted below.
   const instantInHand =
@@ -627,12 +730,27 @@ export function Board() {
         )}
       </AnimatePresence>
 
+      {/* Guided-mode coach bubble (one at a time, anchored to the relevant UI) */}
+      <AnimatePresence>
+        {tip && !hushed.has(tip.key) && (
+          <CoachBubble
+            key={tip.key}
+            tip={tip}
+            onHush={(k) => setHushed((h) => new Set(h).add(k))}
+          />
+        )}
+      </AnimatePresence>
+
       <div className="announce-wrap">
         <AnimatePresence>
           {announce && (
             <motion.div
               key={announce.id}
-              className={'announce' + (announce.text.includes('✦') ? ' skill' : '')}
+              className={
+                'announce' +
+                (announce.text.includes('✦') ? ' skill' : '') +
+                (/^Turn \d+/.test(announce.text) ? ' turn' : '')
+              }
               initial={{ opacity: 0, scale: 0.8, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 1.1 }}
@@ -693,6 +811,18 @@ export function Board() {
                 }}
               >
                 How to Play
+              </button>
+              <button
+                className={'game-menu-item toggle' + (guided ? ' on' : '')}
+                onClick={() => {
+                  setGuided(!guided);
+                  if (!guided) setHushed(new Set()); // re-enabling revives dismissed tips
+                }}
+              >
+                Guided Mode
+                <span className="toggle-pill" aria-hidden>
+                  {guided ? 'ON' : 'OFF'}
+                </span>
               </button>
             </motion.div>
           </motion.div>

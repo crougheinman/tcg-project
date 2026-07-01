@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { hasSupabase } from '../net/supabase';
+import { randomDeck } from '../cards/decks';
 import { Rulebook } from './Rulebook';
 import { DeckSelect } from './DeckSelect';
 
@@ -11,10 +12,12 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
   // After picking a mode, choose a deck before the game starts.
   const [picking, setPicking] = useState<'ai' | 'hotseat' | null>(null);
   const [p1Deck, setP1Deck] = useState<string | null>(null); // hotseat: player 1's deck
+  const [aiDeck, setAiDeck] = useState<string | null>(null); // vs AI: opponent deck, pre-picked for the face-off
 
   const cancel = () => {
     setPicking(null);
     setP1Deck(null);
+    setAiDeck(null);
   };
 
   // Resolve the current screen (keyed so it can animate in/out).
@@ -25,9 +28,10 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
     content = (
       <DeckSelect
         title="Choose your deck — vs AI (opponent's deck is random)"
-        onPick={(deckId) => startAI(deckId)}
+        onPick={(deckId) => startAI(deckId, aiDeck ?? undefined)}
         onBack={cancel}
         confirmStart
+        vsDeckId={aiDeck ?? undefined}
       />
     );
   } else if (picking === 'hotseat' && !p1Deck) {
@@ -42,6 +46,7 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
         onBack={() => setP1Deck(null)}
         disabledId={p1Deck!}
         confirmStart
+        vsDeckId={p1Deck!}
       />
     );
   } else {
@@ -52,7 +57,14 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
         <h1 className="logo">ENTITY DUEL</h1>
         <p className="tagline">a tiny trading card game</p>
         <div className="menu-buttons">
-          <button onClick={() => setPicking('ai')}>Play vs AI</button>
+          <button
+            onClick={() => {
+              setAiDeck(randomDeck().id); // pick now so the face-off can show it
+              setPicking('ai');
+            }}
+          >
+            Play vs AI
+          </button>
           <button onClick={() => setPicking('hotseat')}>Hotseat (2 players, 1 device)</button>
           <button onClick={onOnline} disabled={!hasSupabase}>
             Online PvP{!hasSupabase ? ' (set Supabase keys)' : ''}

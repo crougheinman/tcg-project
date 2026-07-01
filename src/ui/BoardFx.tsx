@@ -1,10 +1,11 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { getDef } from '../cards/cards';
 import { isCreature, isLand, power, toughness } from '../engine/rules';
 import type { GameState, PlayerId } from '../engine/types';
 import { opponentOf } from '../engine/types';
 import { DestroyFx } from './DestroyFx';
+import { SlashFx, SmashDustFx, SpellImpactFx, type SpellTheme } from './ImpactFx';
 import { LandAbsorbFx, type LandAbsorb } from './LandAbsorbFx';
 import { ProjectileFx, type Projectile } from './Projectile';
 import type { Burst } from './Vfx';
@@ -12,10 +13,16 @@ import type { Burst } from './Vfx';
 // three.js is heavy — split it into its own chunk, loaded only in-game.
 const VfxCanvas = lazy(() => import('./Vfx').then((m) => ({ default: m.VfxCanvas })));
 
+// Combat pacing (MTG Arena style): attackers strike one after another, and each
+// strike's feedback (slash / shake / damage numbers) lands at the lunge's impact
+// moment — not on declaration.
+const STRIKE_STAGGER_MS = 260; // gap between consecutive attacker strikes
+const IMPACT_MS = 150; // time into a lunge when the hit "lands" (~40% of 360ms)
+
 /**
  * The board's visual-effects engine. Diffs each new GameState against the
  * previous one and spawns the matching flourishes (particle bursts, damage
- * floaters, combat lunges/slashes, spell spritesheets, destruction sequences).
+ * floaters, combat lunges/slashes, spell bursts, destruction sequences).
  * Self-contained: reads `game`, owns all fx state, queries the DOM by the
  * data-attributes Board renders. Pure flourish — never dispatches.
  */
@@ -27,12 +34,13 @@ export function BoardFx({ game }: { game: GameState }) {
     { id: number; x: number; y: number; text: string; up: boolean }[]
   >([]);
   const [slashes, setSlashes] = useState<{ id: number; x: number; y: number }[]>([]);
+  const [dusts, setDusts] = useState<{ id: number; x: number; y: number }[]>([]);
   const [blockFx, setBlockFx] = useState<{ id: number; x: number; y: number }[]>([]);
   const [landAbsorbs, setLandAbsorbs] = useState<LandAbsorb[]>([]);
   const [projectiles, setProjectiles] = useState<Projectile[]>([]);
   const [destroys, setDestroys] = useState<{ id: number; x: number; y: number }[]>([]);
   const [spellFx, setSpellFx] = useState<
-    { id: number; sheet: string; frames: number; x: number; y: number } | null
+    { id: number; theme: SpellTheme; x: number; y: number } | null
   >(null);
 
   const prevGame = useRef<GameState>(game);
@@ -66,7 +74,21 @@ export function BoardFx({ game }: { game: GameState }) {
         }
     const spellDamage = newSpells.some((sp) => getDef(sp.def).effect?.type === 'damage');
 
+    // Resolved combat this action? Its feedback is choreographed: strike i lands at
+    // strikeDelay(i), so damage numbers / bursts wait for the first hit instead of
+    // appearing before the attacker has even moved.
+    const resolved = game.lastCombat;
+    const combatHit = before.phase === 'combat_block' && game.phase === 'end' && !!resolved;
+    const blockerByAtk: Record<string, string> = {};
+    if (resolved) for (const [blk, atk] of Object.entries(resolved.blocks)) blockerByAtk[atk] = blk;
+    const strikeDelay = (i: number) => i * STRIKE_STAGGER_MS + IMPACT_MS;
+    const firstUnblocked = resolved
+      ? resolved.attackers.findIndex((a) => !blockerByAtk[a])
+      : -1;
+    const faceDmgDelay = combatHit && firstUnblocked >= 0 ? strikeDelay(firstUnblocked) : 0;
+
     let dmgTargetSel: string | null = null; // who/what just took damage (for the spell fx)
+    const newDmgNums: { id: number; x: number; y: number; amt: number }[] = [];
     for (const pid of ['A', 'B'] as PlayerId[]) {
       const d = before.players[pid].life - game.players[pid].life;
       if (d > 0) {
@@ -75,11 +97,9 @@ export function BoardFx({ game }: { game: GameState }) {
         const el = document.querySelector(`[data-player="${pid}"]`);
         if (el) {
           const r = el.getBoundingClientRect();
-          setDmgNums((n) => [
-            ...n,
-            { id: dmgId.current++, x: r.left + r.width / 2, y: r.top, amt: d },
-          ]);
-          if (!spellDamage) shakeEl(el as HTMLElement); // spell damage shakes on bolt impact
+          newDmgNums.push({ id: dmgId.current++, x: r.left + r.width / 2, y: r.top, amt: d });
+          // spell damage shakes on bolt impact; combat damage shakes on strike impact
+          if (!spellDamage && !combatHit) shakeEl(el as HTMLElement);
         }
       }
     }
@@ -93,7 +113,13 @@ export function BoardFx({ game }: { game: GameState }) {
           if (!dmgTargetSel) dmgTargetSel = `[data-iid="${c.iid}"]`;
           spawnAt(`[data-iid="${c.iid}"]`, '#ff5a4a', 18);
         }
-    if (add.length) setBursts((b) => [...b, ...add]);
+    // Flush damage feedback — held back to the first strike's impact during combat.
+    const flushDamage = () => {
+      if (add.length) setBursts((b) => [...b, ...add]);
+      if (newDmgNums.length) setDmgNums((n) => [...n, ...newDmgNums]);
+    };
+    if (combatHit && faceDmgDelay) setTimeout(flushDamage, faceDmgDelay);
+    else flushDamage();
 
     // Creature stat changes -> a floating number at the creature (green up / red down),
     // same drift-down-and-fade as the "Mana +1" float. Covers persistent changes the
@@ -141,7 +167,7 @@ export function BoardFx({ game }: { game: GameState }) {
     };
     const newProjectiles: Projectile[] = [];
     for (const sp of newSpells) {
-      const fx = SPELL_FX[sp.def] ?? SPELL_FX.default;
+      const theme = SPELL_FX[sp.def] ?? SPELL_FX.default;
       const { x, y } = targetXY();
       if (getDef(sp.def).effect?.type === 'damage' && dmgTargetSel) {
         const av = document.querySelector(`[data-player="${sp.owner}"]`);
@@ -153,11 +179,10 @@ export function BoardFx({ game }: { game: GameState }) {
           toX: x,
           toY: y,
           targetSel: dmgTargetSel,
-          sheet: fx.sheet,
-          frames: fx.frames,
+          theme,
         });
       } else {
-        setSpellFx({ id: dmgId.current++, sheet: fx.sheet, frames: fx.frames, x, y });
+        setSpellFx({ id: dmgId.current++, theme, x, y });
       }
     }
     if (newProjectiles.length) setProjectiles((p) => [...p, ...newProjectiles]);
@@ -192,78 +217,100 @@ export function BoardFx({ game }: { game: GameState }) {
     }
     if (newLands.length) setLandAbsorbs((la) => [...la, ...newLands]);
 
-    // Combat strike animations: lunge each attacker toward its target. Read the
-    // *resolved* combat (lastCombat) — blocks never persist in `combat` during the
-    // combat_block phase, so before.combat.blocks would always look empty.
-    const resolved = game.lastCombat;
-    if (before.phase === 'combat_block' && game.phase === 'end' && resolved) {
-      const blockerByAtk: Record<string, string> = {};
-      for (const [blk, atk] of Object.entries(resolved.blocks)) blockerByAtk[atk] = blk;
-      let faceHit = false;
-      const defenderShield = document.querySelector(`[data-player="${opponentOf(before.active)}"]`);
-      const newSlashes: { id: number; x: number; y: number }[] = [];
-      const newBlocks: { id: number; x: number; y: number }[] = [];
-      const slashAt = (el: Element | null) => {
-        if (!el) return;
-        const r = el.getBoundingClientRect();
-        newSlashes.push({ id: dmgId.current++, x: r.left + r.width / 2, y: r.top + r.height / 2 });
-      };
-      const blockAt = (el: Element | null) => {
-        if (!el) return;
-        const r = el.getBoundingClientRect();
-        newBlocks.push({ id: dmgId.current++, x: r.left + r.width / 2, y: r.top + r.height / 2 });
-      };
-      for (const atk of resolved.attackers) {
-        const atkEl = stackEl(atk);
-        const blk = blockerByAtk[atk];
-        if (blk) {
-          lungeTo(atkEl, stackEl(blk)); // clash with blocker
-          shakeEl(stackEl(blk));
-          slashAt(stackEl(blk)); // slash the blocker
-          blockAt(stackEl(blk)); // shield-pop on the blocker so the block reads clearly
-        } else {
-          faceHit = true;
-          lungeTo(atkEl, defenderShield);
-          slashAt(defenderShield); // slash the defending player
+    // A creature just entered -> table-smash dust when its slam lands (~140ms in).
+    for (const pid of ['A', 'B'] as PlayerId[]) {
+      for (const c of game.players[pid].battlefield) {
+        if (!battleBefore.has(c.iid) && isCreature(c)) {
+          const el = document.querySelector(`[data-iid="${c.iid}"]`);
+          if (!el) continue;
+          const r = el.getBoundingClientRect();
+          const d = { id: dmgId.current++, x: r.left + r.width / 2, y: r.top + r.height * 0.78 };
+          setTimeout(() => setDusts((s) => [...s, d]), 140);
+          setTimeout(() => setDusts((s) => s.filter((x) => x.id !== d.id)), 140 + 800);
         }
-      }
-      if (newSlashes.length) {
-        setSlashes((s) => [...s, ...newSlashes]);
-        const ids = new Set(newSlashes.map((n) => n.id));
-        setTimeout(() => setSlashes((s) => s.filter((n) => !ids.has(n.id))), 600);
-      }
-      if (newBlocks.length) setBlockFx((b) => [...b, ...newBlocks]);
-      if (faceHit) {
-        document
-          .querySelector('.board')
-          ?.animate(
-            [
-              { transform: 'translateY(0)' },
-              { transform: 'translateY(6px)' },
-              { transform: 'translateY(-4px)' },
-              { transform: 'translateY(0)' },
-            ],
-            { duration: 260, easing: 'ease-out' },
-          );
-        setFaceFlash((f) => f + 1);
       }
     }
 
+    // Combat strike choreography: each attacker strikes in turn (STRIKE_STAGGER_MS
+    // apart); its slash / shield-pop / shake land at the lunge's impact moment.
+    // (lastCombat, not combat — blocks never persist during combat_block.)
+    if (combatHit && resolved) {
+      const defenderShield = document.querySelector(`[data-player="${opponentOf(before.active)}"]`);
+      const spawnSlash = (el: Element | null) => {
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        const id = dmgId.current++;
+        setSlashes((s) => [...s, { id, x: r.left + r.width / 2, y: r.top + r.height / 2 }]);
+        setTimeout(() => setSlashes((s) => s.filter((n) => n.id !== id)), 600);
+      };
+      const spawnBlock = (el: Element | null) => {
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        setBlockFx((b) => [
+          ...b,
+          { id: dmgId.current++, x: r.left + r.width / 2, y: r.top + r.height / 2 },
+        ]);
+      };
+      resolved.attackers.forEach((atk, i) => {
+        const blk = blockerByAtk[atk];
+        setTimeout(() => {
+          // re-query at strike time — dying cards are still in the DOM (exit fade)
+          const atkEl = stackEl(atk);
+          if (blk) {
+            lungeTo(atkEl, stackEl(blk)); // clash with the blocker
+            setTimeout(() => {
+              shakeEl(stackEl(blk));
+              spawnSlash(stackEl(blk));
+              spawnBlock(stackEl(blk)); // shield-pop so the block reads clearly
+            }, IMPACT_MS);
+          } else {
+            lungeTo(atkEl, defenderShield); // straight at the player
+            setTimeout(() => {
+              spawnSlash(defenderShield);
+              document
+                .querySelector('.board')
+                ?.animate(
+                  [
+                    { transform: 'translateY(0)' },
+                    { transform: 'translateY(6px)' },
+                    { transform: 'translateY(-4px)' },
+                    { transform: 'translateY(0)' },
+                  ],
+                  { duration: 260, easing: 'ease-out' },
+                );
+              setFaceFlash((f) => f + 1);
+            }, IMPACT_MS);
+          }
+        }, i * STRIKE_STAGGER_MS);
+      });
+    }
+
     // A creature left the battlefield (destroyed) -> 2.5s destruction sequence at
-    // its last known position (captured before this render).
+    // its last known position. In combat the explosion waits for the strike that
+    // killed it (its attacker's turn in the sequence), so cause precedes effect.
     const aliveNow = new Set(
       [...game.players.A.battlefield, ...game.players.B.battlefield].map((c) => c.iid),
     );
-    const newDestroys: { id: number; x: number; y: number }[] = [];
+    const deathDelay = (iid: string): number => {
+      if (!combatHit || !resolved) return 0;
+      const ai = resolved.attackers.indexOf(iid); // an attacker that died in a clash
+      if (ai >= 0) return strikeDelay(ai);
+      const atk = resolved.blocks[iid]; // a blocker: killed on its attacker's strike
+      const bi = atk ? resolved.attackers.indexOf(atk) : -1;
+      return bi >= 0 ? strikeDelay(bi) : 0;
+    };
     for (const pid of ['A', 'B'] as PlayerId[]) {
       for (const c of before.players[pid].battlefield) {
         if (isCreature(c) && !aliveNow.has(c.iid)) {
           const r = creatureRects.current[c.iid];
-          if (r) newDestroys.push({ id: dmgId.current++, x: r.x, y: r.y });
+          if (!r) continue;
+          const fx = { id: dmgId.current++, x: r.x, y: r.y };
+          const delay = deathDelay(c.iid);
+          if (delay) setTimeout(() => setDestroys((d) => [...d, fx]), delay);
+          else setDestroys((d) => [...d, fx]);
         }
       }
     }
-    if (newDestroys.length) setDestroys((d) => [...d, ...newDestroys]);
 
     // Record current creature positions for next time (used when they die).
     const rects: Record<string, { x: number; y: number }> = {};
@@ -282,7 +329,7 @@ export function BoardFx({ game }: { game: GameState }) {
 
   useEffect(() => {
     if (!spellFx) return;
-    const t = setTimeout(() => setSpellFx(null), 3000);
+    const t = setTimeout(() => setSpellFx(null), 1400); // one-shot burst + afterglow
     return () => clearTimeout(t);
   }, [spellFx]);
 
@@ -299,8 +346,7 @@ export function BoardFx({ game }: { game: GameState }) {
     [],
   );
   const onProjectileImpact = useCallback(
-    (p: Projectile) =>
-      setSpellFx({ id: dmgId.current++, sheet: p.sheet, frames: p.frames, x: p.toX, y: p.toY }),
+    (p: Projectile) => setSpellFx({ id: dmgId.current++, theme: p.theme, x: p.toX, y: p.toY }),
     [],
   );
 
@@ -313,7 +359,11 @@ export function BoardFx({ game }: { game: GameState }) {
       {faceFlash > 0 && <div key={faceFlash} className="face-flash" />}
 
       {slashes.map((s) => (
-        <div key={s.id} className="slashfx" style={{ left: s.x, top: s.y }} />
+        <SlashFx key={s.id} x={s.x} y={s.y} />
+      ))}
+
+      {dusts.map((d) => (
+        <SmashDustFx key={d.id} x={d.x} y={d.y} />
       ))}
 
       {blockFx.map((b) => (
@@ -346,26 +396,7 @@ export function BoardFx({ game }: { game: GameState }) {
 
       <AnimatePresence>
         {spellFx && (
-          <motion.div
-            key={spellFx.id}
-            className="spellfx-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <div
-              className="spellfx"
-              style={
-                {
-                  left: spellFx.x,
-                  top: spellFx.y,
-                  backgroundImage: `url(${spellFx.sheet})`,
-                  '--frames': spellFx.frames,
-                  '--dur': `${(spellFx.frames * 0.08).toFixed(2)}s`,
-                } as CSSProperties
-              }
-            />
-          </motion.div>
+          <SpellImpactFx key={spellFx.id} x={spellFx.x} y={spellFx.y} theme={spellFx.theme} />
         )}
       </AnimatePresence>
 
@@ -405,13 +436,16 @@ export function BoardFx({ game }: { game: GameState }) {
   );
 }
 
-// Sorcery -> spritesheet (single-row strips in public/effects; frames = width/height).
-const SPELL_FX: Record<string, { sheet: string; frames: number }> = {
-  cinderbolt: { sheet: '/effects/fire-bomb.png', frames: 14 },
-  scorch: { sheet: '/effects/explosion.png', frames: 18 },
-  insight: { sheet: '/effects/star-caller.png', frames: 7 },
-  wild_growth: { sheet: '/effects/green-aura.png', frames: 8 },
-  default: { sheet: '/effects/lightning.png', frames: 5 },
+// Spell -> impact color theme (pure framer-motion burst; no spritesheets).
+const SPELL_FX: Record<string, SpellTheme> = {
+  cinderbolt: { core: '#fff3d6', glow: '#ff9a3c', ring: '#ff5a2a' },
+  scorch: { core: '#ffe8c8', glow: '#ff7433', ring: '#e0392b' },
+  pyroblast: { core: '#fff0d0', glow: '#ff8433', ring: '#d92f1f' },
+  insight: { core: '#f0f8ff', glow: '#6aa9ff', ring: '#3d7fd6' },
+  wild_growth: { core: '#eaffe8', glow: '#7fd46a', ring: '#3f9e4d' },
+  soothe: { core: '#eafff4', glow: '#54c98a', ring: '#2f9e6a' },
+  overgrowth: { core: '#eaffe8', glow: '#7fd46a', ring: '#3f9e4d' },
+  default: { core: '#fff8dc', glow: '#ffd36a', ring: '#d9b65a' },
 };
 
 // --- combat strike animation helpers (imperative, conflict-free with framer) ---
