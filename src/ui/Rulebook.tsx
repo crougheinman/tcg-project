@@ -62,21 +62,36 @@ const SECTIONS: { title: string; items: string[] }[] = [
   },
 ];
 
-export function Rulebook({ label = true }: { label?: boolean }) {
-  const [open, setOpen] = useState(false);
+export function Rulebook({
+  label = true,
+  trigger = true,
+  open: openProp,
+  onOpenChange,
+}: {
+  label?: boolean;
+  trigger?: boolean; // render the 📖 button (false = controlled externally)
+  open?: boolean; // controlled open state
+  onOpenChange?: (v: boolean) => void;
+}) {
+  const [openState, setOpenState] = useState(false);
+  const controlled = openProp !== undefined;
+  const open = controlled ? openProp : openState;
+  const setOpen = (v: boolean) => (controlled ? onOpenChange?.(v) : setOpenState(v));
   return (
     <>
-      <button
-        className="book-btn"
-        onClick={() => setOpen(true)}
-        title="Rulebook"
-        aria-label="Open rulebook"
-      >
-        <span className="book-ico" aria-hidden>
-          📖
-        </span>
-        {label && <span>Rulebook</span>}
-      </button>
+      {trigger && (
+        <button
+          className="book-btn"
+          onClick={() => setOpen(true)}
+          title="Rulebook"
+          aria-label="Open rulebook"
+        >
+          <span className="book-ico" aria-hidden>
+            📖
+          </span>
+          {label && <span>Rulebook</span>}
+        </button>
+      )}
 
       <AnimatePresence>
         {open && (

@@ -187,12 +187,17 @@ input {
   padding: 8px 12px;
   gap: 6px;
 }
-.topbar { display: flex; align-items: center; gap: 16px; }
-.role { margin-left: auto; color: var(--muted); font-size: 13px; }
-.topbar-right { margin-left: auto; }
-.topbar-right ~ .topbar-right, .role + .topbar-right { margin-left: 8px; }
+/* 3-col grid so the phases sit dead-centre regardless of side widths */
+.topbar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; }
+.role { color: var(--muted); font-size: 13px; }
+.topbar-right { justify-self: end; display: flex; align-items: center; gap: 8px; }
+.menu-btn {
+  justify-self: start; background: none; border: none; color: var(--muted);
+  font-size: 22px; line-height: 1; padding: 4px 6px; cursor: pointer;
+}
+.menu-btn:hover { color: var(--gold); }
 
-.phasebar { display: flex; gap: 14px; align-items: center; font-size: 13px; }
+.phasebar { justify-self: center; display: flex; gap: 14px; align-items: center; font-size: 13px; }
 .phasebar .turn { color: var(--muted); }
 .phasebar .active.you { color: var(--good); font-weight: 700; }
 .phasebar .active.them { color: var(--danger); }
@@ -867,6 +872,29 @@ input {
 }
 .result h2 { color: var(--gold); margin-top: 0; }
 
+/* ---- in-game menu / confirm modal (burger) ---- */
+.game-menu {
+  position: relative; background: var(--panel); border: 1px solid var(--gold);
+  border-radius: 16px; padding: 26px 30px 24px; min-width: 260px; max-width: 92vw;
+  display: flex; flex-direction: column; gap: 12px; align-items: stretch;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+.game-menu-title {
+  margin: 0 0 4px; text-align: center; color: var(--gold);
+  font-family: 'Grenze Gotisch', serif; font-weight: 700; font-size: 26px;
+}
+.game-menu-msg { margin: 0 0 6px; text-align: center; color: var(--muted); font-size: 14px; }
+.game-menu-item { font-family: 'Cinzel', serif; font-weight: 700; padding: 12px 18px; }
+.game-menu-item.danger { color: #ffb3ab; border-color: #7a2a24; background: #2a1512; }
+.game-menu-item.danger:hover { border-color: var(--danger); }
+.game-menu-row { display: flex; gap: 10px; }
+.game-menu-row .game-menu-item { flex: 1; }
+.modal-x {
+  position: absolute; top: 8px; right: 10px; background: none; border: none;
+  color: var(--muted); font-size: 24px; line-height: 1; padding: 4px 8px;
+}
+.modal-x:hover { color: var(--gold); border-color: transparent; transform: none; }
+
 @media (max-width: 640px) {
   :root { --card-w: 78px; --card-h: 140px; }
   .logo { font-size: 44px; }
@@ -894,6 +922,32 @@ input {
      the log off the bottom dock to the top-right (over the empty opponent area). */
   .action-log { top: 52px; bottom: auto; right: 8px; max-width: calc(100vw - 32px); }
   .chat-panel { width: min(260px, calc(100vw - 32px)); }
+
+  /* ---- compact opponent board ---- */
+  /* phases only: drop the wordy turn/active labels so Main·Combat·End centre cleanly */
+  .phasebar .turn, .phasebar .active { display: none; }
+
+  /* opponent zone shrinks to its content (one creature-card tall); player fills the rest */
+  .player-zone.opp { flex: 0 1 auto; max-height: 42%; padding: 4px 8px; gap: 2px; }
+  .player-zone.me { flex: 1 1 auto; }
+
+  /* opponent badge: life | avatar | mana on one row, card counts centred beneath */
+  .player-zone.opp .playerbar {
+    display: grid; grid-template-columns: 1fr auto 1fr;
+    grid-template-areas: "life avatar mana" "counts counts counts";
+    align-items: center; column-gap: 8px; row-gap: 0;
+  }
+  .player-zone.opp .pstats { display: contents; }
+  .player-zone.opp .shield-avatar { grid-area: avatar; width: 28px; height: 31px; }
+  .player-zone.opp .shield-avatar .user-ico { width: 14px; height: 14px; }
+  .player-zone.opp .life { grid-area: life; justify-self: end; font-size: 13px; }
+  .player-zone.opp .mana { grid-area: mana; justify-self: start; font-size: 11px; }
+  .player-zone.opp .counts { grid-area: counts; justify-self: center; }
+
+  /* opponent creatures: smaller cards, single row ~one card tall + padding (no scroll) */
+  .player-zone.opp .card { --card-w: 60px; --card-h: 108px; }
+  .player-zone.opp .battlefield { min-height: calc(var(--card-h) + 8px); }
+  .player-zone.opp .row.creatures { flex-wrap: nowrap; min-height: var(--card-h); overflow: hidden; }
 }
 
 /* Very narrow phones: overlap the hand more so all 7 cards stay fully on-screen. */

@@ -26,6 +26,9 @@ export function Board() {
   const error = useGame((s) => s.error);
   const clearError = useGame((s) => s.clearError);
 
+  const [menuOpen, setMenuOpen] = useState(false); // burger menu modal
+  const [confirmAbort, setConfirmAbort] = useState(false); // abort confirmation
+  const [rulesOpen, setRulesOpen] = useState(false); // "How to Play" (controlled Rulebook)
   const [sorceryIid, setSorceryIid] = useState<string | null>(null);
   const [attackers, setAttackers] = useState<Set<string>>(new Set());
   const [blocks, setBlocks] = useState<Record<string, string>>({});
@@ -52,6 +55,22 @@ export function Board() {
   useEffect(() => {
     if (sorceryIid || game.pending) setHovered(null);
   }, [sorceryIid, game.pending]);
+
+  // Click anywhere outside the preview card dismisses it. Needed on touch/hybrid
+  // devices where a tap fires mouseenter (opening the preview) but never mouseleave,
+  // so it would otherwise stay stuck open. Defer the listener one tick so the tap
+  // that opened the preview doesn't immediately close it.
+  useEffect(() => {
+    if (!hovered) return;
+    const close = (e: MouseEvent) => {
+      if (!(e.target as Element).closest('.pcard')) setHovered(null);
+    };
+    const id = window.setTimeout(() => document.addEventListener('click', close), 0);
+    return () => {
+      clearTimeout(id);
+      document.removeEventListener('click', close);
+    };
+  }, [hovered]);
 
   const dragBounds = useRef<HTMLDivElement>(null);
 
@@ -481,12 +500,12 @@ export function Board() {
     <LayoutGroup>
     <div className="board">
       <header className="topbar">
-        <button className="link" onClick={toMenu}>
-          ← Menu
+        <button className="menu-btn" onClick={() => setMenuOpen(true)} aria-label="Menu" title="Menu">
+          ☰
         </button>
         <PhaseBar game={game} myId={myId} />
-        {mode === 'pvp' && <span className="role">You are {myId}</span>}
         <div className="topbar-right">
+          {mode === 'pvp' && <span className="role">You are {myId}</span>}
           <Rulebook label={false} />
         </div>
       </header>
@@ -599,6 +618,96 @@ export function Board() {
           {error}
         </div>
       )}
+
+      {/* Burger menu modal */}
+      <AnimatePresence>
+        {menuOpen && (
+          <motion.div
+            className="overlay"
+            onClick={() => setMenuOpen(false)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="game-menu"
+              onClick={(e) => e.stopPropagation()}
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+            >
+              <button className="modal-x" onClick={() => setMenuOpen(false)} aria-label="Close">
+                ×
+              </button>
+              <h2 className="game-menu-title">Menu</h2>
+              <button
+                className="game-menu-item danger"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setConfirmAbort(true);
+                }}
+              >
+                Abort Match
+              </button>
+              <button
+                className="game-menu-item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setRulesOpen(true);
+                }}
+              >
+                How to Play
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Abort confirmation */}
+      <AnimatePresence>
+        {confirmAbort && (
+          <motion.div
+            className="overlay"
+            onClick={() => setConfirmAbort(false)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="game-menu confirm"
+              onClick={(e) => e.stopPropagation()}
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+            >
+              <button className="modal-x" onClick={() => setConfirmAbort(false)} aria-label="Close">
+                ×
+              </button>
+              <h2 className="game-menu-title">Abort match?</h2>
+              <p className="game-menu-msg">You’ll forfeit this match and return to the main menu.</p>
+              <div className="game-menu-row">
+                <button
+                  className="game-menu-item danger"
+                  onClick={() => {
+                    setConfirmAbort(false);
+                    toMenu();
+                  }}
+                >
+                  Yes, abort
+                </button>
+                <button className="game-menu-item" onClick={() => setConfirmAbort(false)}>
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* "How to Play" — controlled rulebook opened from the menu */}
+      <Rulebook trigger={false} open={rulesOpen} onOpenChange={setRulesOpen} />
 
       {game.winner && (
         <div className="overlay">
