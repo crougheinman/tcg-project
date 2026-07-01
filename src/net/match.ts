@@ -31,6 +31,11 @@ export interface MatchConnection {
   // a dropped chat packet is fine (unlike actions, which are sequenced + resent).
   sendChat: (text: string) => void;
   onChat: (cb: (m: ChatMessage) => void) => void;
+  // Meta signals (outside the lockstep action stream): tell the peer we forfeited,
+  // and learn when the peer left — either by aborting (explicit) or dropping off
+  // (no heartbeat for a while). The remaining player is declared the winner.
+  sendAbort: () => void;
+  onGone: (cb: (reason: 'aborted' | 'disconnected') => void) => void;
   leave: () => void;
 }
 
@@ -43,6 +48,11 @@ function randomRoom(): string {
 
 // How often to re-ask for a missing action while a gap persists (ms).
 const RESEND_INTERVAL_MS = 1200;
+
+// Liveness: each client pings on this cadence; if we hear nothing from the peer
+// (ping, action, chat, resend) for PEER_TIMEOUT_MS, we treat them as disconnected.
+const PING_MS = 3000;
+const PEER_TIMEOUT_MS = 12000;
 
 /**
  * Reliable, ordered, exactly-once delivery on top of Supabase broadcast (which is
@@ -69,9 +79,23 @@ function makeConnection(
 ): MatchConnection {
   let actionCb: ((a: Action) => void) | null = null;
   let chatCb: ((m: ChatMessage) => void) | null = null;
+  let goneCb: ((reason: 'aborted' | 'disconnected') => void) | null = null;
   let appliedCount = 0; // actions applied to the shared engine so far (local + remote)
   const sentHistory = new Map<number, Action>(); // seqs this client originated
   const buffer = new Map<number, Action>(); // received but not yet applicable (seq >= appliedCount)
+
+  // Peer liveness. lastSeen updates on any inbound peer message; the watchdog
+  // fires 'disconnected' if it goes stale. `ended` makes the signal fire once.
+  let ended = false;
+  let lastSeen = Date.now();
+  const touch = () => {
+    lastSeen = Date.now();
+  };
+  const declareGone = (reason: 'aborted' | 'disconnected') => {
+    if (ended) return;
+    ended = true;
+    goneCb?.(reason);
+  };
 
   // Apply every buffered action that is now next in sequence.
   function drain(): void {
@@ -89,6 +113,7 @@ function makeConnection(
   }
 
   channel.on('broadcast', { event: 'action' }, ({ payload }) => {
+    touch();
     const seq = payload.seq as number;
     if (seq < appliedCount || buffer.has(seq)) return; // already applied or already queued
     buffer.set(seq, payload.action as Action);
@@ -98,6 +123,7 @@ function makeConnection(
 
   // Chat: deliver straight through, no ordering/dedup needed (cosmetic, best-effort).
   channel.on('broadcast', { event: 'chat' }, ({ payload }) => {
+    touch();
     chatCb?.({
       from: payload.from as PlayerId,
       text: payload.text as string,
@@ -107,6 +133,7 @@ function makeConnection(
 
   // Peer is missing [from, to); rebroadcast any of those we originated.
   channel.on('broadcast', { event: 'resend' }, ({ payload }) => {
+    touch();
     const from = payload.from as number;
     const to = payload.to as number;
     for (let s = from; s < to; s++) {
@@ -115,12 +142,28 @@ function makeConnection(
     }
   });
 
+  // Liveness ping (keeps lastSeen fresh even when the peer isn't acting).
+  channel.on('broadcast', { event: 'ping' }, () => touch());
+  // Peer explicitly forfeited (aborted the match).
+  channel.on('broadcast', { event: 'forfeit' }, () => {
+    touch();
+    declareGone('aborted');
+  });
+
   // Re-request a stuck gap in case the resend itself was dropped.
   const retry = setInterval(() => {
     if (!actionCb || buffer.size === 0) return;
     const lowest = Math.min(...buffer.keys());
     if (lowest > appliedCount) requestResend(appliedCount, lowest);
   }, RESEND_INTERVAL_MS);
+
+  // Heartbeat out, and a watchdog that declares the peer disconnected if theirs
+  // goes silent. ponytail: heartbeat over broadcast — simpler than Presence given
+  // the post-subscribe .on() wiring here; swap to Presence if it ever matters.
+  const ping = setInterval(() => channel.send({ type: 'broadcast', event: 'ping' }), PING_MS);
+  const watchdog = setInterval(() => {
+    if (!ended && Date.now() - lastSeen > PEER_TIMEOUT_MS) declareGone('disconnected');
+  }, PING_MS);
 
   return {
     roomId,
@@ -150,8 +193,16 @@ function makeConnection(
     onChat: (cb) => {
       chatCb = cb;
     },
+    sendAbort: () => {
+      channel.send({ type: 'broadcast', event: 'forfeit', payload: { from: role } });
+    },
+    onGone: (cb) => {
+      goneCb = cb;
+    },
     leave: () => {
       clearInterval(retry);
+      clearInterval(ping);
+      clearInterval(watchdog);
       supabase?.removeChannel(channel);
     },
   };

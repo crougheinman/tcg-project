@@ -22,12 +22,16 @@ interface Store {
   net: MatchConnection | null;
   error: string | null;
   chat: Record<PlayerId, ChatBubble | null>; // current bubble per side (cosmetic)
+  // PvP meta win: opponent left the match (aborted / disconnected). Kept out of the
+  // deterministic GameState — it's a network outcome, not a rules outcome.
+  forfeit: { winner: PlayerId; reason: string } | null;
 
   startAI: (deckId: string) => void;
   startHotseat: (deckA: string, deckB: string) => void;
   startPvp: (net: MatchConnection) => void;
   dispatch: (action: Action) => void; // local human action
   sendChat: (text: string) => void; // local human chat (PvP only)
+  abortMatch: () => void; // local player forfeits (PvP tells the opponent) -> menu
   toMenu: () => void;
   clearError: () => void;
 }
@@ -76,6 +80,7 @@ export const useGame = create<Store>((set, get) => {
     net: null,
     error: null,
     chat: noChat(),
+    forfeit: null,
 
     startAI: (deckId) => {
       const seed = Math.floor(Math.random() * 0x7fffffff);
@@ -85,6 +90,7 @@ export const useGame = create<Store>((set, get) => {
         aiId: 'B',
         net: null,
         error: null,
+        forfeit: null,
         // AI plays a random deck from the pool.
         game: createInitialState(seed, deckById(deckId).cards, randomDeck().cards),
       });
@@ -99,6 +105,7 @@ export const useGame = create<Store>((set, get) => {
         aiId: null,
         net: null,
         error: null,
+        forfeit: null,
         game: createInitialState(seed, deckById(deckA).cards, deckById(deckB).cards),
       });
     },
@@ -114,6 +121,15 @@ export const useGame = create<Store>((set, get) => {
         }
       });
       net.onChat((m) => showBubble(m.from, m.text)); // opponent message -> their avatar
+      // Opponent left the match: declare the local player the winner, with the reason.
+      net.onGone((reason) => {
+        const s = get();
+        if (s.mode !== 'pvp' || s.game?.winner || s.forfeit) return; // already decided
+        const winner = s.myId;
+        const why =
+          reason === 'aborted' ? 'Your opponent aborted the match.' : 'Your opponent disconnected.';
+        set({ forfeit: { winner, reason: why } });
+      });
       set({
         mode: 'pvp',
         myId: net.role,
@@ -121,6 +137,7 @@ export const useGame = create<Store>((set, get) => {
         net,
         error: null,
         chat: noChat(),
+        forfeit: null,
         game: createInitialState(net.seed, deckById(net.deckA).cards, deckById(net.deckB).cards),
       });
     },
@@ -149,11 +166,29 @@ export const useGame = create<Store>((set, get) => {
       s.net.sendChat(clean);
     },
 
+    abortMatch: () => {
+      const s = get();
+      if (s.mode === 'pvp' && s.net) {
+        s.net.sendAbort(); // tell the opponent before tearing down
+        const net = s.net;
+        setTimeout(() => net.leave(), 200); // let the forfeit packet flush first
+      } else {
+        s.net?.leave();
+      }
+      set({ mode: 'menu', game: null, net: null, aiId: null, error: null, chat: noChat(), forfeit: null });
+    },
+
     toMenu: () => {
       get().net?.leave();
-      set({ mode: 'menu', game: null, net: null, aiId: null, error: null, chat: noChat() });
+      set({ mode: 'menu', game: null, net: null, aiId: null, error: null, chat: noChat(), forfeit: null });
     },
 
     clearError: () => set({ error: null }),
   };
 });
+
+// dev-only: expose the store on window for manual inspection / e2e checks.
+// ponytail: DEV guard strips this from production builds.
+if (import.meta.env.DEV) {
+  (window as unknown as { __game?: typeof useGame }).__game = useGame;
+}

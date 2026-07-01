@@ -871,6 +871,7 @@ input {
   border: 1px solid var(--gold);
 }
 .result h2 { color: var(--gold); margin-top: 0; }
+.result-reason { color: var(--muted); font-size: 14px; margin: 0 0 18px; }
 
 /* ---- in-game menu / confirm modal (burger) ---- */
 .game-menu {

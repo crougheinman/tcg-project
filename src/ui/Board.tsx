@@ -23,6 +23,8 @@ export function Board() {
   const myId = useGame((s) => s.myId);
   const dispatch = useGame((s) => s.dispatch);
   const toMenu = useGame((s) => s.toMenu);
+  const abortMatch = useGame((s) => s.abortMatch);
+  const forfeit = useGame((s) => s.forfeit);
   const error = useGame((s) => s.error);
   const clearError = useGame((s) => s.clearError);
 
@@ -692,7 +694,7 @@ export function Board() {
                   className="game-menu-item danger"
                   onClick={() => {
                     setConfirmAbort(false);
-                    toMenu();
+                    abortMatch();
                   }}
                 >
                   Yes, abort
@@ -708,6 +710,19 @@ export function Board() {
 
       {/* "How to Play" — controlled rulebook opened from the menu */}
       <Rulebook trigger={false} open={rulesOpen} onOpenChange={setRulesOpen} />
+
+      {/* PvP: opponent left the match — remaining player wins, with the reason. */}
+      {forfeit && !game.winner && (
+        <div className="overlay">
+          <div className="result">
+            <h2>{forfeit.winner === myId ? 'You win!' : 'You lose'}</h2>
+            <p className="result-reason">{forfeit.reason}</p>
+            <button className="primary" onClick={toMenu}>
+              Back to Menu
+            </button>
+          </div>
+        </div>
+      )}
 
       {game.winner && (
         <div className="overlay">
