@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.leafwar.game',
-  appName: 'Leaf War',
+  appId: 'com.entityduel.game',
+  appName: 'Entity Duel',
   webDir: 'dist',
 };
 

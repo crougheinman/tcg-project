@@ -13,6 +13,7 @@ import { Rulebook } from './Rulebook';
 import { ZoneViewer } from './ZoneViewer';
 import { BoardFx } from './BoardFx';
 import { PlayerBar } from './PlayerBar';
+import { ResultScreen } from './ResultScreen';
 import { ActionLog } from './ActionLog';
 import { ChatDock } from './ChatDock';
 import { humanize } from './boardLog';
@@ -711,28 +712,14 @@ export function Board() {
       {/* "How to Play" — controlled rulebook opened from the menu */}
       <Rulebook trigger={false} open={rulesOpen} onOpenChange={setRulesOpen} />
 
-      {/* PvP: opponent left the match — remaining player wins, with the reason. */}
-      {forfeit && !game.winner && (
-        <div className="overlay">
-          <div className="result">
-            <h2>{forfeit.winner === myId ? 'You win!' : 'You lose'}</h2>
-            <p className="result-reason">{forfeit.reason}</p>
-            <button className="primary" onClick={toMenu}>
-              Back to Menu
-            </button>
-          </div>
-        </div>
-      )}
-
-      {game.winner && (
-        <div className="overlay">
-          <div className="result">
-            <h2>{game.winner === 'draw' ? 'Draw' : `${game.winner === myId ? 'You win!' : 'You lose'}`}</h2>
-            <button className="primary" onClick={toMenu}>
-              Back to Menu
-            </button>
-          </div>
-        </div>
+      {/* Game over (a winner) or PvP forfeit (opponent left) -> animated stats. */}
+      {(game.winner || forfeit) && (
+        <ResultScreen
+          game={game}
+          myId={myId}
+          reason={forfeit && !game.winner ? forfeit.reason : undefined}
+          onMenu={toMenu}
+        />
       )}
     </div>
     </LayoutGroup>

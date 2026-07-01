@@ -79,6 +79,11 @@ input {
   background: url('/cards/home_animation.gif') center / cover no-repeat;
   opacity: 0.15;
 }
+/* home <-> deck-select share this stack so they can crossfade/slide between each
+   other; overflow-x hidden keeps the slide from spawning a horizontal scrollbar */
+.screen-stack { position: relative; min-height: 100dvh; overflow-x: hidden; }
+.screen { position: absolute; inset: 0; }
+
 .menu {
   max-width: 520px;
   margin: 0 auto; /* padding (not margin) so it can't collapse through #root -> no overflow */
@@ -922,6 +927,33 @@ input {
 }
 .result h2 { color: var(--gold); margin-top: 0; }
 .result-reason { color: var(--muted); font-size: 14px; margin: 0 0 18px; }
+
+/* ---- post-game match stats ---- */
+.result-stats { padding: 26px 30px 22px; width: min(440px, 90vw); border-width: 2px; }
+.result-title {
+  margin: 0; font-family: 'Grenze Gotisch', serif; font-size: 46px; line-height: 1.02;
+  color: var(--gold); text-shadow: 0 0 24px rgba(217, 182, 90, 0.5);
+}
+.outcome-win .result-title { color: var(--good); text-shadow: 0 0 26px rgba(84, 201, 138, 0.55); }
+.outcome-lose .result-title { color: var(--danger); text-shadow: 0 0 26px rgba(224, 87, 62, 0.5); }
+.outcome-win.result-stats { border-color: var(--good); }
+.outcome-lose.result-stats { border-color: var(--danger); }
+.result-sub { color: var(--muted); font-size: 13px; margin: 4px 0 0; letter-spacing: 0.5px; }
+.stats-table { display: flex; flex-direction: column; gap: 4px; margin: 18px 0 22px; }
+.stats-head {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  font-family: 'Cinzel', serif; font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+  color: var(--muted); padding-bottom: 5px; border-bottom: 1px solid #2c3645;
+}
+.stat-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; padding: 5px 0; }
+.stat-row:not(:last-child) { border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
+.stat-you, .stat-opp { font-family: 'Cinzel', serif; font-weight: 700; font-size: 20px; color: var(--ink); }
+.stats-head .stat-you, .stat-row .stat-you { text-align: left; }
+.stats-head .stat-opp, .stat-row .stat-opp { text-align: right; }
+.stats-head .stat-you, .stats-head .stat-opp { font-size: 11px; color: var(--muted); }
+.stat-you.lead, .stat-opp.lead { color: var(--gold); text-shadow: 0 0 10px rgba(217, 182, 90, 0.5); }
+.stat-label { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.stat-ico { font-size: 14px; }
 
 /* ---- in-game menu / confirm modal (burger) ---- */
 .game-menu {
