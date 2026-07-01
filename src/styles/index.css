@@ -406,8 +406,10 @@ input {
 .opp-hand .card-back { --card-w: 54px; --card-h: 76px; }
 
 .center { display: flex; justify-content: center; align-items: center; min-height: 56px; }
-.actions { display: flex; gap: 10px; align-items: center; }
+.actions { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
 .prompt { color: var(--gold); font-size: 14px; }
+.prompt-stack { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.prompt-hint { color: var(--good); font-size: 12px; font-weight: 600; }
 .waiting { color: var(--muted); font-style: italic; }
 
 /* ---- cards ---- */
@@ -475,6 +477,12 @@ input {
 .card.targetable {
   box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px var(--accent), 0 0 12px var(--accent);
   cursor: crosshair;
+}
+/* a castable instant during the block step — pulses green to draw the eye */
+.card.green-glow { animation: greenglow 1.3s ease-in-out infinite; }
+@keyframes greenglow {
+  0%, 100% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px var(--good), 0 0 12px rgba(84, 201, 138, 0.6); }
+  50% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px #7ff0b0, 0 0 24px rgba(84, 201, 138, 0.95); }
 }
 .card.dim { opacity: 0.9; filter: grayscale(0.9) brightness(0.5) contrast(0.9); }
 .card.dim.clickable:hover { filter: grayscale(0.9) brightness(0.5); } /* stay greyed on hover */
@@ -898,9 +906,17 @@ input {
 }
 .mana-orb {
   position: fixed; z-index: 67; pointer-events: none;
-  width: 26px; height: 26px; border-radius: 50%;
+  width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #eaf4ff, #6aa9ff 55%, #2f6fb0);
   box-shadow: 0 0 14px 5px rgba(106, 169, 255, 0.85);
+}
+/* fast damage-spell projectile (fiery bolt) flying from caster to its target.
+   Centered on its (left,top) point via margin so framer can drive travel with x/y. */
+.spell-bolt {
+  position: fixed; z-index: 67; pointer-events: none;
+  width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff2c4, #ff9a3c 50%, #e0392b);
+  box-shadow: 0 0 16px 6px rgba(255, 138, 60, 0.9);
 }
 /* "Mana +1" — floats near the mana readout as the orb merges in, then drifts down */
 .mana-float {
@@ -908,6 +924,13 @@ input {
   font-family: 'Cinzel', serif; font-weight: 800; font-size: 15px;
   color: #8ec3ff; text-shadow: 0 2px 4px #000, 0 0 10px rgba(106, 169, 255, 0.9);
 }
+/* creature stat change — floats over the creature, green (up) / red (down) */
+.stat-float {
+  position: fixed; z-index: 71; pointer-events: none; white-space: nowrap;
+  font-family: 'Cinzel', serif; font-weight: 800; font-size: 15px;
+}
+.stat-float.up { color: #7ff0b0; text-shadow: 0 2px 4px #000, 0 0 10px rgba(84, 201, 138, 0.95); }
+.stat-float.down { color: #ff8a78; text-shadow: 0 2px 4px #000, 0 0 10px rgba(224, 87, 62, 0.95); }
 
 /* ---- face-hit flash (direct attack) ---- */
 .face-flash {

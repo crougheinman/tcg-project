@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import type { PlayerId } from '../engine/types';
 
@@ -21,6 +21,7 @@ const TEXT_DUR_MS = 1100; // then it falls + fades over this
 
 export function LandAbsorbFx({ fx, onDone }: { fx: LandAbsorb; onDone: (id: number) => void }) {
   const [manaPos, setManaPos] = useState<{ x: number; y: number } | null>(null);
+  const orbRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const av = document.querySelector(`[data-player="${fx.pid}"]`) as HTMLElement | null;
@@ -31,6 +32,20 @@ export function LandAbsorbFx({ fx, onDone }: { fx: LandAbsorb; onDone: (id: numb
       const r = manaEl.getBoundingClientRect();
       setManaPos({ x: r.left + r.width / 2, y: r.top });
     }
+
+    // Fly the orb from the land to the avatar via the Web Animations API — framer
+    // does not reliably tween left/top, so we translate with a transform instead.
+    const dx = fx.toX - fx.fromX;
+    const dy = fx.toY - fx.fromY;
+    const orbAnim = orbRef.current?.animate(
+      [
+        { transform: 'translate(0,0) scale(0.5)', opacity: 0, offset: 0 },
+        { transform: 'translate(0,0) scale(1.1)', opacity: 1, offset: 0.2 },
+        { transform: `translate(${dx}px, ${dy}px) scale(1)`, opacity: 1, offset: 0.82 },
+        { transform: `translate(${dx}px, ${dy}px) scale(0.55)`, opacity: 0, offset: 1 },
+      ],
+      { duration: TRAVEL_MS, easing: 'ease-in-out', fill: 'forwards' },
+    );
 
     // Glow the avatar blue once, just as the orb arrives (imperative — the mana
     // readout pulses on its own via the mana change).
@@ -48,6 +63,7 @@ export function LandAbsorbFx({ fx, onDone }: { fx: LandAbsorb; onDone: (id: numb
     return () => {
       clearTimeout(glow);
       clearTimeout(done);
+      orbAnim?.cancel();
     };
   }, [fx, onDone]);
 
@@ -63,19 +79,8 @@ export function LandAbsorbFx({ fx, onDone }: { fx: LandAbsorb; onDone: (id: numb
           transition={{ duration: 0.55, ease: 'easeOut' }}
         />
       )}
-      <motion.div
-        className="mana-orb"
-        initial={{ left: fx.fromX, top: fx.fromY, x: '-50%', y: '-50%', scale: 0.4, opacity: 0 }}
-        animate={{
-          left: fx.toX,
-          top: fx.toY,
-          x: '-50%',
-          y: '-50%',
-          scale: [0.5, 1.1, 1, 0.55],
-          opacity: [0, 1, 1, 0],
-        }}
-        transition={{ duration: TRAVEL_MS / 1000, ease: 'easeInOut', times: [0, 0.2, 0.78, 1] }}
-      />
+      {/* pinned at the land's spot; CSS margin centers it, WAAPI drives the flight */}
+      <div ref={orbRef} className="mana-orb" style={{ left: fx.fromX, top: fx.fromY, opacity: 0 }} />
       {manaPos && (
         <motion.div
           className="mana-float"

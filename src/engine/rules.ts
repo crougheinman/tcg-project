@@ -74,7 +74,12 @@ export function legalActions(state: GameState, player: PlayerId): Action[] {
         actions.push({ type: 'playLand', iid: c.iid });
       } else if (def.type === 'creature' && def.cost <= mana) {
         actions.push({ type: 'castCreature', iid: c.iid });
-      } else if ((def.type === 'sorcery' || def.type === 'instant') && def.cost <= mana && def.effect) {
+      } else if (
+        (def.type === 'sorcery' || def.type === 'instant') &&
+        !def.blockOnly && // block-only instants aren't castable on your turn
+        def.cost <= mana &&
+        def.effect
+      ) {
         const eff = def.effect;
         if (!needsTarget(eff)) {
           if (eff.type !== 'ramp' || p.hand.some(isLand)) {
@@ -166,6 +171,8 @@ export function validateAction(state: GameState, action: Action): void {
       const type = c && getDef(c.def).type;
       if (!c || (type !== 'sorcery' && type !== 'instant')) throw new Error('not a spell in hand');
       if (type === 'sorcery') requirePhase(state, 'main1');
+      if (getDef(c.def).blockOnly && state.phase !== 'combat_block')
+        throw new Error('can only be cast while blocking');
       const def = getDef(c.def);
       if (!def.effect) throw new Error('spell has no effect');
       if (def.cost > availableMana(caster)) throw new Error('not enough mana');

@@ -72,8 +72,12 @@ function pickMain(state: GameState, ai: PlayerId): Action {
   }
 
   // 3b. Take Counter: destroy a tapped enemy creature (biggest first).
+  // Skip block-only instants — they can't be cast on our own turn.
   const destroyer = me.hand.find(
-    (c) => getDef(c.def).effect?.type === 'destroy' && getDef(c.def).cost <= mana,
+    (c) =>
+      getDef(c.def).effect?.type === 'destroy' &&
+      !getDef(c.def).blockOnly &&
+      getDef(c.def).cost <= mana,
   );
   if (destroyer) {
     const tapped = enemyCreatures.filter((c) => c.tapped).sort((x, y) => power(y) - power(x));

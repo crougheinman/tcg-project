@@ -141,7 +141,11 @@ export function Board() {
     const defender = opponentOf(game.active);
     const myTurn = !game.winner && (mode === 'hotseat' || defender === myId);
     if (game.phase !== 'combat_block' || !myTurn || game.pending) return;
-    if (game.players[defender].battlefield.some((c) => isCreature(c) && !c.tapped)) return; // can block
+    const dp = game.players[defender];
+    if (dp.battlefield.some((c) => isCreature(c) && !c.tapped)) return; // can block
+    // Don't rush the pass if they hold an affordable instant they might want to cast.
+    const dpMana = availableMana(dp);
+    if (dp.hand.some((c) => getDef(c.def).type === 'instant' && getDef(c.def).cost <= dpMana)) return;
     const key = `${game.turn}-${defender}`;
     if (autoBlockRef.current === key) return;
     autoBlockRef.current = key;
@@ -188,6 +192,11 @@ export function Board() {
   const canAnyBlock = game.players[opponentOf(game.active)].battlefield.some(
     (c) => isCreature(c) && !c.tapped,
   );
+  // During the block step: does the defender hold a castable instant? (drives the
+  // "…or cast an instant" hint and the green card glow). canPlay is hoisted below.
+  const instantInHand =
+    game.phase === 'combat_block' &&
+    me.hand.some((c) => getDef(c.def).type === 'instant' && canPlay(c));
 
   // ---- click handlers ----
 
@@ -213,6 +222,7 @@ export function Board() {
     if (def.type === 'creature') return sorcerySpeed && def.cost <= mana;
     if (def.type === 'sorcery' || def.type === 'instant') {
       if (def.type === 'sorcery' && !sorcerySpeed) return false;
+      if (def.blockOnly && game.phase !== 'combat_block') return false; // block-only instants
       if (def.cost > mana) return false;
       // a "buff" spell needs a creature on the board to target
       if (def.effect?.type === 'buff') {
@@ -457,20 +467,35 @@ export function Board() {
             <button onClick={() => dispatch({ type: 'advance' })}>Skip Combat</button>
           </div>
         );
-      case 'combat_block':
-        // Nothing can block → no buttons; the auto-resolve effect lets damage through.
+      case 'combat_block': {
+        const instantHint = instantInHand && (
+          <span className="prompt-hint">✨ …or cast a glowing instant</span>
+        );
+        // No creature can block. Still let them cast an instant (or pass) if they have one;
+        // otherwise the auto-resolve effect lets damage through.
         if (!canAnyBlock) {
           return (
             <div className="actions">
-              <span className="prompt">🛡 No blockers available…</span>
+              <div className="prompt-stack">
+                <span className="prompt">🛡 No blockers available…</span>
+                {instantHint}
+              </div>
+              {instantInHand && (
+                <button onClick={() => dispatch({ type: 'declareBlockers', blocks: {} })}>
+                  Let it through
+                </button>
+              )}
             </div>
           );
         }
         return (
           <div className="actions">
-            <span className="prompt">
-              {pendingBlocker ? 'Click an attacker to block' : 'Click your blocker, then its target'}
-            </span>
+            <div className="prompt-stack">
+              <span className="prompt">
+                {pendingBlocker ? 'Click an attacker to block' : 'Click your blocker, then its target'}
+              </span>
+              {instantHint}
+            </div>
             <button
               className="primary"
               onClick={() => {
@@ -492,6 +517,7 @@ export function Board() {
             <button onClick={() => dispatch({ type: 'declareBlockers', blocks: {} })}>No Blocks</button>
           </div>
         );
+      }
       case 'end':
         return (
           <div className="actions">
@@ -551,6 +577,7 @@ export function Board() {
                 inst={c}
                 onClick={() => handHclick(c)}
                 dim={!canPlay(c)}
+                greenGlow={game.phase === 'combat_block' && getDef(c.def).type === 'instant' && canPlay(c)}
                 draggable={canPlay(c) && getDef(c.def).type !== 'sorcery' && getDef(c.def).type !== 'instant'}
                 onDragChange={setDragActive}
                 onDrop={(point) => dropPlay(c, point)}

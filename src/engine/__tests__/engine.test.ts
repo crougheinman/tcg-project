@@ -350,29 +350,47 @@ describe('new mechanics (heal / ramp / token / defender / spell-trigger)', () =>
     expect(bf.find((c) => c.iid === big.iid)!.tapped).toBe(false); // toughness 5 > 2
   });
 
-  it('Take Counter destroys a tapped creature, rejects an untapped one', () => {
+  it('Take Counter is block-only: throws if cast in your main phase', () => {
     const s = fresh();
     s.players.A.battlefield = [inst('aether_well'), inst('aether_well')];
     s.players.A.hand = [inst('take_counter')];
     const tappedFoe = inst('stoneback_cub', { owner: 'B', tapped: true });
-    const untappedFoe = inst('dread_maw', { owner: 'B', tapped: false });
-    s.players.B.battlefield = [tappedFoe, untappedFoe];
-    // untapped target -> rejected
+    s.players.B.battlefield = [tappedFoe];
     expect(() =>
       applyAction(s, {
         type: 'castSorcery',
         iid: s.players.A.hand[0].iid,
-        target: { kind: 'creature', iid: untappedFoe.iid },
+        target: { kind: 'creature', iid: tappedFoe.iid },
       }),
     ).toThrow();
-    // tapped target -> destroyed
-    const g = applyAction(s, {
+  });
+
+  it('Take Counter during combat_block destroys a tapped attacker but rejects an untapped creature', () => {
+    const s = fresh();
+    const attacker = inst('dread_maw', { summoningSick: false }); // A's — will attack, becomes tapped
+    const untappedFoe = inst('stoneback_cub', { owner: 'B' }); // B's own, untapped
+    s.players.A.battlefield = [attacker];
+    s.players.B.battlefield = [
+      inst('aether_well', { owner: 'B' }),
+      inst('aether_well', { owner: 'B' }),
+      untappedFoe,
+    ];
+    s.players.B.hand = [inst('take_counter', { owner: 'B' })];
+    let g = applyAction(s, { type: 'advance' }); // -> combat_attack
+    g = applyAction(g, { type: 'declareAttackers', attackers: [attacker.iid] }); // -> combat_block
+    const tc = g.players.B.hand.find((c) => c.def === 'take_counter')!;
+    // untapped target -> rejected (destroy needs a tapped creature)
+    expect(() =>
+      applyAction(g, { type: 'castSorcery', iid: tc.iid, target: { kind: 'creature', iid: untappedFoe.iid } }),
+    ).toThrow();
+    // tapped attacker -> destroyed
+    const g2 = applyAction(g, {
       type: 'castSorcery',
-      iid: s.players.A.hand[0].iid,
-      target: { kind: 'creature', iid: tappedFoe.iid },
+      iid: tc.iid,
+      target: { kind: 'creature', iid: attacker.iid },
     });
-    expect(g.players.B.battlefield.some((c) => c.iid === tappedFoe.iid)).toBe(false);
-    expect(g.players.B.graveyard.some((c) => c.def === 'stoneback_cub')).toBe(true);
+    expect(g2.players.A.battlefield.some((c) => c.iid === attacker.iid)).toBe(false);
+    expect(g2.players.A.graveyard.some((c) => c.def === 'dread_maw')).toBe(true);
   });
 
   it('token / heal / ramp are valid without a target', () => {

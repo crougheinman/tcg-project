@@ -42,6 +42,7 @@ export interface CardDef {
   keywords?: Keyword[];
   effect?: Effect; // sorceries
   spellTrigger?: Effect; // creature: fires whenever its controller casts a sorcery
+  blockOnly?: boolean; // instant that can be cast only during the block step (combat_block)
   text?: string;
   flavor?: string;
   art?: string; // image path served from /public, e.g. '/cards/ember_sprite.png'

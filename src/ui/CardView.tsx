@@ -12,6 +12,7 @@ interface Props {
   faceDown?: boolean;
   selected?: boolean;
   targetable?: boolean;
+  greenGlow?: boolean; // castable instant during the block step — pulses green
   dim?: boolean;
   arena?: boolean; // battlefield creature: image-only + floating P/T
   draggable?: boolean; // hand card can be dragged onto the battlefield to play it
@@ -35,6 +36,7 @@ export function CardView({
   faceDown,
   selected,
   targetable,
+  greenGlow,
   dim,
   arena,
   draggable,
@@ -88,6 +90,7 @@ export function CardView({
     inst.blitz ? 'blitzed' : '',
     selected ? 'selected' : '',
     targetable ? 'targetable' : '',
+    greenGlow ? 'green-glow' : '',
     dim ? 'dim' : '',
     onClick ? 'clickable' : '',
   ]

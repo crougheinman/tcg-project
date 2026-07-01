@@ -235,7 +235,8 @@ export const CARDS: Record<string, CardDef> = {
     type: 'instant',
     cost: 2,
     effect: { type: 'destroy', targets: 'creature' },
-    text: 'Instant — Destroy target tapped creature.',
+    blockOnly: true,
+    text: 'Instant — cast only while blocking. Destroy target tapped creature.',
     flavor: 'Strike when its guard is down.',
   },
 };
