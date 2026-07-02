@@ -121,6 +121,58 @@ input {
 .menu-buttons button:disabled { opacity: 0.5; }
 .hint { color: var(--muted); font-size: 13px; max-width: 360px; line-height: 1.5; }
 
+/* home: buttons + patch notes side by side so the page never scrolls */
+.menu.home { max-width: 800px; }
+.menu-row {
+  display: flex; align-items: flex-start; justify-content: center;
+  gap: 18px; width: 100%;
+}
+.menu-row .menu-buttons { flex: 0 1 300px; }
+
+/* home-page patch notes / balance announcement */
+.changelog {
+  flex: 1 1 400px; max-width: 420px; text-align: left;
+  display: flex; flex-direction: column; min-height: 0;
+  background: rgba(20, 26, 36, 0.72);
+  border: 1px solid rgba(217, 182, 90, 0.35); border-radius: 10px;
+  padding: 10px 14px; font-size: 12.5px; color: var(--ink);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+.changelog-scroll {
+  overflow-y: auto; min-height: 0; max-height: min(46vh, 320px);
+  margin-top: 6px; padding-right: 6px;
+}
+.changelog-scroll::-webkit-scrollbar { width: 6px; }
+.changelog-scroll::-webkit-scrollbar-thumb { background: rgba(217, 182, 90, 0.4); border-radius: 3px; }
+.changelog > summary {
+  list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px;
+  font-family: 'Cinzel', serif;
+}
+.changelog > summary::-webkit-details-marker { display: none; }
+.changelog-badge { color: var(--gold); font-weight: 700; letter-spacing: 0.5px; }
+.changelog-ver { color: var(--muted); font-size: 11px; margin-left: auto; letter-spacing: 1px; }
+.changelog-intro { color: var(--muted); font-size: 11.5px; line-height: 1.45; margin: 0 0 6px; }
+.changelog-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.changelog-item { display: flex; gap: 8px; align-items: flex-start; }
+.changelog-body { line-height: 1.4; }
+.changelog-body b { color: var(--gold); }
+.changelog-why { display: block; color: var(--muted); font-style: italic; font-size: 11px; margin-top: 2px; }
+.chip {
+  flex: none; margin-top: 1px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.5px;
+  padding: 2px 6px; border-radius: 999px; white-space: nowrap;
+}
+.chip.buff { color: var(--good); background: rgba(84, 201, 138, 0.16); box-shadow: inset 0 0 0 1px var(--good); }
+.chip.nerf { color: var(--danger); background: rgba(224, 87, 62, 0.16); box-shadow: inset 0 0 0 1px var(--danger); }
+.changelog-foot { color: var(--muted); font-size: 11px; margin: 8px 0 0; }
+
+/* faint build tag — small enough that only devs really notice it */
+.build-tag {
+  position: fixed; right: 7px; bottom: 5px; z-index: 90;
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 9px; letter-spacing: 0.5px;
+  color: var(--muted); opacity: 0.28; pointer-events: none; user-select: none;
+}
+
 /* deck selection */
 .deck-title {
   font-family: 'Grenze Gotisch', serif; color: var(--gold); font-size: 30px; margin-bottom: 4px;
@@ -233,6 +285,12 @@ input {
   /* carousel screen: tighten spacing so the whole picker fits with no scroll */
   .menu { padding: 3vh 16px; gap: 10px; }
   .deck-title { font-size: 24px; }
+  /* home: stack the buttons above the notes when there isn't room for a row */
+  .menu.home { max-width: 520px; }
+  .menu-row { flex-direction: column; align-items: center; gap: 12px; }
+  .menu-row .menu-buttons { flex: none; width: 100%; max-width: 320px; }
+  .changelog { flex: none; width: 100%; max-width: 400px; }
+  .changelog-scroll { max-height: 34vh; }
 }
 @media (max-width: 440px) {
   .deck-list { grid-template-columns: 1fr; }

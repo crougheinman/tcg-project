@@ -53,7 +53,7 @@ export const CARDS: Record<string, CardDef> = {
     type: 'creature',
     cost: 3,
     power: 2,
-    toughness: 2,
+    toughness: 1,
     keywords: ['flying'],
     text: 'Flying.',
     flavor: 'It hunts the wind itself.',
@@ -170,7 +170,7 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 2,
     keywords: ['haste'],
     text: 'Haste.',
-    flavor: 'A masterless sword is never still for long.',
+    flavor: 'A masterless sword, restless even in the fray.',
   },
   kensei_duelist: {
     id: 'kensei_duelist',
@@ -212,7 +212,7 @@ export const CARDS: Record<string, CardDef> = {
     type: 'creature',
     cost: 2,
     power: 2,
-    toughness: 2,
+    toughness: 3,
     flavor: 'It shambles ever forward, and never tires.',
   },
   plague_priest: {
@@ -361,8 +361,8 @@ export const CARDS: Record<string, CardDef> = {
     name: 'Iaijutsu Strike',
     type: 'instant',
     cost: 1,
-    effect: { type: 'buff', power: 2, toughness: 1, targets: 'creature' },
-    text: 'Instant — target creature gets +2/+1.',
+    effect: { type: 'buff', power: 1, toughness: 1, targets: 'creature' },
+    text: 'Instant — target creature gets +1/+1.',
     flavor: 'The blade is sheathed before you see it move.',
   },
   warding_stance: {
@@ -390,8 +390,8 @@ export const CARDS: Record<string, CardDef> = {
     name: 'Withering Touch',
     type: 'instant',
     cost: 2,
-    effect: { type: 'damage', amount: 3, targets: 'any' },
-    text: 'Instant — deal 3 damage to any target.',
+    effect: { type: 'damage', amount: 4, targets: 'any' },
+    text: 'Instant — deal 4 damage to any target.',
     flavor: 'Flesh sloughs from bone at the lightest caress.',
   },
   soul_siphon: {

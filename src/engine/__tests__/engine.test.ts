@@ -117,7 +117,7 @@ describe('combat', () => {
 
   it('only a flyer can block a flyer', () => {
     const s = fresh();
-    const flyer = inst('sky_talon', { summoningSick: false }); // 2/2 flying
+    const flyer = inst('sky_talon', { summoningSick: false }); // 2/1 flying
     const ground = inst('stoneback_cub', { owner: 'B' });
     s.players.A.battlefield = [flyer];
     s.players.B.battlefield = [ground];
@@ -515,7 +515,7 @@ describe('new decks (Iron Blossom / Grave Tide)', () => {
   it('Grave Necromancer also raises a Zombie when you cast an instant', () => {
     const s = fresh();
     s.players.A.battlefield = [inst('aether_well'), inst('aether_well'), inst('grave_necromancer')];
-    s.players.A.hand = [inst('withering_touch')]; // instant, cost 2, damage 3
+    s.players.A.hand = [inst('withering_touch')]; // instant, cost 2, damage 4
     const g = applyAction(s, {
       type: 'castSorcery',
       iid: s.players.A.hand[0].iid,
@@ -543,7 +543,7 @@ describe('new decks (Iron Blossom / Grave Tide)', () => {
     expect(g.players.B.life).toBe(19); // only the Plague Priest trigger
   });
 
-  it('Iaijutsu Strike is an instant: buffs +2/+1 at instant speed (combat_attack)', () => {
+  it('Iaijutsu Strike is an instant: buffs +1/+1 at instant speed (combat_attack)', () => {
     const s = fresh();
     s.players.A.battlefield = [inst('aether_well'), inst('kensei_duelist', { summoningSick: false })];
     s.players.A.hand = [inst('iaijutsu_strike')]; // instant, cost 1
@@ -555,7 +555,7 @@ describe('new decks (Iron Blossom / Grave Tide)', () => {
       target: { kind: 'creature', iid: target.iid },
     });
     const buffed = g2.players.A.battlefield.find((c) => c.def === 'kensei_duelist')!;
-    expect(power(buffed)).toBe(5); // 3 + 2
+    expect(power(buffed)).toBe(4); // 3 + 1
     expect(toughness(buffed)).toBe(3); // 2 + 1
     expect(g2.phase).toBe('combat_attack'); // instant doesn't advance the phase
   });

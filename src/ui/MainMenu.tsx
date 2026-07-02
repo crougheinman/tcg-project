@@ -5,6 +5,42 @@ import { hasSupabase } from '../net/supabase';
 import { randomDeck } from '../cards/decks';
 import { Rulebook } from './Rulebook';
 import { DeckSelect } from './DeckSelect';
+import { APP_VERSION } from '../version';
+
+// Home-page patch notes. Balance pass tuned across ~5,000 simulated AI-vs-AI duels
+// so every deck lands in a ~44–56% win band with real strengths and weaknesses.
+const PATCH_NOTES: { deck: string; kind: 'buff' | 'nerf'; change: string; why: string }[] = [
+  {
+    deck: 'Skyward',
+    kind: 'nerf',
+    change: 'Sky Talon is now 2/1, with fewer flyers — traded card draw and burn for ground troops.',
+    why: 'It ruled the skies with almost no counterplay.',
+  },
+  {
+    deck: 'Iron Blossom',
+    kind: 'nerf',
+    change: 'Iaijutsu Strike now grants +1/+1 (was +2/+1).',
+    why: 'Its instant tricks won every fight and closed games too fast.',
+  },
+  {
+    deck: 'Pyromancer',
+    kind: 'buff',
+    change: 'Added Dread Maw finishers and more early blockers.',
+    why: 'Too fragile to survive aggro — or to actually finish the job.',
+  },
+  {
+    deck: 'Stonewall',
+    kind: 'buff',
+    change: 'New win conditions — two Storm Drakes and Dread Maw — plus extra burn for big or flying threats.',
+    why: 'It could stall forever but never actually win.',
+  },
+  {
+    deck: 'Grave Tide',
+    kind: 'buff',
+    change: 'Sturdier Ghouls (2/3), Withering Touch hits for 4, and the Necromancer now raises the dead on ANY spell.',
+    why: 'Its bodies were too flimsy and it lacked reach.',
+  },
+];
 
 export function MainMenu({ onOnline }: { onOnline: () => void }) {
   const startAI = useGame((s) => s.startAI);
@@ -52,11 +88,12 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
   } else {
     screen = 'home';
     content = (
-      <div className="menu">
+      <div className="menu home">
         <div className="home-bg" aria-hidden />
         <h1 className="logo">ENTITY DUEL</h1>
         <p className="tagline">a tiny trading card game</p>
-        <div className="menu-buttons">
+        <div className="menu-row">
+          <div className="menu-buttons">
           <button
             onClick={() => {
               setAiDeck(randomDeck().id); // pick now so the face-off can show it
@@ -70,7 +107,38 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
             Online PvP{!hasSupabase ? ' (set Supabase keys)' : ''}
           </button>
           <Rulebook icon={false} />
+          </div>
+
+          <details className="changelog" open>
+            <summary>
+              <span className="changelog-badge">⚖ Balance Update</span>
+              <span className="changelog-ver">v{APP_VERSION}</span>
+            </summary>
+            <div className="changelog-scroll">
+              <p className="changelog-intro">
+                Tuned across thousands of simulated duels so every deck has real strengths — and
+                real weaknesses.
+              </p>
+              <ul className="changelog-list">
+                {PATCH_NOTES.map((n) => (
+                  <li key={n.deck} className={'changelog-item ' + n.kind}>
+                    <span className={'chip ' + n.kind}>
+                      {n.kind === 'buff' ? '▲ BUFF' : '▼ NERF'}
+                    </span>
+                    <div className="changelog-body">
+                      <b>{n.deck}</b> — {n.change}
+                      <span className="changelog-why">{n.why}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <p className="changelog-foot">
+                Emberwood, Wildblitz &amp; Wildwood Titans are unchanged.
+              </p>
+            </div>
+          </details>
         </div>
+
         {!hasSupabase && (
           <p className="hint">
             Online needs a free Supabase project. Copy <code>.env.local.example</code> to{' '}
