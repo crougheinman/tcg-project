@@ -512,6 +512,28 @@ describe('new decks (Iron Blossom / Grave Tide)', () => {
     expect(zombies).toHaveLength(3); // 2 from the spell + 1 from the trigger
   });
 
+  it('Grave Necromancer also raises a Zombie when you cast an instant', () => {
+    const s = fresh();
+    s.players.A.battlefield = [inst('aether_well'), inst('aether_well'), inst('grave_necromancer')];
+    s.players.A.hand = [inst('withering_touch')]; // instant, cost 2, damage 3
+    const g = applyAction(s, {
+      type: 'castSorcery',
+      iid: s.players.A.hand[0].iid,
+      target: { kind: 'player', player: 'B' },
+    });
+    const zombies = g.players.A.battlefield.filter((c) => c.def === 'zombie_token');
+    expect(zombies).toHaveLength(1); // the instant fired the trigger
+  });
+
+  it('Plague Priest still does NOT trigger on an instant cast', () => {
+    const s = fresh();
+    s.players.A.battlefield = [inst('aether_well'), inst('aether_well'), inst('plague_priest')];
+    s.players.A.hand = [inst('soothe')]; // instant (heal), not a sorcery
+    s.players.B.life = 20;
+    const g = applyAction(s, { type: 'castSorcery', iid: s.players.A.hand[0].iid });
+    expect(g.players.B.life).toBe(20); // Plague Priest only fires on sorceries
+  });
+
   it('Plague Priest drains 1 life on a (non-damage) sorcery cast', () => {
     const s = fresh();
     s.players.A.battlefield = [inst('aether_well'), inst('aether_well'), inst('plague_priest')];

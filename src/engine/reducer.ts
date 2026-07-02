@@ -72,15 +72,15 @@ export function applyAction(state: GameState, action: Action): GameState {
       caster.graveyard.push(c);
       s.log.push(`${casterId} casts ${def.name}`);
       applyEffect(s, casterId, def.effect!, action.target);
-      // creatures that trigger on a *sorcery* cast (e.g. Pyre Adept) — not instants
-      if (def.type === 'sorcery') {
-        for (const cr of caster.battlefield) {
-          const trig = getDef(cr.def).spellTrigger;
-          if (trig) {
-            s.log.push(`✦ ${getDef(cr.def).name} triggers`);
-            applyEffect(s, casterId, trig, { kind: 'player', player: opponentOf(casterId) });
-          }
-        }
+      // Creatures that trigger when their controller casts a spell. By default they
+      // fire only on sorceries (e.g. Pyre Adept, Plague Priest); a creature flagged
+      // `spellTriggerInstant` (e.g. Grave Necromancer) also fires on instants.
+      for (const cr of caster.battlefield) {
+        const crDef = getDef(cr.def);
+        if (!crDef.spellTrigger) continue;
+        if (def.type === 'instant' && !crDef.spellTriggerInstant) continue;
+        s.log.push(`✦ ${crDef.name} triggers`);
+        applyEffect(s, casterId, crDef.spellTrigger, { kind: 'player', player: opponentOf(casterId) });
       }
       break;
     }

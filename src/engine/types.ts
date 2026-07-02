@@ -42,6 +42,7 @@ export interface CardDef {
   keywords?: Keyword[];
   effect?: Effect; // sorceries
   spellTrigger?: Effect; // creature: fires whenever its controller casts a sorcery
+  spellTriggerInstant?: boolean; // creature: its spellTrigger also fires on instant casts
   blockOnly?: boolean; // instant that can be cast only during the block step (combat_block)
   text?: string;
   flavor?: string;

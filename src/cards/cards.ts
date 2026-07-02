@@ -234,7 +234,8 @@ export const CARDS: Record<string, CardDef> = {
     power: 1,
     toughness: 3,
     spellTrigger: { type: 'token', token: 'zombie_token', count: 1 },
-    text: 'Whenever you cast a sorcery, raise a 1/1 Zombie.',
+    spellTriggerInstant: true,
+    text: 'Whenever you cast a spell, raise a 1/1 Zombie.',
     flavor: 'The dead make patient students.',
   },
   rotting_hulk: {
