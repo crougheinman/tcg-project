@@ -3,7 +3,8 @@ import { createInitialState, MAX_DECK_SIZE } from '../state';
 import { applyAction } from '../reducer';
 import { isLand, isCreature, canAttack, availableMana, power, toughness } from '../rules';
 import type { Action, CardInstance, GameState } from '../types';
-import { DECK_EMBERWOOD, DECK_SKYWARD, DECK_LIST } from '../../cards/decks';
+import { DECK_EMBERWOOD, DECK_SKYWARD, DECK_LIST, DECK_IRONBLOSSOM, DECK_GRAVETIDE } from '../../cards/decks';
+import { getDef } from '../../cards/cards';
 
 let counter = 0;
 function inst(def: string, over: Partial<CardInstance> = {}): CardInstance {
@@ -478,5 +479,77 @@ describe('deck size limit', () => {
   });
   it('every starter deck is within the limit', () => {
     for (const d of DECK_LIST) expect(d.cards.length).toBeLessThanOrEqual(MAX_DECK_SIZE);
+  });
+});
+
+describe('new decks (Iron Blossom / Grave Tide)', () => {
+  it('every deck lists only known cards and boots without throwing', () => {
+    for (const d of DECK_LIST) {
+      for (const id of d.cards) expect(() => getDef(id)).not.toThrow();
+      expect(() => createInitialState(7, d.cards, d.cards)).not.toThrow();
+    }
+  });
+
+  it('both new decks are present and exactly 30 cards', () => {
+    expect(DECK_IRONBLOSSOM).toHaveLength(30);
+    expect(DECK_GRAVETIDE).toHaveLength(30);
+    expect(DECK_LIST.map((d) => d.id)).toEqual(
+      expect.arrayContaining(['ironblossom', 'gravetide']),
+    );
+  });
+
+  it('Grave Necromancer raises an extra Zombie whenever you cast a sorcery', () => {
+    const s = fresh();
+    s.players.A.battlefield = [
+      inst('aether_well'),
+      inst('aether_well'),
+      inst('aether_well'),
+      inst('grave_necromancer'),
+    ];
+    s.players.A.hand = [inst('raise_horde')]; // sorcery, cost 3
+    const g = applyAction(s, { type: 'castSorcery', iid: s.players.A.hand[0].iid });
+    const zombies = g.players.A.battlefield.filter((c) => c.def === 'zombie_token');
+    expect(zombies).toHaveLength(3); // 2 from the spell + 1 from the trigger
+  });
+
+  it('Plague Priest drains 1 life on a (non-damage) sorcery cast', () => {
+    const s = fresh();
+    s.players.A.battlefield = [inst('aether_well'), inst('aether_well'), inst('plague_priest')];
+    s.players.A.hand = [inst('insight')]; // sorcery, no face damage of its own
+    s.players.B.life = 20;
+    const g = applyAction(s, { type: 'castSorcery', iid: s.players.A.hand[0].iid });
+    expect(g.players.B.life).toBe(19); // only the Plague Priest trigger
+  });
+
+  it('Iaijutsu Strike is an instant: buffs +2/+1 at instant speed (combat_attack)', () => {
+    const s = fresh();
+    s.players.A.battlefield = [inst('aether_well'), inst('kensei_duelist', { summoningSick: false })];
+    s.players.A.hand = [inst('iaijutsu_strike')]; // instant, cost 1
+    const g = applyAction(s, { type: 'advance' }); // -> combat_attack
+    const target = g.players.A.battlefield.find((c) => c.def === 'kensei_duelist')!;
+    const g2 = applyAction(g, {
+      type: 'castSorcery',
+      iid: g.players.A.hand[0].iid,
+      target: { kind: 'creature', iid: target.iid },
+    });
+    const buffed = g2.players.A.battlefield.find((c) => c.def === 'kensei_duelist')!;
+    expect(power(buffed)).toBe(5); // 3 + 2
+    expect(toughness(buffed)).toBe(3); // 2 + 1
+    expect(g2.phase).toBe('combat_attack'); // instant doesn't advance the phase
+  });
+
+  it('Grasp from the Grave is block-only: throws if cast in your main phase', () => {
+    const s = fresh();
+    s.players.A.battlefield = [inst('aether_well'), inst('aether_well')];
+    s.players.A.hand = [inst('grasp_from_grave')];
+    const tappedFoe = inst('stoneback_cub', { owner: 'B', tapped: true });
+    s.players.B.battlefield = [tappedFoe];
+    expect(() =>
+      applyAction(s, {
+        type: 'castSorcery',
+        iid: s.players.A.hand[0].iid,
+        target: { kind: 'creature', iid: tappedFoe.iid },
+      }),
+    ).toThrow();
   });
 });

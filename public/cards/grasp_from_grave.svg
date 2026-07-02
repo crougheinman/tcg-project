@@ -1,0 +1,30 @@
+<svg viewBox="0 0 320 160" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.3" y2="1">
+      <stop offset="0" stop-color="#2b3a24"/>
+      <stop offset="1" stop-color="#080b07"/>
+    </linearGradient>
+    <radialGradient id="rot" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#b7d38a"/>
+      <stop offset="0.5" stop-color="#5f7d3f"/>
+      <stop offset="1" stop-color="#22331b"/>
+    </radialGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="2.4"/></filter>
+  </defs>
+  <rect width="320" height="160" fill="url(#bg)"/>
+  <circle cx="160" cy="66" r="42" fill="url(#rot)" opacity="0.33" filter="url(#glow)"/>
+  <g fill="#d9d3ba" stroke="#3a3f2c" stroke-width="0.7">
+    <rect x="150" y="42" width="4.4" height="38" rx="2.2" transform="rotate(-11 152 78)"/>
+    <rect x="157" y="36" width="4.4" height="44" rx="2.2" transform="rotate(-3 159 78)"/>
+    <rect x="164" y="38" width="4.4" height="42" rx="2.2" transform="rotate(5 166 78)"/>
+    <rect x="171" y="46" width="4.2" height="34" rx="2.1" transform="rotate(13 173 78)"/>
+    <rect x="139" y="70" width="4.2" height="22" rx="2.1" transform="rotate(-44 145 86)"/>
+    <path d="M146 76 Q146 100 160 102 Q174 100 174 76 Z"/>
+  </g>
+  <path d="M92 124 Q160 92 228 124 L228 130 L92 130 Z" fill="#18220f" stroke="#3a3f2c" stroke-width="0.8"/>
+  <ellipse cx="122" cy="116" rx="6" ry="3" fill="#20301b"/>
+  <ellipse cx="205" cy="116" rx="7" ry="3.4" fill="#20301b"/>
+  <rect x="5" y="5" width="310" height="150" rx="8" fill="none" stroke="#8a8f6a" stroke-width="1.5" opacity="0.6"/>
+  <rect x="0" y="126" width="320" height="34" fill="#04060a" opacity="0.55"/>
+  <text x="160" y="149" text-anchor="middle" font-family="Georgia, serif" font-size="15" font-weight="700" fill="#dcd6bd" letter-spacing="0.4">Grasp from the Grave</text>
+</svg>

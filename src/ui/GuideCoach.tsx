@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 
 // Guided-mode coach: ONE contextual bubble at a time, anchored to the UI element
@@ -12,19 +12,30 @@ export interface Tip {
   place?: 'above' | 'below'; // bubble position relative to the anchor (default above)
 }
 
-export function CoachBubble({ tip, onHush }: { tip: Tip; onHush: (key: string) => void }) {
-  const [pos, setPos] = useState<{ x: number; y: number; place: 'above' | 'below' } | null>(null);
+const GAP = 14; // clearance between the bubble and its anchor
 
-  useEffect(() => {
+export function CoachBubble({ tip, onHush }: { tip: Tip; onHush: (key: string) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ x: number; top: number; place: 'above' | 'below' } | null>(null);
+
+  // Position the bubble by computing an explicit top from its OWN measured height,
+  // rather than lifting it with a CSS translate (-100%) that has to compose with
+  // framer-motion's animated transform — that composition is fragile across browsers
+  // and was dropping the bubble onto the hand. offsetHeight is the layout height, so
+  // it's correct even while framer is mid-scale.
+  useLayoutEffect(() => {
     const measure = () => {
       const el = document.querySelector(tip.sel);
-      if (!el) return setPos(null);
+      const bubble = ref.current;
+      if (!el || !bubble) return setPos(null);
       const r = el.getBoundingClientRect();
       const place = tip.place ?? 'above';
+      const bh = bubble.offsetHeight;
+      const top = place === 'above' ? r.top - GAP - bh : r.bottom + GAP;
       setPos({
         // clamp x so the bubble never leaves the viewport
-        x: Math.min(Math.max(r.left + r.width / 2, 130), window.innerWidth - 130),
-        y: place === 'above' ? r.top - 10 : r.bottom + 10,
+        x: Math.min(Math.max(r.left + r.width / 2, 140), window.innerWidth - 140),
+        top: Math.max(6, top), // never run off the top edge
         place,
       });
     };
@@ -37,13 +48,19 @@ export function CoachBubble({ tip, onHush }: { tip: Tip; onHush: (key: string) =
     };
   }, [tip]);
 
-  if (!pos) return null;
   return (
     <motion.div
-      className={'coach-bubble ' + pos.place}
-      style={{ left: pos.x, top: pos.y }}
-      initial={{ opacity: 0, scale: 0.8, y: pos.place === 'above' ? 8 : -8 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
+      ref={ref}
+      className={'coach-bubble ' + (pos?.place ?? 'above')}
+      // Rendered (hidden) even before positioning so its height can be measured;
+      // only horizontal centering rides on the CSS translate (composes safely).
+      style={{
+        left: pos ? pos.x : -9999,
+        top: pos ? pos.top : -9999,
+        visibility: pos ? 'visible' : 'hidden',
+      }}
+      initial={{ opacity: 0, scale: 0.85 }}
+      animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.85, transition: { duration: 0.15 } }}
       transition={{ type: 'spring', stiffness: 420, damping: 26 }}
     >

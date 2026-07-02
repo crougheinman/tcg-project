@@ -3,6 +3,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { DECK_LIST, deckById, type DeckMeta } from '../cards/decks';
 import { getDef } from '../cards/cards';
 
+// Emblem art auto-wires to /cards/<id>.png; fall back to <id>.svg, then hide the
+// <img> so a missing file degrades gracefully instead of showing a broken-image icon.
+function artFallback(e: React.SyntheticEvent<HTMLImageElement>) {
+  const img = e.currentTarget;
+  if (img.src.endsWith('.png')) img.src = img.src.replace(/\.png$/, '.svg');
+  else img.style.display = 'none';
+}
+
 // Pick a deck before a game. Shows name, battle style, description, art.
 // `confirmStart`: glow the choice + a face-off transition before invoking onPick.
 // `disabledId`: a deck that can't be picked (e.g. already taken by player 1).
@@ -42,7 +50,7 @@ export function DeckSelect({
     const taken = d.id === disabledId;
     return (
       <>
-        {art && <img className="deck-art" src={art} alt="" draggable={false} />}
+        {art && <img className="deck-art" src={art} alt="" draggable={false} onError={artFallback} />}
         <div className="deck-name">{d.name}</div>
         <div className={'deck-style ' + styleClass(d.style)}>{d.style}</div>
         <div className="deck-desc">{d.desc}</div>
@@ -147,7 +155,7 @@ function FaceOffCard({ deck, from }: { deck: DeckMeta; from: 'left' | 'right' })
         }
         onAnimationComplete={() => stage === 'fly' && setStage('drift')}
       >
-        {art && <img src={art} alt="" draggable={false} />}
+        {art && <img src={art} alt="" draggable={false} onError={artFallback} />}
         <span className="faceoff-name">{deck.name}</span>
       </motion.div>
       {/* wind streaks trailing the fly-in */}

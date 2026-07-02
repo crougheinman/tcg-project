@@ -1,0 +1,24 @@
+<svg viewBox="0 0 320 160" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#4d121b"/>
+      <stop offset="1" stop-color="#130708"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#f4dc96"/>
+      <stop offset="0.5" stop-color="#df5551"/>
+      <stop offset="1" stop-color="#7c1f24"/>
+    </radialGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="2"/></filter>
+  </defs>
+  <rect width="320" height="160" fill="url(#bg)"/>
+  <circle cx="160" cy="64" r="38" fill="url(#sun)" opacity="0.85"/>
+  <path d="M112 108 L214 24" stroke="#f4dc96" stroke-width="9" stroke-linecap="round" opacity="0.55" filter="url(#glow)"/>
+  <path d="M112 108 L214 24" stroke="#fff7e0" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M200 30 L214 24 L206 38" fill="#fff7e0"/>
+  <line x1="126" y1="98" x2="120" y2="112" stroke="#e6c874" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+  <line x1="140" y1="94" x2="135" y2="106" stroke="#e6c874" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+  <rect x="5" y="5" width="310" height="150" rx="8" fill="none" stroke="#c79a44" stroke-width="1.5" opacity="0.65"/>
+  <rect x="0" y="126" width="320" height="34" fill="#0b0405" opacity="0.55"/>
+  <text x="160" y="149" text-anchor="middle" font-family="Georgia, serif" font-size="16" font-weight="700" fill="#e6c874" letter-spacing="0.5">Iaijutsu Strike</text>
+</svg>

@@ -76,6 +76,31 @@ export const DECK_STONEWALL: string[] = [
   ...repeat('take_counter', 2),
 ]; // 30
 
+export const DECK_IRONBLOSSOM: string[] = [
+  ...repeat('aether_well', 12),
+  ...repeat('ashigaru', 4),
+  ...repeat('ronin_blade', 4),
+  ...repeat('kensei_duelist', 3),
+  ...repeat('iron_shogun', 1),
+  ...repeat('iaijutsu_strike', 2),
+  ...repeat('warding_stance', 1),
+  ...repeat('shuriken_volley', 2),
+  ...repeat('insight', 1),
+]; // 30
+
+export const DECK_GRAVETIDE: string[] = [
+  ...repeat('aether_well', 12),
+  ...repeat('shambling_ghoul', 4),
+  ...repeat('plague_priest', 2),
+  ...repeat('grave_necromancer', 2),
+  ...repeat('rotting_hulk', 2),
+  ...repeat('carrion_colossus', 1),
+  ...repeat('raise_horde', 2),
+  ...repeat('withering_touch', 2),
+  ...repeat('soul_siphon', 1),
+  ...repeat('grasp_from_grave', 2),
+]; // 30
+
 export const STARTER_DECKS: Record<string, string[]> = {
   Emberwood: DECK_EMBERWOOD,
   Skyward: DECK_SKYWARD,
@@ -138,6 +163,22 @@ export const DECK_LIST: DeckMeta[] = [
     desc: 'Walls, removal, and lifegain. Outlast everything, then close with a lone Storm Drake.',
     emblem: 'granite_sentinel',
     cards: DECK_STONEWALL,
+  },
+  {
+    id: 'ironblossom',
+    name: 'Iron Blossom',
+    style: 'Aggro · Bushido Tempo',
+    desc: 'Swift, disciplined blades and instant combat tricks. Strike first, strike true, and end it before they draw steel.',
+    emblem: 'kensei_duelist',
+    cards: DECK_IRONBLOSSOM,
+  },
+  {
+    id: 'gravetide',
+    name: 'Grave Tide',
+    style: 'Swarm · Undead & Drain',
+    desc: 'Raise a horde of expendable dead, bleed them with each dark ritual, and drag their attackers into the grave.',
+    emblem: 'grave_necromancer',
+    cards: DECK_GRAVETIDE,
   },
 ];
 
