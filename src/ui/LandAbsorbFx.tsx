@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import type { PlayerId } from '../engine/types';
+import { ManaConsumeFx } from './ImpactFx';
 
 // A land entering the battlefield "vaporizes" into a blue mana orb that flies to
 // its controller's avatar (the land is then hidden — the mana readout represents it).
@@ -21,6 +22,7 @@ const TEXT_DUR_MS = 1100; // then it falls + fades over this
 
 export function LandAbsorbFx({ fx, onDone }: { fx: LandAbsorb; onDone: (id: number) => void }) {
   const [manaPos, setManaPos] = useState<{ x: number; y: number } | null>(null);
+  const [consumed, setConsumed] = useState(false); // orb reached the avatar -> burst
   const orbRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -47,16 +49,17 @@ export function LandAbsorbFx({ fx, onDone }: { fx: LandAbsorb; onDone: (id: numb
       { duration: TRAVEL_MS, easing: 'ease-in-out', fill: 'forwards' },
     );
 
-    // Glow the avatar blue once, just as the orb arrives (imperative — the mana
-    // readout pulses on its own via the mana change).
+    // As the orb arrives: a strong blue glow pulse on the avatar + the smoke burst.
     const glow = setTimeout(() => {
+      setConsumed(true);
       av?.animate(
         [
-          { filter: 'drop-shadow(0 0 0px rgba(106, 169, 255, 0))' },
-          { filter: 'drop-shadow(0 0 16px rgba(106, 169, 255, 0.95))' },
-          { filter: 'drop-shadow(0 0 0px rgba(106, 169, 255, 0))' },
+          { filter: 'drop-shadow(0 0 0 rgba(106, 169, 255, 0)) brightness(1)' },
+          { filter: 'drop-shadow(0 0 26px rgba(106, 169, 255, 1)) brightness(1.35)' },
+          { filter: 'drop-shadow(0 0 10px rgba(106, 169, 255, 0.6)) brightness(1.1)' },
+          { filter: 'drop-shadow(0 0 0 rgba(106, 169, 255, 0)) brightness(1)' },
         ],
-        { duration: 720, easing: 'ease-out' },
+        { duration: 1000, easing: 'ease-out' },
       );
     }, TRAVEL_MS - 360);
     const done = setTimeout(() => onDone(fx.id), TEXT_AT_MS + TEXT_DUR_MS + 150);
@@ -81,6 +84,8 @@ export function LandAbsorbFx({ fx, onDone }: { fx: LandAbsorb; onDone: (id: numb
       )}
       {/* pinned at the land's spot; CSS margin centers it, WAAPI drives the flight */}
       <div ref={orbRef} className="mana-orb" style={{ left: fx.fromX, top: fx.fromY, opacity: 0 }} />
+      {/* blue glow + smoke burst at the avatar the moment the orb is consumed */}
+      {consumed && <ManaConsumeFx x={fx.toX} y={fx.toY} />}
       {manaPos && (
         <motion.div
           className="mana-float"

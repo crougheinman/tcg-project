@@ -189,8 +189,10 @@ export function CardView({
             </span>
           </div>
           {inst.summoningSick && (
-            <span className="badge sick arena-sick" title="Summoning sick">
-              zZ
+            <span className="sleep-zzz" title="Summoning sick — resting, can't attack yet" aria-hidden>
+              <span>z</span>
+              <span>z</span>
+              <span>z</span>
             </span>
           )}
         </>

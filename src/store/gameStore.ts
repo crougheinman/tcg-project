@@ -1,9 +1,12 @@
 import { create } from 'zustand';
 import { createInitialState } from '../engine/state';
 import { applyAction } from '../engine/reducer';
-import type { Action, GameState, PlayerId } from '../engine/types';
+import type { Action, GameState, PlayerId, Target } from '../engine/types';
+import { opponentOf } from '../engine/types';
 import { deckById, randomDeck } from '../cards/decks';
+import { getDef } from '../cards/cards';
 import { aiShouldAct, pickAction } from '../ai/ai';
+import { CHARGE_MS, CHARGE_SPELLS, HEAL_MS, HEAL_SPELLS, SMOKE_MS, SMOKE_SPELLS } from '../ui/spellTiming';
 import type { MatchConnection } from '../net/match';
 
 export type Mode = 'menu' | 'ai' | 'hotseat' | 'pvp';
@@ -29,6 +32,21 @@ interface Store {
   // default so newcomers get help immediately.
   guided: boolean;
   setGuided: (v: boolean) => void;
+  // The deck pairing from the last vs-AI match, so "Play Again" can rematch with a
+  // fresh shuffle without sending the player back through deck-select.
+  lastAiDecks: { deck: string; oppDeck: string } | null;
+  // A spell mid-telegraph: its castSorcery is deferred so BoardFx can play a lead-in
+  // (a burn charge-up at the caster, or smoke at the target) while the target card
+  // stays on the board — it resolves only when the telegraph finishes.
+  //   kind 'charge' -> Cinderbolt/Scorch/Pyroblast charge orb at the caster.
+  //   kind 'smoke'  -> Grasp/Withering smoke at the target, then debris/wither.
+  charging: {
+    casterId: PlayerId;
+    def: string;
+    kind: 'charge' | 'smoke' | 'heal';
+    ms: number;
+    target?: Target;
+  } | null;
 
   startAI: (deckId: string, oppDeckId?: string) => void; // oppDeckId: pre-picked (face-off shows it)
   startHotseat: (deckA: string, deckB: string) => void;
@@ -36,6 +54,7 @@ interface Store {
   dispatch: (action: Action) => void; // local human action
   sendChat: (text: string) => void; // local human chat (PvP only)
   abortMatch: () => void; // local player forfeits (PvP tells the opponent) -> menu
+  playAgain: () => void; // vs AI only: rematch with the same decks, fresh shuffle
   toMenu: () => void;
   clearError: () => void;
 }
@@ -46,23 +65,53 @@ const BUBBLE_MS = 5000; // how long a chat bubble stays before fading
 const noChat = (): Record<PlayerId, ChatBubble | null> => ({ A: null, B: null });
 
 export const useGame = create<Store>((set, get) => {
+  // Should this cast telegraph (delay its resolution so BoardFx can play a lead-in)?
+  // Returns the telegraph descriptor, else null. PvP is excluded (desyncs timing).
+  type Telegraph = { casterId: PlayerId; def: string; kind: 'charge' | 'smoke' | 'heal'; ms: number; target?: Target };
+  function telegraphFor(g: GameState, action: Action): Telegraph | null {
+    if (action.type !== 'castSorcery') return null;
+    // instants can be cast off-turn while blocking -> caster derives from the phase
+    const casterId = g.phase === 'combat_block' ? opponentOf(g.active) : g.active;
+    const card = g.players[casterId].hand.find((c) => c.iid === action.iid);
+    if (!card) return null;
+    if (CHARGE_SPELLS.has(card.def) && getDef(card.def).effect?.type === 'damage')
+      return { casterId, def: card.def, kind: 'charge', ms: CHARGE_MS };
+    if (SMOKE_SPELLS.has(card.def))
+      return { casterId, def: card.def, kind: 'smoke', ms: SMOKE_MS, target: action.target };
+    if (HEAL_SPELLS.has(card.def))
+      return { casterId, def: card.def, kind: 'heal', ms: HEAL_MS[card.def] ?? 2000 };
+    return null;
+  }
+
   // Step the AI one action at a time so the human sees each move.
   function scheduleAi() {
     const st = get();
-    if (st.mode !== 'ai' || !st.game || !st.aiId) return;
+    if (st.mode !== 'ai' || !st.game || !st.aiId || st.charging) return;
     if (!aiShouldAct(st.game, st.aiId)) return;
     setTimeout(
       () => {
         const s = get();
-        if (s.mode !== 'ai' || !s.game || !s.aiId || !aiShouldAct(s.game, s.aiId)) return;
-        try {
-          const next = applyAction(s.game, pickAction(s.game, s.aiId));
-          set({ game: next });
-        } catch (e) {
-          set({ error: `AI error: ${(e as Error).message}` });
+        if (s.mode !== 'ai' || !s.game || !s.aiId || s.charging || !aiShouldAct(s.game, s.aiId))
           return;
+        const action = pickAction(s.game, s.aiId);
+        const tel = telegraphFor(s.game, action);
+        const applyAi = () => {
+          const cur = get();
+          if (cur.mode !== 'ai' || !cur.game) return;
+          try {
+            set({ game: applyAction(cur.game, action), charging: null });
+          } catch (e) {
+            set({ error: `AI error: ${(e as Error).message}`, charging: null });
+            return;
+          }
+          scheduleAi();
+        };
+        if (tel) {
+          set({ charging: tel }); // telegraph, then resolve
+          setTimeout(applyAi, tel.ms);
+        } else {
+          applyAi();
         }
-        scheduleAi();
       },
       st.guided ? AI_DELAY_GUIDED_MS : AI_DELAY_MS,
     );
@@ -89,11 +138,13 @@ export const useGame = create<Store>((set, get) => {
     error: null,
     chat: noChat(),
     forfeit: null,
+    charging: null,
     guided: localStorage.getItem('guided') !== '0', // default ON
     setGuided: (v) => {
       localStorage.setItem('guided', v ? '1' : '0');
       set({ guided: v });
     },
+    lastAiDecks: null,
 
     startAI: (deckId, oppDeckId) => {
       const seed = Math.floor(Math.random() * 0x7fffffff);
@@ -106,6 +157,8 @@ export const useGame = create<Store>((set, get) => {
         net: null,
         error: null,
         forfeit: null,
+        charging: null,
+        lastAiDecks: { deck: deckId, oppDeck: aiDeck.id },
         game: createInitialState(seed, deckById(deckId).cards, aiDeck.cards),
       });
       scheduleAi(); // in case AI ever goes first (it doesn't on turn 1, but safe)
@@ -120,6 +173,7 @@ export const useGame = create<Store>((set, get) => {
         net: null,
         error: null,
         forfeit: null,
+        charging: null,
         game: createInitialState(seed, deckById(deckA).cards, deckById(deckB).cards),
       });
     },
@@ -152,23 +206,37 @@ export const useGame = create<Store>((set, get) => {
         error: null,
         chat: noChat(),
         forfeit: null,
+        charging: null,
         game: createInitialState(net.seed, deckById(net.deckA).cards, deckById(net.deckB).cards),
       });
     },
 
     dispatch: (action) => {
       const s = get();
-      if (!s.game) return;
-      let next: GameState;
-      try {
-        next = applyAction(s.game, action);
-      } catch (e) {
-        set({ error: (e as Error).message });
-        return;
+      if (!s.game || s.charging) return; // ignore input while a spell is telegraphing
+      const tel = s.mode !== 'pvp' ? telegraphFor(s.game, action) : null;
+      const apply = () => {
+        const cur = get();
+        if (!cur.game) return;
+        let next: GameState;
+        try {
+          next = applyAction(cur.game, action);
+        } catch (e) {
+          set({ error: (e as Error).message, charging: null });
+          return;
+        }
+        set({ game: next, error: null, charging: null });
+        if (cur.mode === 'pvp' && cur.net) cur.net.sendAction(action);
+        if (cur.mode === 'ai') scheduleAi();
+      };
+      if (tel) {
+        // Telegraph first (charge orb at caster, or smoke at the target — the target
+        // card stays on the board), THEN resolve so the payoff lands with the visual.
+        set({ charging: tel });
+        setTimeout(apply, tel.ms);
+      } else {
+        apply();
       }
-      set({ game: next, error: null });
-      if (s.mode === 'pvp' && s.net) s.net.sendAction(action);
-      if (s.mode === 'ai') scheduleAi();
     },
 
     sendChat: (text) => {
@@ -189,12 +257,18 @@ export const useGame = create<Store>((set, get) => {
       } else {
         s.net?.leave();
       }
-      set({ mode: 'menu', game: null, net: null, aiId: null, error: null, chat: noChat(), forfeit: null });
+      set({ mode: 'menu', game: null, net: null, aiId: null, error: null, chat: noChat(), forfeit: null, charging: null });
+    },
+
+    playAgain: () => {
+      const s = get();
+      if (s.mode !== 'ai' || !s.lastAiDecks) return;
+      s.startAI(s.lastAiDecks.deck, s.lastAiDecks.oppDeck);
     },
 
     toMenu: () => {
       get().net?.leave();
-      set({ mode: 'menu', game: null, net: null, aiId: null, error: null, chat: noChat(), forfeit: null });
+      set({ mode: 'menu', game: null, net: null, aiId: null, error: null, chat: noChat(), forfeit: null, charging: null });
     },
 
     clearError: () => set({ error: null }),

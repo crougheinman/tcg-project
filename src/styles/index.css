@@ -255,7 +255,7 @@ input {
   border: 2px solid var(--wood);
   box-shadow: 0 0 0 4px var(--frame), 0 18px 44px rgba(0, 0, 0, 0.65);
 }
-.faceoff-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.faceoff-card img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
 .faceoff-name {
   position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 6px 8px; text-align: center;
   font-family: 'Grenze Gotisch', serif; font-size: 21px; color: #f3e7c4;
@@ -296,7 +296,7 @@ input {
   .deck-list { grid-template-columns: 1fr; }
 }
 .deck-art {
-  width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 8px;
+  width: 100%; aspect-ratio: 16 / 12; object-fit: cover; object-position: top; border-radius: 8px;
   border: 1px solid #9a7b46; background: #fbf4e2; image-rendering: auto;
 }
 .deck-name { font-family: 'Grenze Gotisch', serif; font-size: 22px; color: var(--title); }
@@ -664,6 +664,29 @@ input {
 .arena-sick {
   position: absolute; top: 3px; right: 4px; z-index: 3;
   background: rgba(0, 0, 0, 0.55); border-radius: 4px; padding: 0 3px;
+}
+
+/* summoning-sick creature: sleeping "z z z" that drift up and fade in sequence */
+.sleep-zzz {
+  position: absolute; top: 5px; right: 5px; z-index: 4;
+  width: 34px; height: 34px; pointer-events: none;
+}
+.sleep-zzz span {
+  position: absolute; bottom: 0; left: 0;
+  font-family: 'Grenze Gotisch', 'Cinzel', serif; font-weight: 800; line-height: 1;
+  color: #ff4a4a;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 7px rgba(255, 60, 60, 0.95);
+  opacity: 0;
+  animation: zsleep 2.4s ease-in-out infinite;
+}
+.sleep-zzz span:nth-child(1) { font-size: 13px; animation-delay: 0s; }
+.sleep-zzz span:nth-child(2) { font-size: 17px; animation-delay: 0.8s; }
+.sleep-zzz span:nth-child(3) { font-size: 21px; animation-delay: 1.6s; }
+@keyframes zsleep {
+  0% { opacity: 0; transform: translate(0, 6px) rotate(-8deg) scale(0.6); }
+  25% { opacity: 1; }
+  70% { opacity: 0.9; }
+  100% { opacity: 0; transform: translate(14px, -20px) rotate(10deg) scale(1.15); }
 }
 
 /* ---- hover preview ---- */
@@ -1041,6 +1064,32 @@ input {
   background: radial-gradient(circle at 35% 30%, #fff2c4, #ff9a3c 50%, #e0392b);
   box-shadow: 0 0 16px 6px rgba(255, 138, 60, 0.9);
 }
+/* Shuriken Volley: a spinning steel star (WAAPI drives the flight + spin) */
+.shuriken-proj {
+  position: fixed; z-index: 67; pointer-events: none;
+  width: 22px; height: 22px; margin: -11px 0 0 -11px;
+  background: conic-gradient(from 45deg, #e9eef5, #9aa6b4, #e9eef5, #9aa6b4, #e9eef5);
+  clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%);
+  filter: drop-shadow(0 0 5px rgba(220, 235, 255, 0.9));
+}
+/* smoke telegraph puffs (Grasp violet / Withering green) */
+.fx-smokepuff { position: absolute; left: 0; top: 0; border-radius: 50%; filter: blur(4px); }
+/* green souls streaming into the avatar (Soul Siphon) */
+.fx-soul {
+  position: absolute; left: 0; top: 0; border-radius: 50% 50% 50% 0;
+  filter: blur(0.5px) drop-shadow(0 0 6px rgba(110, 224, 106, 0.95));
+}
+/* stone debris chunks (Grasp) + green flecks (Withering) */
+.fx-debris {
+  position: absolute; left: 0; top: 0; border-radius: 2px;
+  background: linear-gradient(150deg, #b3aa9a, #7d7364 60%, #554d40);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.fx-debris.wither {
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #b6e88a, #5a9a37 60%, #33611f);
+  box-shadow: 0 0 6px rgba(120, 200, 80, 0.7);
+}
 /* "Mana +1" — floats near the mana readout as the orb merges in, then drifts down */
 .mana-float {
   position: fixed; z-index: 71; pointer-events: none; white-space: nowrap;
@@ -1096,6 +1145,9 @@ input {
 .outcome-lose.result-stats { border-color: var(--danger); }
 .result-sub { color: var(--muted); font-size: 13px; margin: 4px 0 0; letter-spacing: 0.5px; }
 .stats-table { display: flex; flex-direction: column; gap: 4px; margin: 18px 0 22px; }
+.result-actions { display: flex; gap: 10px; justify-content: center; }
+.result-actions .link { color: var(--muted); }
+.result-actions .link:hover { color: var(--gold); }
 .stats-head {
   display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
   font-family: 'Cinzel', serif; font-size: 11px; letter-spacing: 1px; text-transform: uppercase;

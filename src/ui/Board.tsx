@@ -26,6 +26,7 @@ export function Board() {
   const dispatch = useGame((s) => s.dispatch);
   const toMenu = useGame((s) => s.toMenu);
   const abortMatch = useGame((s) => s.abortMatch);
+  const playAgain = useGame((s) => s.playAgain);
   const forfeit = useGame((s) => s.forfeit);
   const error = useGame((s) => s.error);
   const clearError = useGame((s) => s.clearError);
@@ -191,8 +192,8 @@ export function Board() {
       mode === 'hotseat'
         ? `🛡 ${suffix.charAt(0).toUpperCase() + suffix.slice(1)} blocked`
         : before.active === myId
-        ? `🛡 Your attack was blocked!`
-        : `🛡 You blocked ${suffix}!`;
+          ? `🛡 Your attack was blocked!`
+          : `🛡 You blocked ${suffix}!`;
     setAnnounce({ id: announceId.current++, text, ms: 2400 });
   }, [game, myId, mode]);
 
@@ -253,7 +254,7 @@ export function Board() {
         return {
           key: 'combatgo',
           sel: '.center',
-          text: 'Nothing castable? Head to Combat to attack with your creatures.',
+          text: 'Nothing castable? Head to Combat to attack with your creatures. Or just End Turn to skip combat.',
         };
       }
       case 'combat_attack': {
@@ -541,14 +542,33 @@ export function Board() {
       );
     }
     switch (game.phase) {
-      case 'main1':
+      case 'main1': {
+        // End the turn in one click: advance straight past combat + end.
+        const endTurn = () => {
+          dispatch({ type: 'advance' }); // main1 -> combat_attack
+          dispatch({ type: 'advance' }); // combat_attack -> end
+          dispatch({ type: 'advance' }); // end -> next turn
+        };
+        // No creature can attack → combat is pointless; offer only End Turn.
+        if (!canAnyAttack) {
+          return (
+            <div className="actions">
+              <button className="primary" onClick={endTurn}>
+                End Turn
+              </button>
+            </div>
+          );
+        }
+        // Attackers available: offer Combat, or End Turn to skip it entirely.
         return (
           <div className="actions">
             <button className="primary" onClick={() => dispatch({ type: 'advance' })}>
-              Go to Combat ⚔
+              Go to Combat
             </button>
+            <button className="primary" onClick={endTurn}>End Turn</button>
           </div>
         );
+      }
       case 'combat_attack':
         // No creature can attack → no buttons; the auto-skip effect advances combat.
         if (!canAnyAttack) {
@@ -634,257 +654,266 @@ export function Board() {
 
   return (
     <HoverCtx.Provider value={setHovered}>
-    <LayoutGroup>
-    <div className="board">
-      <header className="topbar">
-        <button className="menu-btn" onClick={() => setMenuOpen(true)} aria-label="Menu" title="Menu">
-          ☰
-        </button>
-        <PhaseBar game={game} myId={myId} />
-        <div className="topbar-right">
-          {mode === 'pvp' && <span className="role">You are {myId}</span>}
-          <Rulebook label={false} />
+      <LayoutGroup>
+        <div className="board">
+          <header className="topbar">
+            <button className="menu-btn" onClick={() => setMenuOpen(true)} aria-label="Menu" title="Menu">
+              ☰
+            </button>
+            <PhaseBar game={game} myId={myId} />
+            <div className="topbar-right">
+              {mode === 'pvp' && <span className="role">You are {myId}</span>}
+              <Rulebook label={false} />
+            </div>
+          </header>
+
+          {/* Opponent */}
+          <section className="player-zone opp">
+            <PlayerBar
+              p={opp}
+              side={oppId}
+              mana={{ avail: availableMana(opp), total: opp.battlefield.filter(isLand).length }}
+              onFace={() => faceClick(oppId)}
+              targetable={!!sorceryIid}
+            />
+            <div className="hand opp-hand">
+              <AnimatePresence>
+                {opp.hand.map((c) => (
+                  <CardView key={c.iid} inst={c} faceDown />
+                ))}
+              </AnimatePresence>
+            </div>
+            {permanents(oppId, oppId)}
+          </section>
+
+          <section className="center">{actionButtons()}</section>
+
+          {/* Me */}
+          <section className="player-zone me">
+            {permanents(localId, localId, true)}
+            <div className="player-dock">
+              <div className="hand">
+                <AnimatePresence>
+                  {me.hand.map((c) => (
+                    <CardView
+                      key={c.iid}
+                      inst={c}
+                      onClick={() => handHclick(c)}
+                      dim={!canPlay(c)}
+                      greenGlow={game.phase === 'combat_block' && getDef(c.def).type === 'instant' && canPlay(c)}
+                      draggable={canPlay(c) && getDef(c.def).type !== 'sorcery' && getDef(c.def).type !== 'instant'}
+                      onDragChange={setDragActive}
+                      onDrop={(point) => dropPlay(c, point)}
+                    />
+                  ))}
+                </AnimatePresence>
+              </div>
+              <div className="player-platform">
+                <button
+                  className="zone-btn left"
+                  onClick={() => setZone('graveyard')}
+                  title="View graveyard"
+                >
+                  ⚰ {me.graveyard.length}
+                </button>
+                <PlayerBar
+                  p={me}
+                  side={localId}
+                  mana={{ avail: availableMana(me), total: me.battlefield.filter(isLand).length }}
+                  onFace={() => faceClick(localId)}
+                  targetable={!!sorceryIid}
+                  self
+                />
+                <button className="zone-btn right" onClick={() => setZone('deck')} title="View deck">
+                  🂠 {me.library.length}
+                </button>
+              </div>
+            </div>
+          </section>
         </div>
-      </header>
 
-      {/* Opponent */}
-      <section className="player-zone opp">
-        <PlayerBar
-          p={opp}
-          side={oppId}
-          mana={{ avail: availableMana(opp), total: opp.battlefield.filter(isLand).length }}
-          onFace={() => faceClick(oppId)}
-          targetable={!!sorceryIid}
-        />
-        <div className="hand opp-hand">
-          <AnimatePresence>
-            {opp.hand.map((c) => (
-              <CardView key={c.iid} inst={c} faceDown />
-            ))}
-          </AnimatePresence>
-        </div>
-        {permanents(oppId, oppId)}
-      </section>
+        {/* Everything below renders OUTSIDE `.board` on purpose. `.board` gets a CSS
+        transform during screen-shake fx (chargeShake / combat face-hit impact),
+        and a transformed ancestor becomes the containing block for its
+        `position: fixed` descendants per spec — silently breaking every fixed fx
+        overlay's viewport-relative coordinates for as long as the shake runs
+        (this is what misplaced the charge-up orb). Rendering these as siblings
+        of `.board`, not children, keeps them truly viewport-fixed regardless of
+        what `.board` is doing. */}
+        <BoardFx game={game} />
 
-      <section className="center">{actionButtons()}</section>
-
-      {/* Me */}
-      <section className="player-zone me">
-        {permanents(localId, localId, true)}
-        <div className="player-dock">
-        <div className="hand">
-          <AnimatePresence>
-            {me.hand.map((c) => (
-              <CardView
-                key={c.iid}
-                inst={c}
-                onClick={() => handHclick(c)}
-                dim={!canPlay(c)}
-                greenGlow={game.phase === 'combat_block' && getDef(c.def).type === 'instant' && canPlay(c)}
-                draggable={canPlay(c) && getDef(c.def).type !== 'sorcery' && getDef(c.def).type !== 'instant'}
-                onDragChange={setDragActive}
-                onDrop={(point) => dropPlay(c, point)}
-              />
-            ))}
-          </AnimatePresence>
-        </div>
-        <div className="player-platform">
-          <button
-            className="zone-btn left"
-            onClick={() => setZone('graveyard')}
-            title="View graveyard"
-          >
-            ⚰ {me.graveyard.length}
-          </button>
-          <PlayerBar
-            p={me}
-            side={localId}
-            mana={{ avail: availableMana(me), total: me.battlefield.filter(isLand).length }}
-            onFace={() => faceClick(localId)}
-            targetable={!!sorceryIid}
-            self
-          />
-          <button className="zone-btn right" onClick={() => setZone('deck')} title="View deck">
-            🂠 {me.library.length}
-          </button>
-        </div>
-        </div>
-      </section>
-
-      <BoardFx game={game} />
-
-      <AnimatePresence>
-        {hovered && !sorceryIid && !game.pending && (
-          <CardPreview key={hovered.iid} inst={hovered} side={previewSide(hovered.iid)} />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {zone && (
-          <ZoneViewer
-            key={zone}
-            title={zone === 'deck' ? 'Your Deck' : 'Graveyard'}
-            cards={zone === 'deck' ? me.library : me.graveyard}
-            onClose={() => setZone(null)}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Guided-mode coach bubble (one at a time, anchored to the relevant UI) */}
-      <AnimatePresence>
-        {tip && !hushed.has(tip.key) && (
-          <CoachBubble
-            key={tip.key}
-            tip={tip}
-            onHush={(k) => setHushed((h) => new Set(h).add(k))}
-          />
-        )}
-      </AnimatePresence>
-
-      <div className="announce-wrap">
         <AnimatePresence>
-          {announce && (
-            <motion.div
-              key={announce.id}
-              className={
-                'announce' +
-                (announce.text.includes('✦') ? ' skill' : '') +
-                (/^Turn \d+/.test(announce.text) ? ' turn' : '')
-              }
-              initial={{ opacity: 0, scale: 0.8, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 1.1 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 26 }}
-            >
-              {announce.text}
-            </motion.div>
+          {hovered && !sorceryIid && !game.pending && (
+            <CardPreview key={hovered.iid} inst={hovered} side={previewSide(hovered.iid)} />
           )}
         </AnimatePresence>
-      </div>
 
-      <div ref={dragBounds} className="drag-layer" />
-      <ActionLog log={game.log} myId={myId} boundsRef={dragBounds} />
-      {mode === 'pvp' && <ChatDock />}
+        <AnimatePresence>
+          {zone && (
+            <ZoneViewer
+              key={zone}
+              title={zone === 'deck' ? 'Your Deck' : 'Graveyard'}
+              cards={zone === 'deck' ? me.library : me.graveyard}
+              onClose={() => setZone(null)}
+            />
+          )}
+        </AnimatePresence>
 
-      {error && (
-        <div className="toast" onClick={clearError}>
-          {error}
+        {/* Guided-mode coach bubble (one at a time, anchored to the relevant UI) */}
+        <AnimatePresence>
+          {tip && !hushed.has(tip.key) && (
+            <CoachBubble
+              key={tip.key}
+              tip={tip}
+              onHush={(k) => setHushed((h) => new Set(h).add(k))}
+            />
+          )}
+        </AnimatePresence>
+
+        <div className="announce-wrap">
+          <AnimatePresence>
+            {announce && (
+              <motion.div
+                key={announce.id}
+                className={
+                  'announce' +
+                  (announce.text.includes('✦') ? ' skill' : '') +
+                  (/^Turn \d+/.test(announce.text) ? ' turn' : '')
+                }
+                initial={{ opacity: 0, scale: 0.8, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 1.1 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 26 }}
+              >
+                {announce.text}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
-      )}
 
-      {/* Burger menu modal */}
-      <AnimatePresence>
-        {menuOpen && (
-          <motion.div
-            className="overlay"
-            onClick={() => setMenuOpen(false)}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              className="game-menu"
-              onClick={(e) => e.stopPropagation()}
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 320, damping: 26 }}
-            >
-              <button className="modal-x" onClick={() => setMenuOpen(false)} aria-label="Close">
-                ×
-              </button>
-              <h2 className="game-menu-title">Menu</h2>
-              <button
-                className="game-menu-item danger"
-                onClick={() => {
-                  setMenuOpen(false);
-                  setConfirmAbort(true);
-                }}
-              >
-                Abort Match
-              </button>
-              <button
-                className="game-menu-item"
-                onClick={() => {
-                  setMenuOpen(false);
-                  setRulesOpen(true);
-                }}
-              >
-                How to Play
-              </button>
-              <button
-                className={'game-menu-item toggle' + (guided ? ' on' : '')}
-                onClick={() => {
-                  setGuided(!guided);
-                  if (!guided) setHushed(new Set()); // re-enabling revives dismissed tips
-                }}
-              >
-                Guided Mode
-                <span className="toggle-pill" aria-hidden>
-                  {guided ? 'ON' : 'OFF'}
-                </span>
-              </button>
-            </motion.div>
-          </motion.div>
+        <div ref={dragBounds} className="drag-layer" />
+        <ActionLog log={game.log} myId={myId} boundsRef={dragBounds} />
+        {mode === 'pvp' && <ChatDock />}
+
+        {error && (
+          <div className="toast" onClick={clearError}>
+            {error}
+          </div>
         )}
-      </AnimatePresence>
 
-      {/* Abort confirmation */}
-      <AnimatePresence>
-        {confirmAbort && (
-          <motion.div
-            className="overlay"
-            onClick={() => setConfirmAbort(false)}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
+        {/* Burger menu modal */}
+        <AnimatePresence>
+          {menuOpen && (
             <motion.div
-              className="game-menu confirm"
-              onClick={(e) => e.stopPropagation()}
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+              className="overlay"
+              onClick={() => setMenuOpen(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
             >
-              <button className="modal-x" onClick={() => setConfirmAbort(false)} aria-label="Close">
-                ×
-              </button>
-              <h2 className="game-menu-title">Abort match?</h2>
-              <p className="game-menu-msg">You’ll forfeit this match and return to the main menu.</p>
-              <div className="game-menu-row">
+              <motion.div
+                className="game-menu"
+                onClick={(e) => e.stopPropagation()}
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+              >
+                <button className="modal-x" onClick={() => setMenuOpen(false)} aria-label="Close">
+                  ×
+                </button>
+                <h2 className="game-menu-title">Menu</h2>
                 <button
                   className="game-menu-item danger"
                   onClick={() => {
-                    setConfirmAbort(false);
-                    abortMatch();
+                    setMenuOpen(false);
+                    setConfirmAbort(true);
                   }}
                 >
-                  Yes, abort
+                  Abort Match
                 </button>
-                <button className="game-menu-item" onClick={() => setConfirmAbort(false)}>
-                  Cancel
+                <button
+                  className="game-menu-item"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setRulesOpen(true);
+                  }}
+                >
+                  How to Play
                 </button>
-              </div>
+                <button
+                  className={'game-menu-item toggle' + (guided ? ' on' : '')}
+                  onClick={() => {
+                    setGuided(!guided);
+                    if (!guided) setHushed(new Set()); // re-enabling revives dismissed tips
+                  }}
+                >
+                  Guided Mode
+                  <span className="toggle-pill" aria-hidden>
+                    {guided ? 'ON' : 'OFF'}
+                  </span>
+                </button>
+              </motion.div>
             </motion.div>
-          </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Abort confirmation */}
+        <AnimatePresence>
+          {confirmAbort && (
+            <motion.div
+              className="overlay"
+              onClick={() => setConfirmAbort(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <motion.div
+                className="game-menu confirm"
+                onClick={(e) => e.stopPropagation()}
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+              >
+                <button className="modal-x" onClick={() => setConfirmAbort(false)} aria-label="Close">
+                  ×
+                </button>
+                <h2 className="game-menu-title">Abort match?</h2>
+                <p className="game-menu-msg">You’ll forfeit this match and return to the main menu.</p>
+                <div className="game-menu-row">
+                  <button
+                    className="game-menu-item danger"
+                    onClick={() => {
+                      setConfirmAbort(false);
+                      abortMatch();
+                    }}
+                  >
+                    Yes, abort
+                  </button>
+                  <button className="game-menu-item" onClick={() => setConfirmAbort(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* "How to Play" — controlled rulebook opened from the menu */}
+        <Rulebook trigger={false} open={rulesOpen} onOpenChange={setRulesOpen} />
+
+        {/* Game over (a winner) or PvP forfeit (opponent left) -> animated stats. */}
+        {(game.winner || forfeit) && (
+          <ResultScreen
+            game={game}
+            myId={myId}
+            reason={forfeit && !game.winner ? forfeit.reason : undefined}
+            onMenu={toMenu}
+            onPlayAgain={mode === 'ai' ? playAgain : undefined}
+          />
         )}
-      </AnimatePresence>
-
-      {/* "How to Play" — controlled rulebook opened from the menu */}
-      <Rulebook trigger={false} open={rulesOpen} onOpenChange={setRulesOpen} />
-
-      {/* Game over (a winner) or PvP forfeit (opponent left) -> animated stats. */}
-      {(game.winner || forfeit) && (
-        <ResultScreen
-          game={game}
-          myId={myId}
-          reason={forfeit && !game.winner ? forfeit.reason : undefined}
-          onMenu={toMenu}
-        />
-      )}
-    </div>
-    </LayoutGroup>
+      </LayoutGroup>
     </HoverCtx.Provider>
   );
 }

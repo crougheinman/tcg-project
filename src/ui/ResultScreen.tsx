@@ -34,11 +34,13 @@ export function ResultScreen({
   myId,
   reason,
   onMenu,
+  onPlayAgain,
 }: {
   game: GameState;
   myId: PlayerId;
   reason?: string; // set on a forfeit win (opponent left)
   onMenu: () => void;
+  onPlayAgain?: () => void; // vs AI only: rematch button lives in this modal
 }) {
   const oppId = opponentOf(myId);
   const outcome: 'win' | 'lose' | 'draw' = reason
@@ -115,15 +117,21 @@ export function ResultScreen({
           })}
         </motion.div>
 
-        <motion.button
-          className="primary"
-          onClick={onMenu}
+        <motion.div
+          className="result-actions"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.95 + rows.length * 0.08 + 0.1 }}
         >
-          Back to Menu
-        </motion.button>
+          {onPlayAgain && (
+            <button className="primary" onClick={onPlayAgain}>
+              ⟳ Play Again
+            </button>
+          )}
+          <button className={onPlayAgain ? 'link' : 'primary'} onClick={onMenu}>
+            Back to Menu
+          </button>
+        </motion.div>
       </motion.div>
     </motion.div>
   );

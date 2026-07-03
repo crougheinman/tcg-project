@@ -57,9 +57,9 @@ export function PlayerBar({
         >
           ◈ {mana.avail}/{mana.total}
         </span>
-        <span className="counts" title="Cards in hand · cards left in deck">
+        {/* <span className="counts" title="Cards in hand · cards left in deck">
           {p.hand.length} ✋ · {p.library.length} 🂠
-        </span>
+        </span> */}
       </div>
     </div>
   );
