@@ -5,6 +5,7 @@ import { hasSupabase } from '../net/supabase';
 import { randomDeck } from '../cards/decks';
 import { Rulebook } from './Rulebook';
 import { DeckSelect } from './DeckSelect';
+import { CardGallery } from './CardGallery';
 import { APP_VERSION } from '../version';
 
 // Home-page patch notes. Balance pass tuned across ~5,000 simulated AI-vs-AI duels
@@ -49,6 +50,7 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
   const [picking, setPicking] = useState<'ai' | 'hotseat' | null>(null);
   const [p1Deck, setP1Deck] = useState<string | null>(null); // hotseat: player 1's deck
   const [aiDeck, setAiDeck] = useState<string | null>(null); // vs AI: opponent deck, pre-picked for the face-off
+  const [showGallery, setShowGallery] = useState(false); // browse every card in the game
 
   const cancel = () => {
     setPicking(null);
@@ -59,7 +61,10 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
   // Resolve the current screen (keyed so it can animate in/out).
   let screen: string;
   let content: ReactNode;
-  if (picking === 'ai') {
+  if (showGallery) {
+    screen = 'gallery';
+    content = <CardGallery onBack={() => setShowGallery(false)} />;
+  } else if (picking === 'ai') {
     screen = 'ai';
     content = (
       <DeckSelect
@@ -94,19 +99,20 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
         <p className="tagline">a tiny trading card game</p>
         <div className="menu-row">
           <div className="menu-buttons">
-          <button
-            onClick={() => {
-              setAiDeck(randomDeck().id); // pick now so the face-off can show it
-              setPicking('ai');
-            }}
-          >
-            Play vs AI
-          </button>
-          <button onClick={() => setPicking('hotseat')}>Hotseat (2 players, 1 device)</button>
-          <button onClick={onOnline} disabled={!hasSupabase}>
-            Online PvP{!hasSupabase ? ' (set Supabase keys)' : ''}
-          </button>
-          <Rulebook icon={false} />
+            <button
+              onClick={() => {
+                setAiDeck(randomDeck().id); // pick now so the face-off can show it
+                setPicking('ai');
+              }}
+            >
+              Play vs AI
+            </button>
+            <button onClick={() => setPicking('hotseat')}>Hotseat (2 players, 1 device)</button>
+            <button onClick={onOnline} disabled={!hasSupabase}>
+              Online PvP{!hasSupabase ? ' (set Supabase keys)' : ''}
+            </button>
+            <button onClick={() => setShowGallery(true)}>Card Codex</button>
+            <Rulebook icon={false} />
           </div>
 
           <details className="changelog" open>
@@ -116,15 +122,13 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
             </summary>
             <div className="changelog-scroll">
               <p className="changelog-intro">
-                Tuned across thousands of simulated duels so every deck has real strengths — and
-                real weaknesses.
+                Tuned across thousands of simulated duels so every deck has real strengths — and real
+                weaknesses.
               </p>
               <ul className="changelog-list">
                 {PATCH_NOTES.map((n) => (
                   <li key={n.deck} className={'changelog-item ' + n.kind}>
-                    <span className={'chip ' + n.kind}>
-                      {n.kind === 'buff' ? '▲ BUFF' : '▼ NERF'}
-                    </span>
+                    <span className={'chip ' + n.kind}>{n.kind === 'buff' ? '▲ BUFF' : '▼ NERF'}</span>
                     <div className="changelog-body">
                       <b>{n.deck}</b> — {n.change}
                       <span className="changelog-why">{n.why}</span>
