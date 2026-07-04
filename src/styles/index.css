@@ -1336,7 +1336,7 @@ input {
   .coach-bubble { max-width: min(78vw, 250px); font-size: 12px; }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 640px), (orientation: landscape) and (max-height: 500px) {
   :root { --card-w: 78px; --card-h: 140px; }
   .logo { font-size: 44px; }
   /* tight cards: drop rules text (full text is on hold-to-preview) and shrink labels */
@@ -1399,4 +1399,44 @@ input {
 /* Very narrow phones: overlap the hand more so all 7 cards stay fully on-screen. */
 @media (max-width: 360px) {
   .player-dock .hand .card:not(:first-child) { margin-left: -42px; } /* ~294px for 7 cards */
+}
+
+/* Landscape phones: width is abundant, HEIGHT is scarce. The block above already
+   applies here (its query includes landscape+short), giving the full mobile
+   compaction. This supplement overrides only the height-critical values: shorter
+   cards, a wider fan, and trimmed vertical chrome so the board fits 100dvh without
+   clipping. Portrait/desktop untouched — gated on landscape + max-height 500px. */
+@media (orientation: landscape) and (max-height: 500px) {
+  :root { --card-w: 62px; --card-h: 82px; } /* far shorter than portrait's 78x140 */
+  .board { padding: 3px 12px; gap: 2px; }
+
+  /* thin the top chrome to reclaim vertical space */
+  .topbar { gap: 6px; }
+  .menu-btn { font-size: 18px; padding: 2px 4px; }
+  .pstep { padding: 1px 6px; font-size: 9px; }
+  .center { min-height: 22px; }
+
+  .player-zone { padding: 3px 8px; gap: 1px; }
+  .player-zone.opp { max-height: 34%; }
+  .player-zone.opp .card { --card-w: 50px; --card-h: 68px; }
+  .player-zone.opp .battlefield { min-height: calc(var(--card-h) + 6px); }
+
+  /* At ~375px tall a full creature row can't clear the bottom hand fan, so the
+     player's front row paints ABOVE the hand (z-index > the hand's 1, < the
+     platform's 3) — its P/T badge stays readable through the small overlap. */
+  .player-zone.me .row.creatures .stack { position: relative; z-index: 2; }
+
+  /* hand: shorter, wider-spread cards tucked behind the platform (width is
+     abundant in landscape, so the fan can breathe while costing little height) */
+  .player-dock .hand .card { --card-w: 56px; --card-h: 64px; }
+  .player-dock .hand .card:not(:first-child) { margin-left: -18px; }
+  .player-dock .hand { margin-bottom: -30px; }
+  .player-platform { padding: 4px 0; }
+  .player-platform .playerbar { margin-top: -20px; }
+
+  /* the full hover/tap preview card is taller than a landscape phone — top-align
+     it and scale down from the top edge so it fits without clipping. Applied to
+     .pcard, which carries no framer transform, so the pop-in still plays. */
+  .preview-overlay { align-items: start; padding-top: 6px; }
+  .preview-overlay .pcard { transform: scale(0.64); transform-origin: top center; }
 }
