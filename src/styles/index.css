@@ -1408,7 +1408,13 @@ input {
    clipping. Portrait/desktop untouched — gated on landscape + max-height 500px. */
 @media (orientation: landscape) and (max-height: 500px) {
   :root { --card-w: 62px; --card-h: 82px; } /* far shorter than portrait's 78x140 */
-  .board { padding: 3px 12px; gap: 2px; }
+  /* viewport-fit=cover: in landscape the notch / home bar sit on the left, right and
+     bottom edges, so pad by the safe-area insets (falls back to the old 12px / 3px). */
+  .board {
+    padding: 3px max(12px, env(safe-area-inset-right)) max(3px, env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
+    gap: 2px;
+  }
 
   /* thin the top chrome to reclaim vertical space */
   .topbar { gap: 6px; }
@@ -1424,7 +1430,10 @@ input {
   /* At ~375px tall a full creature row can't clear the bottom hand fan, so the
      player's front row paints ABOVE the hand (z-index > the hand's 1, < the
      platform's 3) — its P/T badge stays readable through the small overlap. */
-  .player-zone.me .row.creatures .stack { position: relative; z-index: 2; }
+  .player-zone.me .row.creatures .stack { z-index: 2; }
+  /* ...but while a hand card is hovered/inspected, lift the whole hand above the
+     creature row (z 3 ties the platform, which comes later in the DOM and still wins) */
+  .player-dock .hand:has(.card:hover) { z-index: 3; }
 
   /* hand: shorter, wider-spread cards tucked behind the platform (width is
      abundant in landscape, so the fan can breathe while costing little height) */
