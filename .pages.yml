@@ -1,1 +1,25 @@
-test
+media:
+  input: public/images
+  output: /images
+
+content:
+  - name: posts
+    label: Blog Posts
+    type: collection
+    path: content/posts
+    format: yaml-frontmatter
+    fields:
+      - name: title
+        label: Title
+        type: string
+        required: true
+      - name: date
+        label: Date
+        type: date
+        required: true
+      - name: image
+        label: Featured Image
+        type: image
+      - name: body
+        label: Content
+        type: rich-text
