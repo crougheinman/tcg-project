@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CARDS } from '../cards/cards';
 import type { CardDef, CardType } from '../engine/types';
+import { CardFace } from './CardFace';
 
 // A browsable codex of every card in the game: search + type filter, and a click
 // to open a larger detail view with full rules text and flavor. Reuses the in-game
@@ -19,36 +20,6 @@ const TYPE_FILTERS: { key: Filter; label: string }[] = [
 
 // Group by type, then curve, then name — reads like a well-ordered binder.
 const TYPE_ORDER: Record<CardType, number> = { creature: 0, sorcery: 1, instant: 2, land: 3 };
-
-function artFallback(e: React.SyntheticEvent<HTMLImageElement>) {
-  const img = e.currentTarget;
-  if (img.src.endsWith('.png')) img.src = img.src.replace(/\.png$/, '.svg');
-  else img.style.display = 'none';
-}
-
-// The shared card face (name / cost / art / rules text / power-toughness).
-function CardFace({ def }: { def: CardDef }) {
-  return (
-    <>
-      <div className="card-top">
-        <span className="card-name">{def.name}</span>
-        {def.type !== 'land' && <span className="card-cost">{def.cost}</span>}
-      </div>
-      <div className="card-type">{def.type}</div>
-      {def.art && (
-        <img className="card-art" src={def.art} alt="" draggable={false} onError={artFallback} />
-      )}
-      {def.text && <div className="card-text">{def.text}</div>}
-      <div className="card-bottom">
-        {def.type === 'creature' && (
-          <span className="card-pt">
-            {def.power}/{def.toughness}
-          </span>
-        )}
-      </div>
-    </>
-  );
-}
 
 export function CardGallery({ onBack }: { onBack: () => void }) {
   const [q, setQ] = useState('');

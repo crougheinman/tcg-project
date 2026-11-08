@@ -13,7 +13,14 @@ export function Lobby({ onBack }: { onBack: () => void }) {
 
   // Pick a deck first; it's exchanged in the handshake.
   if (!deck) {
-    return <DeckSelect title="Choose your deck — Online PvP" onPick={setDeck} onBack={onBack} />;
+    return (
+      <DeckSelect
+        title="Choose your deck — Online PvP"
+        onPick={setDeck}
+        onBack={onBack}
+        customDecks={false}
+      />
+    );
   }
 
   function host() {

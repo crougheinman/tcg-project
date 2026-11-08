@@ -6,6 +6,7 @@ import { actorOf } from '../engine/rules';
 import { cuesFor } from '../audio/cues';
 import { isMuted, playCues, setMuted as persistMuted } from '../audio/sfx';
 import { deckById, randomDeck } from '../cards/decks';
+import { resolveDeck } from '../cards/customDecks';
 import { getDef } from '../cards/cards';
 import { aiShouldAct, pickAction } from '../ai/ai';
 import { CHARGE_MS, CHARGE_SPELLS, HEAL_MS, HEAL_SPELLS, SMOKE_MS, SMOKE_SPELLS } from '../ui/spellTiming';
@@ -177,7 +178,7 @@ export const useGame = create<Store>((set, get) => {
     startAI: (deckId, oppDeckId) => {
       const seed = Math.floor(Math.random() * 0x7fffffff);
       // AI plays the pre-picked deck (shown in the face-off), else a random one.
-      const aiDeck = oppDeckId ? deckById(oppDeckId) : randomDeck();
+      const aiDeck = oppDeckId ? resolveDeck(oppDeckId) : randomDeck();
       set({
         mode: 'ai',
         myId: 'A',
@@ -187,7 +188,7 @@ export const useGame = create<Store>((set, get) => {
         forfeit: null,
         charging: null,
         lastAiDecks: { deck: deckId, oppDeck: aiDeck.id },
-        game: createInitialState(seed, deckById(deckId).cards, aiDeck.cards),
+        game: createInitialState(seed, resolveDeck(deckId).cards, aiDeck.cards),
       });
       scheduleAi(); // in case AI ever goes first (it doesn't on turn 1, but safe)
     },
@@ -202,7 +203,7 @@ export const useGame = create<Store>((set, get) => {
         error: null,
         forfeit: null,
         charging: null,
-        game: createInitialState(seed, deckById(deckA).cards, deckById(deckB).cards),
+        game: createInitialState(seed, resolveDeck(deckA).cards, resolveDeck(deckB).cards),
       });
     },
 

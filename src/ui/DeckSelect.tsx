@@ -1,19 +1,16 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DECK_LIST, deckById, type DeckMeta } from '../cards/decks';
+import { customMeta, loadCustomDecks } from '../cards/customDecks';
 import { getDef } from '../cards/cards';
-
-// Emblem art auto-wires to /cards/<id>.png; fall back to <id>.svg, then hide the
-// <img> so a missing file degrades gracefully instead of showing a broken-image icon.
-function artFallback(e: React.SyntheticEvent<HTMLImageElement>) {
-  const img = e.currentTarget;
-  if (img.src.endsWith('.png')) img.src = img.src.replace(/\.png$/, '.svg');
-  else img.style.display = 'none';
-}
+import { artFallback } from './artFallback';
 
 // Pick a deck before a game. Shows name, battle style, description, art.
 // `confirmStart`: glow the choice + a face-off transition before invoking onPick.
 // `disabledId`: a deck that can't be picked (e.g. already taken by player 1).
+// `customDecks`: include the player's own builds. Off for Online PvP, where both
+//   clients resolve a deck id from their OWN catalog and a custom id the peer has
+//   never seen would silently build two different decks from one seed.
 // `vsDeckId`: the opponent's deck, when known up-front — enables the VS face-off
 // (fly-in with wind streaks, then a slow drift to center) during the transition.
 // Desktop: a staggered grid. Mobile: a swipeable carousel (arrows + drag).
@@ -24,6 +21,7 @@ export function DeckSelect({
   confirmStart,
   disabledId,
   vsDeckId,
+  customDecks = true,
 }: {
   title?: string;
   onPick: (deckId: string) => void;
@@ -31,8 +29,13 @@ export function DeckSelect({
   confirmStart?: boolean;
   disabledId?: string;
   vsDeckId?: string;
+  customDecks?: boolean;
 }) {
   const [chosen, setChosen] = useState<string | null>(null);
+  // Read once on mount: the shelf shouldn't shift under a player mid-choice.
+  const [decks] = useState<DeckMeta[]>(() =>
+    customDecks ? [...DECK_LIST, ...loadCustomDecks().map(customMeta)] : DECK_LIST,
+  );
 
   function choose(id: string) {
     if (chosen || id === disabledId) return;
@@ -71,6 +74,7 @@ export function DeckSelect({
       <h2 className="deck-title">{title}</h2>
 
       <DeckPicker
+        decks={decks}
         chosen={chosen}
         disabledId={disabledId}
         onChoose={choose}
@@ -179,11 +183,13 @@ function FaceOffCard({ deck, from }: { deck: DeckMeta; from: 'left' | 'right' })
 
 // Grid on desktop, swipe/arrow carousel on mobile (≤640px).
 function DeckPicker({
+  decks,
   chosen,
   disabledId,
   onChoose,
   renderInner,
 }: {
+  decks: DeckMeta[];
   chosen: string | null;
   disabledId?: string;
   onChoose: (id: string) => void;
@@ -205,7 +211,7 @@ function DeckPicker({
   const go = (delta: number) => {
     if (chosen) return;
     setDir(delta);
-    setIndex((i) => (i + delta + DECK_LIST.length) % DECK_LIST.length);
+    setIndex((i) => (i + delta + decks.length) % decks.length);
   };
 
   if (!isMobile) {
@@ -216,7 +222,7 @@ function DeckPicker({
         animate="show"
         variants={{ hidden: {}, show: { transition: { staggerChildren: 0.07 } } }}
       >
-        {DECK_LIST.map((d) => {
+        {decks.map((d) => {
           const taken = d.id === disabledId;
           const selected = chosen === d.id;
           return (
@@ -243,7 +249,7 @@ function DeckPicker({
     );
   }
 
-  const d = DECK_LIST[index];
+  const d = decks[index];
   const taken = d.id === disabledId;
   const selected = chosen === d.id;
   const variants = {
@@ -309,7 +315,7 @@ function DeckPicker({
       </div>
 
       <div className="carousel-dots">
-        {DECK_LIST.map((x, i) => (
+        {decks.map((x, i) => (
           <span key={x.id} className={'dot' + (i === index ? ' on' : '')} />
         ))}
       </div>

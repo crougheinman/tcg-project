@@ -1503,3 +1503,110 @@ a:focus-visible {
 /* Focus-restore targets: they take focus programmatically when a focused card
    leaves the DOM, so they must not draw a ring of their own. */
 .hand:focus, .row.creatures:focus { outline: none; }
+
+/* ---- Deck Builder ---- */
+.db-shelf { max-width: 1100px; margin: 0 auto; padding: 18px 16px 40px; }
+.db-note {
+  color: var(--muted); font-size: 14px; line-height: 1.5; margin: 0 0 18px;
+  border-left: 3px solid var(--frame); padding-left: 12px;
+}
+.db-note strong { color: var(--ink); }
+.db-h3 { color: var(--gold); font-family: 'Cinzel', serif; margin: 26px 0 10px; font-size: 15px; }
+.db-row { display: flex; flex-wrap: wrap; gap: 10px; }
+
+.db-new, .db-clone {
+  background: var(--panel); color: var(--ink); border: 1px solid var(--frame);
+  border-radius: var(--radius); padding: 12px 16px; cursor: pointer; font-size: 14px;
+}
+.db-new { border-color: var(--gold); color: var(--gold); font-weight: 700; }
+.db-new:hover, .db-clone:hover { background: var(--bg2); }
+
+.db-saved { display: flex; align-items: stretch; }
+.db-saved-open {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--frame);
+  border-right: none; border-radius: var(--radius) 0 0 var(--radius);
+  padding: 10px 14px; cursor: pointer; min-width: 150px; text-align: left;
+}
+.db-saved-name { font-weight: 700; }
+.db-saved-sub { color: var(--muted); font-size: 12px; }
+.db-del {
+  background: var(--panel); color: var(--muted); border: 1px solid var(--frame);
+  border-radius: 0 var(--radius) var(--radius) 0; padding: 0 12px; cursor: pointer;
+}
+.db-del:hover { color: #fff; background: var(--danger); border-color: var(--danger); }
+
+.db-name {
+  background: var(--bg2); color: var(--ink); border: 1px solid var(--frame);
+  border-radius: var(--radius); padding: 8px 12px; font-size: 15px;
+  font-family: 'Cinzel', serif; min-width: 200px;
+}
+.db-count {
+  margin-left: auto; color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums;
+  align-self: center; padding: 0 6px;
+}
+.db-count.ok { color: var(--good); }
+.db-save {
+  background: var(--gold); color: #241a05; border: none; border-radius: var(--radius);
+  padding: 8px 16px; font-weight: 700; cursor: pointer;
+}
+.db-save:disabled { background: var(--panel); color: var(--muted); cursor: not-allowed; }
+
+.db-issues {
+  flex: none; max-width: 1100px; margin: 10px auto 0; padding: 10px 16px 10px 34px; list-style: disc;
+  color: var(--danger); font-size: 13px; line-height: 1.6;
+}
+
+.db-body {
+  /* .gallery is a flex column with overflow hidden, so the body has to claim the
+     remaining height and own its own scrolling — otherwise it collapses to the
+     width of one card and clips every card face. */
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 18px;
+  padding: 14px 18px 40px; align-items: start;
+}
+.db-pool {
+  display: grid; gap: 20px 16px; justify-content: center;
+  grid-template-columns: repeat(auto-fill, var(--card-w));
+}
+/* Match the codex: cap rules text so every card face keeps its fixed height. */
+.db-pick .card-text { max-height: 30px; }
+/* The pool reuses the in-game .card face, so only the button chrome is new. */
+.db-pick { position: relative; cursor: pointer; text-align: left; padding: 0; }
+.db-pick:hover:not(:disabled) { transform: translateY(-4px); }
+.db-pick.full { opacity: 0.45; cursor: not-allowed; }
+.db-have {
+  position: absolute; right: -6px; top: -6px; z-index: 3;
+  background: var(--gold); color: #241a05; border-radius: 999px;
+  padding: 2px 7px; font-size: 12px; font-weight: 700;
+}
+
+.db-list {
+  background: var(--panel); border: 1px solid var(--frame); border-radius: var(--radius);
+  padding: 8px; position: sticky; top: 12px; max-height: 76vh; overflow-y: auto;
+}
+.db-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 18px 8px; }
+.db-line {
+  display: flex; align-items: center; gap: 8px; padding: 5px 6px;
+  border-left: 3px solid transparent; border-radius: 4px; font-size: 13px;
+}
+.db-line:hover { background: var(--bg2); }
+.db-line.creature { border-left-color: var(--creature); }
+.db-line.sorcery { border-left-color: var(--sorcery); }
+.db-line.instant { border-left-color: var(--instant); }
+.db-line.land { border-left-color: var(--land); }
+.db-n { color: var(--gold); font-weight: 700; min-width: 18px; font-variant-numeric: tabular-nums; }
+.db-nm { flex: 1; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-cost { color: var(--muted); font-variant-numeric: tabular-nums; }
+.db-minus {
+  background: transparent; color: var(--muted); border: 1px solid var(--frame);
+  border-radius: 4px; width: 22px; height: 22px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 16px; line-height: 1; padding: 0; flex: none;
+}
+.db-minus:hover { color: #fff; background: var(--danger); border-color: var(--danger); }
+
+@media (max-width: 860px) {
+  .db-body { grid-template-columns: 1fr; }
+  .db-list { position: static; max-height: none; }
+}

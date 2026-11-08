@@ -4,6 +4,7 @@ import { getDef } from '../cards/cards';
 import { power, toughness } from '../engine/rules';
 import type { CardInstance } from '../engine/types';
 import { useSetHover } from './hover';
+import { artFallback } from './artFallback';
 
 const LONG_PRESS_MS = 320;
 
@@ -24,12 +25,6 @@ interface Props {
   onDrop?: (point: { x: number; y: number }) => void;
   onDragChange?: (active: boolean) => void;
   onClick?: () => void;
-}
-
-function artFallback(e: React.SyntheticEvent<HTMLImageElement>) {
-  const img = e.currentTarget;
-  if (img.src.endsWith('.png')) img.src = img.src.replace(/\.png$/, '.svg');
-  else img.style.display = 'none';
 }
 
 // Framer Motion owns transform (scale/rotate/y) so it can animate enter, exit,

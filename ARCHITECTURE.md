@@ -150,6 +150,21 @@ Take Counter and Grasp from the Grave live. `pickBlocks` is the strongest routin
 harness (`ai/__tests__/ai.test.ts`) runs every deck pairing across seeds with a 4000-step cap and
 asserts termination, a winner, and that every picked action was one `legalActions` offered.
 
+**Deck building — `src/cards/customDecks.ts` + `ui/DeckBuilder.tsx`.** Players build their own
+30-card decks. Because cards are already pure data, this is UI only — the engine never learns a deck
+was hand-built. `validateDeck` is pure and tested: exactly 30 cards, at most `MAX_COPIES` (6) of any
+non-land, at least one land, no unknown ids, and no tokens. The copy limit is 6 precisely so that
+**every starter deck is itself a legal custom deck** (Skyward runs 6 Stoneback Cub), which is
+asserted in a test — if the builder could not express a starter, it would not be enforcing the
+game's own rules. The token blacklist is derived from the `token` effects that create Wolves and
+Zombies, so a new token is excluded the moment something references it. Custom decks are
+**local-only (vs AI / hotseat)**: the PvP handshake exchanges deck *ids* and each client resolves
+them from its own catalog, so a custom id the peer has never seen would build two different decks
+from one seed — a guaranteed desync. Sending the card list over the wire would lift that, but it is
+a protocol change that also widens the peer-trust surface. Use `resolveDeck(id)` wherever a
+player-chosen deck becomes cards; plain `deckById` knows only starters and silently falls back to
+Emberwood.
+
 **Cards — `src/cards`.** A fully data-driven catalog of 41 `CardDef`s (`cards.ts`) plus 8 starter
 decks of 30 (`decks.ts`). Effects are a discriminated union of 8 kinds (`types.ts`), **every one
 implemented** in the `applyEffect` switch (`reducer.ts:189`). All 3 keywords (haste/flying/defender)
@@ -242,7 +257,7 @@ from this list.
 | **Med** | **No double-deck-out terminal.** Deck-out is only checked on a forced draw. | `reducer.ts` `drawCard` | A both-empty board has no terminal condition (unlikely at 20 life / 30 cards). |
 | **Med** | **Host/join race + multiple-joiner corruption**; unhandled Supabase send/subscribe errors; 4-char room code with no uniqueness/auth; peer deck id trusted with divergent fallbacks. | `net/match.ts` `createMatch`/`joinMatch` | Handshake robustness gaps; a stray joiner can corrupt an in-progress match. |
 | **Med** | **Two version sources to keep in sync** (`version.ts` and `package.json`, both `1.0.2`); **no `prefers-reduced-motion`** despite `repeat:Infinity` loops. | `package.json`, `src/version.ts`, `ui/ImpactFx.tsx` | Regressions land unnoticed; accessibility/versioning drift. |
-| **Low** | **No audio settings beyond on/off** (no volume slider); `spellTrigger` loop reads a live-mutated array (`reducer.ts` `castSorcery`); `destroy` isn't truly unconditional (>9999 toughness survives); unbounded net resend history; dead `STARTER_DECKS` export; click-only cards with no keyboard path. | various | Latent hazards + accessibility gaps. |
+| **Low** | **No audio settings beyond on/off** (no volume slider); `spellTrigger` loop reads a live-mutated array (`reducer.ts` `castSorcery`); `destroy` isn't truly unconditional (>9999 toughness survives); unbounded net resend history; click-only cards with no keyboard path. | various | Latent hazards + accessibility gaps. |
 
 ---
 

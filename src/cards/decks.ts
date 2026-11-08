@@ -103,11 +103,6 @@ export const DECK_GRAVETIDE: string[] = [
   ...repeat('grasp_from_grave', 1),
 ]; // 30
 
-export const STARTER_DECKS: Record<string, string[]> = {
-  Emberwood: DECK_EMBERWOOD,
-  Skyward: DECK_SKYWARD,
-};
-
 export interface DeckMeta {
   id: string;
   name: string;

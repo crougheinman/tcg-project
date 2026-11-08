@@ -7,6 +7,7 @@ import { randomDeck } from '../cards/decks';
 import { Rulebook } from './Rulebook';
 import { DeckSelect } from './DeckSelect';
 import { CardGallery } from './CardGallery';
+import { DeckBuilder } from './DeckBuilder';
 import { APP_VERSION } from '../version';
 
 // Home-page patch notes. Balance pass tuned across ~5,000 simulated AI-vs-AI duels
@@ -50,6 +51,7 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
   const [p1Deck, setP1Deck] = useState<string | null>(null); // hotseat: player 1's deck
   const [aiDeck, setAiDeck] = useState<string | null>(null); // vs AI: opponent deck, pre-picked for the face-off
   const [showGallery, setShowGallery] = useState(false); // browse every card in the game
+  const [showBuilder, setShowBuilder] = useState(false);
 
   const cancel = () => {
     setPicking(null);
@@ -60,7 +62,10 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
   // Resolve the current screen (keyed so it can animate in/out).
   let screen: string;
   let content: ReactNode;
-  if (showGallery) {
+  if (showBuilder) {
+    screen = 'builder';
+    content = <DeckBuilder onBack={() => setShowBuilder(false)} />;
+  } else if (showGallery) {
     screen = 'gallery';
     content = <CardGallery onBack={() => setShowGallery(false)} />;
   } else if (picking === 'ai') {
@@ -116,6 +121,7 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
               </button>
             )}
             <button onClick={() => setShowGallery(true)}>Card Codex</button>
+            <button onClick={() => setShowBuilder(true)}>Deck Builder</button>
             <Rulebook icon={false} />
           </div>
 
