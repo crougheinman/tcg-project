@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { hasSupabase } from '../net/supabase';
+import { loadMatch } from '../net/resume';
 import { randomDeck } from '../cards/decks';
 import { Rulebook } from './Rulebook';
 import { DeckSelect } from './DeckSelect';
@@ -12,40 +13,38 @@ import { APP_VERSION } from '../version';
 // so every deck lands in a ~44–56% win band with real strengths and weaknesses.
 const PATCH_NOTES: { deck: string; kind: 'buff' | 'nerf'; change: string; why: string }[] = [
   {
-    deck: 'Skyward',
+    deck: 'Grave Tide',
     kind: 'nerf',
-    change: 'Sky Talon is now 2/1, with fewer flyers — traded card draw and burn for ground troops.',
-    why: 'It ruled the skies with almost no counterplay.',
+    change: 'Withering Touch hits for 3 (was 4), Shambling Ghoul is 2/2 (was 2/3), and one Grasp from the Grave became a Ghoul.',
+    why: 'The AI learned to hold removal for the block step, and Grave Tide ran away with the format.',
   },
   {
-    deck: 'Iron Blossom',
-    kind: 'nerf',
-    change: 'Iaijutsu Strike now grants +1/+1 (was +2/+1).',
-    why: 'Its instant tricks won every fight and closed games too fast.',
+    deck: 'Wildblitz',
+    kind: 'buff',
+    change: 'Two lands became two more Swift Lancers — down to 10 lands.',
+    why: 'A deck that tops out at three mana was drowning in lands it could not spend.',
   },
   {
     deck: 'Pyromancer',
     kind: 'buff',
-    change: 'Added Dread Maw finishers and more early blockers.',
-    why: 'Too fragile to survive aggro — or to actually finish the job.',
+    change: 'One land became a fourth Pyre Adept.',
+    why: 'Same story, milder: it flooded out instead of applying pressure.',
   },
   {
     deck: 'Stonewall',
-    kind: 'buff',
-    change: 'New win conditions — two Storm Drakes and Dread Maw — plus extra burn for big or flying threats.',
-    why: 'It could stall forever but never actually win.',
-  },
-  {
-    deck: 'Grave Tide',
-    kind: 'buff',
-    change: 'Sturdier Ghouls (2/3), Withering Touch hits for 4, and the Necromancer now raises the dead on ANY spell.',
-    why: 'Its bodies were too flimsy and it lacked reach.',
+    kind: 'nerf',
+    change: 'One Storm Drake became a fourth Granite Sentinel.',
+    why: 'Great blockers AND the best finisher was too much of both.',
   },
 ];
 
 export function MainMenu({ onOnline }: { onOnline: () => void }) {
   const startAI = useGame((s) => s.startAI);
   const startHotseat = useGame((s) => s.startHotseat);
+  const resumePvp = useGame((s) => s.resumePvp);
+  // An unfinished PvP match from this tab (reload / crash). Read once on mount so
+  // the button doesn't vanish mid-render once the record is cleared.
+  const [resumable] = useState(() => loadMatch());
   // After picking a mode, choose a deck before the game starts.
   const [picking, setPicking] = useState<'ai' | 'hotseat' | null>(null);
   const [p1Deck, setP1Deck] = useState<string | null>(null); // hotseat: player 1's deck
@@ -111,6 +110,11 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
             <button onClick={onOnline} disabled={!hasSupabase}>
               Online PvP{!hasSupabase ? ' (set Supabase keys)' : ''}
             </button>
+            {resumable && hasSupabase && (
+              <button className="resume-btn" onClick={resumePvp}>
+                ⟳ Reconnect to match {resumable.roomId}
+              </button>
+            )}
             <button onClick={() => setShowGallery(true)}>Card Codex</button>
             <Rulebook icon={false} />
           </div>

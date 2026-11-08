@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialState, MAX_DECK_SIZE } from '../state';
 import { applyAction } from '../reducer';
-import { isLand, isCreature, canAttack, availableMana, power, toughness } from '../rules';
+import { isLand, isCreature, canAttack, availableMana, power, toughness, actorOf, findCreature } from '../rules';
 import type { Action, CardInstance, GameState } from '../types';
 import { DECK_EMBERWOOD, DECK_SKYWARD, DECK_LIST, DECK_IRONBLOSSOM, DECK_GRAVETIDE } from '../../cards/decks';
 import { getDef } from '../../cards/cards';
@@ -472,6 +472,100 @@ describe('instants (flexible-timing spells)', () => {
   });
 });
 
+describe('actorOf (the single legal actor)', () => {
+  // The lockstep PvP transport stamps every action with one shared seq counter,
+  // which is only coherent while exactly one side may originate an action.
+  it('is the active player in main1, combat_attack and end', () => {
+    const base = fresh();
+    expect(actorOf({ ...base, phase: 'main1', active: 'A' })).toBe('A');
+    expect(actorOf({ ...base, phase: 'combat_attack', active: 'A' })).toBe('A');
+    expect(actorOf({ ...base, phase: 'end', active: 'B' })).toBe('B');
+  });
+
+  it('is the DEFENDER during combat_block', () => {
+    const base = fresh();
+    expect(actorOf({ ...base, phase: 'combat_block', active: 'A' })).toBe('B');
+    expect(actorOf({ ...base, phase: 'combat_block', active: 'B' })).toBe('A');
+  });
+
+  it('is the caster while a trigger is pending', () => {
+    const base = fresh();
+    const pending = { kind: 'whipflash' as const, source: 'x' };
+    expect(actorOf({ ...base, phase: 'main1', active: 'B', pending })).toBe('B');
+  });
+
+  it('tracks a real game across the attack/block handoff', () => {
+    const s = fresh();
+    const attacker = inst('dread_maw', { summoningSick: false });
+    s.players.A.battlefield = [attacker];
+    expect(actorOf(s)).toBe('A'); // main1
+    let g = applyAction(s, { type: 'advance' });
+    expect(actorOf(g)).toBe('A'); // combat_attack — attacker still acts
+    g = applyAction(g, { type: 'declareAttackers', attackers: [attacker.iid] });
+    expect(g.phase).toBe('combat_block');
+    expect(actorOf(g)).toBe('B'); // handed over to the defender
+  });
+});
+
+describe('declareBlockers validation guards', () => {
+  it('throws a clean Error (not a TypeError) when the attacker died mid-combat_block', () => {
+    // The defender's instant can kill a tapped attacker while blocks are still
+    // being declared. The attacker stays listed in combat.attackers but is gone
+    // from the battlefield, so validation must not dereference it blindly.
+    const s = fresh();
+    const attacker = inst('dread_maw', { summoningSick: false });
+    s.players.A.battlefield = [attacker];
+    s.players.B.battlefield = [
+      inst('aether_well', { owner: 'B' }),
+      inst('aether_well', { owner: 'B' }),
+      inst('ashigaru', { owner: 'B' }),
+    ];
+    s.players.B.hand = [inst('take_counter', { owner: 'B' })];
+    let g = applyAction(s, { type: 'advance' });
+    g = applyAction(g, { type: 'declareAttackers', attackers: [attacker.iid] });
+
+    const tc = g.players.B.hand.find((c) => c.def === 'take_counter')!;
+    g = applyAction(g, {
+      type: 'castSorcery',
+      iid: tc.iid,
+      target: { kind: 'creature', iid: attacker.iid },
+    });
+
+    // Precondition: listed as an attacker, but no longer on any battlefield.
+    expect(g.combat!.attackers).toContain(attacker.iid);
+    expect(findCreature(g, attacker.iid)).toBeNull();
+
+    const blocker = g.players.B.battlefield.find((c) => c.def === 'ashigaru')!;
+    const act: Action = { type: 'declareBlockers', blocks: { [blocker.iid]: attacker.iid } };
+    expect(() => applyAction(g, act)).toThrow('attacker no longer in play');
+    try {
+      applyAction(g, act);
+      expect.unreachable('should have thrown');
+    } catch (e) {
+      expect(e).toBeInstanceOf(Error);
+      expect(e).not.toBeInstanceOf(TypeError); // the old `!.card` bug
+    }
+  });
+
+  it('still resolves combat when the dead attacker is simply not blocked', () => {
+    const s = fresh();
+    const attacker = inst('dread_maw', { summoningSick: false });
+    s.players.A.battlefield = [attacker];
+    s.players.B.battlefield = [inst('aether_well', { owner: 'B' }), inst('aether_well', { owner: 'B' })];
+    s.players.B.hand = [inst('take_counter', { owner: 'B' })];
+    let g = applyAction(s, { type: 'advance' });
+    g = applyAction(g, { type: 'declareAttackers', attackers: [attacker.iid] });
+    const tc = g.players.B.hand.find((c) => c.def === 'take_counter')!;
+    g = applyAction(g, {
+      type: 'castSorcery',
+      iid: tc.iid,
+      target: { kind: 'creature', iid: attacker.iid },
+    });
+    g = applyAction(g, { type: 'declareBlockers', blocks: {} });
+    expect(g.players.B.life).toBe(20); // dead attacker deals no damage
+  });
+});
+
 describe('deck size limit', () => {
   it('rejects a deck larger than MAX_DECK_SIZE', () => {
     const tooBig = Array.from({ length: MAX_DECK_SIZE + 1 }, () => 'aether_well');
@@ -479,6 +573,12 @@ describe('deck size limit', () => {
   });
   it('every starter deck is within the limit', () => {
     for (const d of DECK_LIST) expect(d.cards.length).toBeLessThanOrEqual(MAX_DECK_SIZE);
+  });
+
+  it('every starter deck is exactly 30 cards', () => {
+    // Balance passes swap cards in and out by hand; this catches an edit that
+    // drops or duplicates one and silently changes a deck's consistency.
+    for (const d of DECK_LIST) expect(d.cards.length, `deck ${d.id}`).toBe(30);
   });
 });
 

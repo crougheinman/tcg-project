@@ -1,12 +1,17 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import type { Action, PlayerId } from '../engine/types';
+import { createLockstep, type LockstepOut } from './lockstep';
+import { clearMatch, saveMatch, type SavedMatch } from './resume';
 
 // PvP transport over a Supabase Realtime broadcast channel.
 // Lockstep: we relay *actions* only; both clients replay them through the same
 // deterministic engine starting from the same seed. No server compute.
-// ponytail: client-authoritative lockstep; move authority to a Supabase Edge
-// Function running the same engine if cheating ever matters.
+//
+// This file owns only the wire: channel wiring, liveness and the handshakes.
+// All sequencing/dedup/gap logic lives in the pure `lockstep.ts` core, which is
+// unit-tested. ponytail: client-authoritative lockstep; move authority to a
+// Supabase Edge Function running the same engine if cheating ever matters.
 
 /** An in-match chat message. Cosmetic only — never part of game state. */
 export interface ChatMessage {
@@ -18,12 +23,20 @@ export interface ChatMessage {
 /** Max characters per chat message (defensive cap; the dock also enforces it). */
 export const MAX_CHAT_LEN = 120;
 
+/** Peer liveness as the UI should present it. */
+export type PeerStatus = 'ok' | 'stale';
+
 export interface MatchConnection {
   roomId: string;
   role: PlayerId;
   seed: number;
   deckA: string; // host deck id
   deckB: string; // joiner deck id
+  /**
+   * Actions already applied before this connection existed. Empty for a fresh
+   * match; on a rejoin the store replays these to rebuild the exact GameState.
+   */
+  initialLog: Action[];
   sendAction: (a: Action) => void;
   onAction: (cb: (a: Action) => void) => void;
   // Chat rides a *separate* broadcast event, outside the lockstep action stream —
@@ -33,9 +46,11 @@ export interface MatchConnection {
   onChat: (cb: (m: ChatMessage) => void) => void;
   // Meta signals (outside the lockstep action stream): tell the peer we forfeited,
   // and learn when the peer left — either by aborting (explicit) or dropping off
-  // (no heartbeat for a while). The remaining player is declared the winner.
+  // (no heartbeat for a long while). The remaining player is declared the winner.
   sendAbort: () => void;
   onGone: (cb: (reason: 'aborted' | 'disconnected') => void) => void;
+  /** Transient liveness, for a "reconnecting…" banner. Recoverable, unlike onGone. */
+  onPeerStatus: (cb: (s: PeerStatus) => void) => void;
   leave: () => void;
 }
 
@@ -49,26 +64,14 @@ function randomRoom(): string {
 // How often to re-ask for a missing action while a gap persists (ms).
 const RESEND_INTERVAL_MS = 1200;
 
-// Liveness: each client pings on this cadence; if we hear nothing from the peer
-// (ping, action, chat, resend) for PEER_TIMEOUT_MS, we treat them as disconnected.
+// Liveness. Each client pings on PING_MS. Silence past PEER_STALE_MS shows a
+// recoverable "reconnecting" banner; only silence past PEER_GONE_MS ends the
+// match. The long gone-timeout is deliberate: a transient blip (tunnel, tab
+// backgrounded, wifi handoff) must not forfeit a game that can simply resync.
 const PING_MS = 3000;
-const PEER_TIMEOUT_MS = 12000;
+const PEER_STALE_MS = 9000;
+const PEER_GONE_MS = 45000;
 
-/**
- * Reliable, ordered, exactly-once delivery on top of Supabase broadcast (which is
- * best-effort: messages can be dropped, duplicated, or reordered).
- *
- * The game is turn-based — only one player is the legal actor at any moment, so
- * every applied action has a single global position in the combined stream. We
- * stamp each action with that position (`seq`) and have both clients apply the
- * stream strictly in order:
- *   - in-order action  -> apply immediately
- *   - future action    -> buffer it and request the missing range (a gap)
- *   - past/duplicate   -> ignore
- * The originator keeps a history of what it sent so it can answer resend requests.
- * Net result: the store only ever sees remote actions in order, exactly once, so
- * the deterministic engine can never desync from dropped/reordered packets.
- */
 function makeConnection(
   channel: RealtimeChannel,
   roomId: string,
@@ -76,49 +79,90 @@ function makeConnection(
   seed: number,
   deckA: string,
   deckB: string,
+  restoreLog?: Action[],
 ): MatchConnection {
-  let actionCb: ((a: Action) => void) | null = null;
   let chatCb: ((m: ChatMessage) => void) | null = null;
   let goneCb: ((reason: 'aborted' | 'disconnected') => void) | null = null;
-  let appliedCount = 0; // actions applied to the shared engine so far (local + remote)
-  const sentHistory = new Map<number, Action>(); // seqs this client originated
-  const buffer = new Map<number, Action>(); // received but not yet applicable (seq >= appliedCount)
+  let statusCb: ((s: PeerStatus) => void) | null = null;
 
-  // Peer liveness. lastSeen updates on any inbound peer message; the watchdog
-  // fires 'disconnected' if it goes stale. `ended` makes the signal fire once.
+  const send = (event: string, payload: unknown) =>
+    channel.send({ type: 'broadcast', event, payload });
+
+  // The pure sequencing core. Its outbound messages map 1:1 onto broadcast events.
+  const ls = createLockstep({
+    log: restoreLog,
+    emit: (m: LockstepOut) =>
+      m.event === 'action'
+        ? send('action', { seq: m.seq, action: m.action })
+        : send('resend', { from: m.from, to: m.to }),
+  });
+
+  /** Snapshot the match so a reload can rejoin rather than forfeit. */
+  function persist(): void {
+    saveMatch({ roomId, role, seed, deckA, deckB, log: ls.snapshot() });
+  }
+  if (restoreLog?.length) persist(); // keep the record fresh across a rejoin
+
+  // Peer liveness. `lastSeen` updates on any inbound peer message. `ended` makes
+  // the terminal signal fire exactly once.
   let ended = false;
+  let status: PeerStatus = restoreLog ? 'stale' : 'ok'; // a rejoin starts out of contact
   let lastSeen = Date.now();
-  const touch = () => {
-    lastSeen = Date.now();
+
+  const setStatus = (s: PeerStatus) => {
+    if (status === s || ended) return;
+    status = s;
+    statusCb?.(s);
   };
+
+  const touch = () => {
+    const wasStale = status === 'stale';
+    lastSeen = Date.now();
+    setStatus('ok');
+    // The peer just came back. We may have missed the tail of the stream while
+    // out of contact, and a pure gap at the END is invisible to the resend path
+    // (nothing newer arrived to reveal it), so ask explicitly.
+    if (wasStale) send('rejoin', { have: ls.applied });
+  };
+
   const declareGone = (reason: 'aborted' | 'disconnected') => {
     if (ended) return;
     ended = true;
+    clearMatch(); // the match is over — don't offer to reconnect to it
     goneCb?.(reason);
   };
 
-  // Apply every buffered action that is now next in sequence.
-  function drain(): void {
-    if (!actionCb) return; // not wired up yet — keep buffering
-    while (buffer.has(appliedCount)) {
-      const a = buffer.get(appliedCount)!;
-      buffer.delete(appliedCount);
-      actionCb(a);
-      appliedCount++;
-    }
-  }
-
-  function requestResend(from: number, to: number): void {
-    channel.send({ type: 'broadcast', event: 'resend', payload: { from, to } });
-  }
-
   channel.on('broadcast', { event: 'action' }, ({ payload }) => {
     touch();
-    const seq = payload.seq as number;
-    if (seq < appliedCount || buffer.has(seq)) return; // already applied or already queued
-    buffer.set(seq, payload.action as Action);
-    if (seq > appliedCount) requestResend(appliedCount, seq); // gap: ask for what's missing
-    drain();
+    ls.receive(payload.seq as number, payload.action as Action);
+  });
+
+  // Peer is missing [from, to); rebroadcast any of those we hold. Because the
+  // core keeps the FULL log (not just what we originated), either client can
+  // heal the other.
+  channel.on('broadcast', { event: 'resend' }, ({ payload }) => {
+    touch();
+    ls.serveResend(payload.from as number, payload.to as number);
+  });
+
+  // A peer (re)appeared and told us how much it has. Send it the tail it is
+  // missing; if it is somehow ahead of us, ask for ours through the resend path
+  // (which cannot loop, unlike answering a rejoin with another rejoin).
+  channel.on('broadcast', { event: 'rejoin' }, ({ payload }) => {
+    touch();
+    const have = payload.have as number;
+    const { from, actions } = ls.catchupFor(have);
+    if (actions.length) send('catchup', { from, actions });
+    if (have > ls.applied) send('resend', { from: ls.applied, to: have });
+  });
+
+  // A contiguous run of actions after a reconnect. Replayed through the normal
+  // receive path so dedup/ordering behave exactly as in steady state.
+  channel.on('broadcast', { event: 'catchup' }, ({ payload }) => {
+    touch();
+    const from = payload.from as number;
+    const actions = (payload.actions ?? []) as Action[];
+    actions.forEach((a, i) => ls.receive(from + i, a));
   });
 
   // Chat: deliver straight through, no ordering/dedup needed (cosmetic, best-effort).
@@ -131,17 +175,6 @@ function makeConnection(
     });
   });
 
-  // Peer is missing [from, to); rebroadcast any of those we originated.
-  channel.on('broadcast', { event: 'resend' }, ({ payload }) => {
-    touch();
-    const from = payload.from as number;
-    const to = payload.to as number;
-    for (let s = from; s < to; s++) {
-      const a = sentHistory.get(s);
-      if (a) channel.send({ type: 'broadcast', event: 'action', payload: { seq: s, action: a } });
-    }
-  });
-
   // Liveness ping (keeps lastSeen fresh even when the peer isn't acting).
   channel.on('broadcast', { event: 'ping' }, () => touch());
   // Peer explicitly forfeited (aborted the match).
@@ -151,18 +184,17 @@ function makeConnection(
   });
 
   // Re-request a stuck gap in case the resend itself was dropped.
-  const retry = setInterval(() => {
-    if (!actionCb || buffer.size === 0) return;
-    const lowest = Math.min(...buffer.keys());
-    if (lowest > appliedCount) requestResend(appliedCount, lowest);
-  }, RESEND_INTERVAL_MS);
+  const retry = setInterval(() => ls.pokeGap(), RESEND_INTERVAL_MS);
 
-  // Heartbeat out, and a watchdog that declares the peer disconnected if theirs
-  // goes silent. ponytail: heartbeat over broadcast — simpler than Presence given
-  // the post-subscribe .on() wiring here; swap to Presence if it ever matters.
-  const ping = setInterval(() => channel.send({ type: 'broadcast', event: 'ping' }), PING_MS);
+  // Heartbeat out, plus a two-stage watchdog: stale (recoverable) then gone.
+  // ponytail: heartbeat over broadcast — simpler than Presence given the
+  // post-subscribe .on() wiring here; swap to Presence if it ever matters.
+  const ping = setInterval(() => send('ping', {}), PING_MS);
   const watchdog = setInterval(() => {
-    if (!ended && Date.now() - lastSeen > PEER_TIMEOUT_MS) declareGone('disconnected');
+    if (ended) return;
+    const silent = Date.now() - lastSeen;
+    if (silent > PEER_GONE_MS) declareGone('disconnected');
+    else if (silent > PEER_STALE_MS) setStatus('stale');
   }, PING_MS);
 
   return {
@@ -171,33 +203,42 @@ function makeConnection(
     seed,
     deckA,
     deckB,
+    initialLog: restoreLog ? [...restoreLog] : [],
     sendAction: (a) => {
-      // The store applies the local action synchronously before calling this, so
-      // its position is the current count. Record it (for resends) and advance.
-      const seq = appliedCount;
-      sentHistory.set(seq, a);
-      appliedCount++;
-      channel.send({ type: 'broadcast', event: 'action', payload: { seq, action: a } });
+      // The store applies the local action synchronously before calling this.
+      ls.send(a);
+      persist();
     },
     onAction: (cb) => {
-      actionCb = cb;
-      drain(); // flush anything that arrived before we were wired up
+      ls.onApply((a) => {
+        cb(a);
+        persist();
+      });
     },
     sendChat: (text) => {
       const clean = text.trim().slice(0, MAX_CHAT_LEN);
       if (!clean) return;
       // self:false means we won't hear this back — the store shows our own bubble.
-      const msg: ChatMessage = { from: role, text: clean, id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` };
-      channel.send({ type: 'broadcast', event: 'chat', payload: msg });
+      const msg: ChatMessage = {
+        from: role,
+        text: clean,
+        id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      };
+      send('chat', msg);
     },
     onChat: (cb) => {
       chatCb = cb;
     },
     sendAbort: () => {
-      channel.send({ type: 'broadcast', event: 'forfeit', payload: { from: role } });
+      clearMatch();
+      send('forfeit', { from: role });
     },
     onGone: (cb) => {
       goneCb = cb;
+    },
+    onPeerStatus: (cb) => {
+      statusCb = cb;
+      if (status !== 'ok') cb(status); // report a rejoin's initial out-of-contact state
     },
     leave: () => {
       clearInterval(retry);
@@ -220,7 +261,13 @@ export function createMatch(
     config: { broadcast: { self: false } },
   });
 
+  // Only the first joiner starts the match. A second 'join' (a stray client on the
+  // same 4-char code, or a retried packet) would otherwise build a second engine
+  // over the same channel and corrupt the match in progress.
+  let started = false;
   channel.on('broadcast', { event: 'join' }, ({ payload }) => {
+    if (started) return;
+    started = true;
     const joinDeck = (payload.deck as string) ?? 'skyward';
     // Share seed + host deck so both build the identical game.
     channel.send({ type: 'broadcast', event: 'init', payload: { seed, deck: hostDeck } });
@@ -242,13 +289,47 @@ export function joinMatch(
     config: { broadcast: { self: false } },
   });
 
+  let started = false;
   channel.on('broadcast', { event: 'init' }, ({ payload }) => {
+    if (started) return; // ignore a duplicate/retried init
+    started = true;
     const hostDeck = (payload.deck as string) ?? 'emberwood';
     onStart(makeConnection(channel, roomId, 'B', payload.seed as number, hostDeck, joinDeck));
   });
   channel.subscribe((status) => {
     if (status === 'SUBSCRIBED') {
       channel.send({ type: 'broadcast', event: 'join', payload: { deck: joinDeck } });
+    }
+  });
+}
+
+/**
+ * Rejoin a match this tab was already playing (after a reload or a long stall).
+ * Nothing is re-negotiated: the saved seed and deck ids rebuild the same initial
+ * state, the saved log replays it forward, and the `rejoin` handshake pulls
+ * whatever the peer applied while we were away.
+ */
+export function rejoinMatch(saved: SavedMatch, onStart: (conn: MatchConnection) => void): void {
+  if (!supabase) throw new Error('Supabase not configured');
+  const channel = supabase.channel(`match:${saved.roomId}`, {
+    config: { broadcast: { self: false } },
+  });
+
+  onStart(
+    makeConnection(
+      channel,
+      saved.roomId,
+      saved.role,
+      saved.seed,
+      saved.deckA,
+      saved.deckB,
+      saved.log,
+    ),
+  );
+
+  channel.subscribe((status) => {
+    if (status === 'SUBSCRIBED') {
+      channel.send({ type: 'broadcast', event: 'rejoin', payload: { have: saved.log.length } });
     }
   });
 }

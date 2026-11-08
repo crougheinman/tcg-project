@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { getDef } from '../cards/cards';
-import { availableMana, canAttack, isCreature, isLand } from '../engine/rules';
+import { actorOf, availableMana, canAttack, isCreature, isLand } from '../engine/rules';
 import type { CardInstance, PlayerId } from '../engine/types';
 import { needsTarget, opponentOf } from '../engine/types';
 import { CardView } from './CardView';
@@ -29,6 +29,7 @@ export function Board() {
   const playAgain = useGame((s) => s.playAgain);
   const forfeit = useGame((s) => s.forfeit);
   const error = useGame((s) => s.error);
+  const peerStale = useGame((s) => s.peerStale);
   const clearError = useGame((s) => s.clearError);
 
   const [menuOpen, setMenuOpen] = useState(false); // burger menu modal
@@ -197,7 +198,7 @@ export function Board() {
     setAnnounce({ id: announceId.current++, text, ms: 2400 });
   }, [game, myId, mode]);
 
-  const actor: PlayerId = game.phase === 'combat_block' ? opponentOf(game.active) : game.active;
+  const actor: PlayerId = actorOf(game); // never re-inline the combat_block ternary
   const localId: PlayerId = mode === 'hotseat' ? actor : myId;
   const oppId = opponentOf(localId);
   const canAct = !game.winner && (mode === 'hotseat' || actor === myId);
@@ -432,7 +433,7 @@ export function Board() {
         className={'battlefield' + (mine && dragActive ? ' drop-active' : '')}
         ref={mine ? myFieldRef : undefined}
       >
-        <div className="row creatures">
+        <div className="row creatures" data-focus-zone tabIndex={-1}>
           <AnimatePresence>
             {creatures.map((c) => (
               <motion.div
@@ -692,7 +693,9 @@ export function Board() {
           <section className="player-zone me">
             {permanents(localId, localId, true)}
             <div className="player-dock">
-              <div className="hand">
+              {/* tabIndex -1: not a tab stop itself, but a place to put focus back
+                  when the focused card is played and leaves the DOM. */}
+              <div className="hand" data-focus-zone tabIndex={-1}>
                 <AnimatePresence>
                   {me.hand.map((c) => (
                     <CardView
@@ -798,6 +801,16 @@ export function Board() {
         {error && (
           <div className="toast" onClick={clearError}>
             {error}
+          </div>
+        )}
+
+        {/* The peer went quiet but the match is still recoverable: the transport
+            resyncs by itself if they come back, and only gives up after a long
+            grace period. Informational only — play is already blocked because it
+            is not this client's turn to act. */}
+        {mode === 'pvp' && peerStale && !game.winner && (
+          <div className="toast net-stale" role="status">
+            <span className="net-stale-dot" aria-hidden /> Opponent connection lost — reconnecting…
           </div>
         )}
 

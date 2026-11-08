@@ -2,12 +2,14 @@ import { create } from 'zustand';
 import { createInitialState } from '../engine/state';
 import { applyAction } from '../engine/reducer';
 import type { Action, GameState, PlayerId, Target } from '../engine/types';
-import { opponentOf } from '../engine/types';
+import { actorOf } from '../engine/rules';
 import { deckById, randomDeck } from '../cards/decks';
 import { getDef } from '../cards/cards';
 import { aiShouldAct, pickAction } from '../ai/ai';
 import { CHARGE_MS, CHARGE_SPELLS, HEAL_MS, HEAL_SPELLS, SMOKE_MS, SMOKE_SPELLS } from '../ui/spellTiming';
 import type { MatchConnection } from '../net/match';
+import { rejoinMatch } from '../net/match';
+import { clearMatch, loadMatch } from '../net/resume';
 
 export type Mode = 'menu' | 'ai' | 'hotseat' | 'pvp';
 
@@ -28,6 +30,10 @@ interface Store {
   // PvP meta win: opponent left the match (aborted / disconnected). Kept out of the
   // deterministic GameState — it's a network outcome, not a rules outcome.
   forfeit: { winner: PlayerId; reason: string } | null;
+  // Peer is out of contact but the match is still recoverable (a blip, a
+  // backgrounded tab). Purely presentational — the engine is untouched, and the
+  // transport resyncs by itself if the peer comes back.
+  peerStale: boolean;
   // Guided mode: contextual coach bubbles that teach the game. Persisted; ON by
   // default so newcomers get help immediately.
   guided: boolean;
@@ -51,6 +57,8 @@ interface Store {
   startAI: (deckId: string, oppDeckId?: string) => void; // oppDeckId: pre-picked (face-off shows it)
   startHotseat: (deckA: string, deckB: string) => void;
   startPvp: (net: MatchConnection) => void;
+  /** Rejoin the match this tab was playing before a reload. No-op if there is none. */
+  resumePvp: () => void;
   dispatch: (action: Action) => void; // local human action
   sendChat: (text: string) => void; // local human chat (PvP only)
   abortMatch: () => void; // local player forfeits (PvP tells the opponent) -> menu
@@ -70,8 +78,8 @@ export const useGame = create<Store>((set, get) => {
   type Telegraph = { casterId: PlayerId; def: string; kind: 'charge' | 'smoke' | 'heal'; ms: number; target?: Target };
   function telegraphFor(g: GameState, action: Action): Telegraph | null {
     if (action.type !== 'castSorcery') return null;
-    // instants can be cast off-turn while blocking -> caster derives from the phase
-    const casterId = g.phase === 'combat_block' ? opponentOf(g.active) : g.active;
+    // instants can be cast off-turn while blocking -> caster is whoever may act now
+    const casterId = actorOf(g);
     const card = g.players[casterId].hand.find((c) => c.iid === action.iid);
     if (!card) return null;
     if (CHARGE_SPELLS.has(card.def) && getDef(card.def).effect?.type === 'damage')
@@ -139,6 +147,7 @@ export const useGame = create<Store>((set, get) => {
     chat: noChat(),
     forfeit: null,
     charging: null,
+    peerStale: false,
     guided: localStorage.getItem('guided') !== '0', // default ON
     setGuided: (v) => {
       localStorage.setItem('guided', v ? '1' : '0');
@@ -179,15 +188,33 @@ export const useGame = create<Store>((set, get) => {
     },
 
     startPvp: (net) => {
+      // Rebuild the match. For a fresh game initialLog is empty; for a rejoin it
+      // is the saved action stream, and replaying it through the same seeded
+      // engine lands byte-identical to where this client left off.
+      let game: GameState;
+      try {
+        game = createInitialState(net.seed, deckById(net.deckA).cards, deckById(net.deckB).cards);
+        for (const a of net.initialLog) game = applyAction(game, a);
+      } catch (e) {
+        // A log that will not replay is a corrupt record, not a playable match.
+        clearMatch();
+        net.leave();
+        set({ mode: 'menu', game: null, net: null, error: `could not restore match: ${(e as Error).message}` });
+        return;
+      }
+
       net.onAction((action) => {
         const s = get();
         if (!s.game) return;
         try {
-          set({ game: applyAction(s.game, action) });
+          const next = applyAction(s.game, action);
+          if (next.winner) clearMatch(); // finished — nothing left to reconnect to
+          set({ game: next });
         } catch (e) {
           set({ error: `desync: ${(e as Error).message}` });
         }
       });
+      net.onPeerStatus((st) => set({ peerStale: st === 'stale' }));
       net.onChat((m) => showBubble(m.from, m.text)); // opponent message -> their avatar
       // Opponent left the match: declare the local player the winner, with the reason.
       net.onGone((reason) => {
@@ -196,7 +223,7 @@ export const useGame = create<Store>((set, get) => {
         const winner = s.myId;
         const why =
           reason === 'aborted' ? 'Your opponent aborted the match.' : 'Your opponent disconnected.';
-        set({ forfeit: { winner, reason: why } });
+        set({ forfeit: { winner, reason: why }, peerStale: false }); // terminal — stop the "reconnecting" banner
       });
       set({
         mode: 'pvp',
@@ -207,13 +234,31 @@ export const useGame = create<Store>((set, get) => {
         chat: noChat(),
         forfeit: null,
         charging: null,
-        game: createInitialState(net.seed, deckById(net.deckA).cards, deckById(net.deckB).cards),
+        peerStale: false,
+        game,
       });
+    },
+
+    resumePvp: () => {
+      const saved = loadMatch();
+      if (!saved) return;
+      try {
+        rejoinMatch(saved, (conn) => get().startPvp(conn));
+      } catch (e) {
+        clearMatch();
+        set({ error: (e as Error).message });
+      }
     },
 
     dispatch: (action) => {
       const s = get();
       if (!s.game || s.charging) return; // ignore input while a spell is telegraphing
+      // PvP lockstep: only the legal actor may ORIGINATE an action. The transport
+      // stamps each action with a single shared seq counter, so if the non-actor
+      // client also originates one both sides stamp the same seq and each drops
+      // the other's copy as "already applied" -> permanent, silent divergence.
+      // Enforce the invariant here, at the only place local input enters.
+      if (s.mode === 'pvp' && s.myId !== actorOf(s.game)) return;
       const tel = s.mode !== 'pvp' ? telegraphFor(s.game, action) : null;
       const apply = () => {
         const cur = get();
@@ -226,6 +271,7 @@ export const useGame = create<Store>((set, get) => {
           return;
         }
         set({ game: next, error: null, charging: null });
+        if (next.winner) clearMatch(); // finished — nothing left to reconnect to
         if (cur.mode === 'pvp' && cur.net) cur.net.sendAction(action);
         if (cur.mode === 'ai') scheduleAi();
       };
@@ -257,7 +303,8 @@ export const useGame = create<Store>((set, get) => {
       } else {
         s.net?.leave();
       }
-      set({ mode: 'menu', game: null, net: null, aiId: null, error: null, chat: noChat(), forfeit: null, charging: null });
+      clearMatch(); // deliberately leaving — don't offer to reconnect
+      set({ mode: 'menu', game: null, net: null, aiId: null, error: null, chat: noChat(), forfeit: null, charging: null, peerStale: false });
     },
 
     playAgain: () => {
@@ -268,7 +315,8 @@ export const useGame = create<Store>((set, get) => {
 
     toMenu: () => {
       get().net?.leave();
-      set({ mode: 'menu', game: null, net: null, aiId: null, error: null, chat: noChat(), forfeit: null, charging: null });
+      clearMatch(); // deliberately leaving — don't offer to reconnect
+      set({ mode: 'menu', game: null, net: null, aiId: null, error: null, chat: noChat(), forfeit: null, charging: null, peerStale: false });
     },
 
     clearError: () => set({ error: null }),

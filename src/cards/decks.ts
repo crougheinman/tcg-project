@@ -31,8 +31,8 @@ export const DECK_SKYWARD: string[] = [
 ]; // 30
 
 export const DECK_PYROMANCER: string[] = [
-  ...repeat('aether_well', 12),
-  ...repeat('pyre_adept', 3),
+  ...repeat('aether_well', 11),
+  ...repeat('pyre_adept', 4),
   ...repeat('ember_sprite', 2),
   ...repeat('stoneback_cub', 4),
   ...repeat('cinderbolt', 3),
@@ -43,9 +43,9 @@ export const DECK_PYROMANCER: string[] = [
 ]; // 30
 
 export const DECK_WILDBLITZ: string[] = [
-  ...repeat('aether_well', 12),
+  ...repeat('aether_well', 10),
   ...repeat('ember_sprite', 3),
-  ...repeat('swift_lancer', 3),
+  ...repeat('swift_lancer', 5),
   ...repeat('stoneback_cub', 3),
   ...repeat('kunoichi', 3),
   ...repeat('call_wolves', 3),
@@ -67,12 +67,12 @@ export const DECK_WILDWOOD: string[] = [
 export const DECK_STONEWALL: string[] = [
   ...repeat('aether_well', 13),
   ...repeat('bulwark', 1),
-  ...repeat('granite_sentinel', 3),
+  ...repeat('granite_sentinel', 4),
   ...repeat('soothe', 2),
   ...repeat('cinderbolt', 2),
   ...repeat('scorch', 2),
   ...repeat('insight', 1),
-  ...repeat('storm_drake', 2),
+  ...repeat('storm_drake', 1),
   ...repeat('topple', 1),
   ...repeat('take_counter', 1),
   ...repeat('dread_maw', 2),
@@ -92,7 +92,7 @@ export const DECK_IRONBLOSSOM: string[] = [
 
 export const DECK_GRAVETIDE: string[] = [
   ...repeat('aether_well', 12),
-  ...repeat('shambling_ghoul', 4),
+  ...repeat('shambling_ghoul', 5),
   ...repeat('plague_priest', 2),
   ...repeat('grave_necromancer', 2),
   ...repeat('rotting_hulk', 2),
@@ -100,7 +100,7 @@ export const DECK_GRAVETIDE: string[] = [
   ...repeat('raise_horde', 1),
   ...repeat('withering_touch', 2),
   ...repeat('soul_siphon', 1),
-  ...repeat('grasp_from_grave', 2),
+  ...repeat('grasp_from_grave', 1),
 ]; // 30
 
 export const STARTER_DECKS: Record<string, string[]> = {

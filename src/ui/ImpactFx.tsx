@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 
 // Pure framer-motion impact effects — no spritesheets. Each is a burst of
 // primitive shapes (rings / flashes / shards) themed by color.
@@ -82,6 +82,9 @@ export function SpellImpactFx({ x, y, theme }: { x: number; y: number; theme: Sp
  * Duration matches the caller's charge window so it vanishes right as the bolt fires.
  */
 export function ChargeFx({ x, y, theme, ms }: { x: number; y: number; theme: SpellTheme; ms: number }) {
+  // Looping particles are the one thing MotionConfig cannot soften (it leaves
+  // opacity alone), so drop the repeat and play the burst once instead.
+  const reduce = useReducedMotion();
   const PULSES = 9;
   const times: number[] = [];
   const coreScale: number[] = [];
@@ -125,7 +128,7 @@ export function ChargeFx({ x, y, theme, ms }: { x: number; y: number; theme: Spe
           transition={{
             duration: 0.5,
             delay: e.delay,
-            repeat: Infinity,
+            repeat: reduce ? 0 : Infinity,
             repeatDelay: 0.15,
             ease: 'easeIn',
           }}
@@ -229,6 +232,9 @@ export function ManaConsumeFx({ x, y }: { x: number; y: number }) {
 /** Soul Siphon: green souls stream in from all sides and get pulled INTO the avatar
  * for `ms`, over a pulsing green aura. */
 export function SoulSiphonFx({ x, y, ms }: { x: number; y: number; ms: number }) {
+  // Looping particles are the one thing MotionConfig cannot soften (it leaves
+  // opacity alone), so drop the repeat and play the burst once instead.
+  const reduce = useReducedMotion();
   const GREEN = '#6ee06a';
   const souls = Array.from({ length: 12 }, (_, i) => {
     const ang = (i / 12) * Math.PI * 2;
@@ -267,7 +273,7 @@ export function SoulSiphonFx({ x, y, ms }: { x: number; y: number; ms: number })
           transition={{
             duration: s.dur,
             delay: s.delay,
-            repeat: Infinity,
+            repeat: reduce ? 0 : Infinity,
             repeatDelay: 0.12,
             times: [0, 0.7, 1],
             ease: 'easeIn',
@@ -280,6 +286,9 @@ export function SoulSiphonFx({ x, y, ms }: { x: number; y: number; ms: number })
 
 /** Rising glowing smoke plume at a target for `ms` (violet = Grasp, green = Withering). */
 export function SmokeFx({ x, y, color, ms }: { x: number; y: number; color: string; ms: number }) {
+  // Looping particles are the one thing MotionConfig cannot soften (it leaves
+  // opacity alone), so drop the repeat and play the burst once instead.
+  const reduce = useReducedMotion();
   const puffs = Array.from({ length: 6 }, (_, i) => ({
     dx: (i - 2.5) * 8,
     size: 22 + ((i * 7) % 16),
@@ -308,7 +317,7 @@ export function SmokeFx({ x, y, color, ms }: { x: number; y: number; color: stri
           }}
           initial={{ opacity: 0, x: 0, y: 8, scale: 0.5 }}
           animate={{ opacity: [0, 0.85, 0], x: [0, p.dx, p.dx * 1.4], y: [8, -18, -42], scale: [0.5, 1, 1.6] }}
-          transition={{ duration: 1.1, delay: p.delay, repeat: Infinity, repeatDelay: 0.05, ease: 'easeOut' }}
+          transition={{ duration: 1.1, delay: p.delay, repeat: reduce ? 0 : Infinity, repeatDelay: 0.05, ease: 'easeOut' }}
         />
       ))}
     </div>
