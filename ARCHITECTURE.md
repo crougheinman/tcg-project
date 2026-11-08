@@ -183,6 +183,17 @@ avoid fighting framer's transform ownership), and a single lazy-loaded three.js 
 (`Vfx.tsx`). Fx overlays render as siblings of `.board` (not children) because `.board` gets a CSS
 transform during shake that would break `position:fixed` descendants.
 
+**Audio — `src/audio`.** Synthesized, zero-asset sound, mirroring what `ImpactFx` does for visuals
+("pure framer-motion, no spritesheets"): every effect is built at runtime from oscillators and
+filtered noise, so the whole system costs no payload — which matters for a game whose `public/` is
+already its heaviest part. Split in two: `cues.ts` decides WHICH sound an applied action deserves
+(pure, diffing before/after state for deaths and the winner, tested in the `engine` project) and
+`sfx.ts` is the synth (browser-only, silent no-op when WebAudio is missing, so jsdom tests and old
+webviews need no guards). The `AudioContext` is created on first play, not at import, because
+browsers start it suspended until a user gesture. Cues fire from the store's apply path, not the UI,
+so local, AI and peer actions all sound identical and `BoardFx` stays purely visual. Mute persists
+to `localStorage` and genuinely silences the synth.
+
 **Build — root config.** Deliberately minimal: 5 npm scripts, one `vite.config.ts` doubling as the
 Vitest config (`environment:'node'`, no DOM). `tsconfig.json` is `strict:true` and the `build`
 script runs `tsc --noEmit && vite build`, so type errors fail the build. CI (`.github/workflows/ci.yml`) runs tsc, tests and build on every PR. Secrets hygiene is clean (only the public anon key; `.env*`
@@ -231,7 +242,7 @@ from this list.
 | **Med** | **No double-deck-out terminal.** Deck-out is only checked on a forced draw. | `reducer.ts` `drawCard` | A both-empty board has no terminal condition (unlikely at 20 life / 30 cards). |
 | **Med** | **Host/join race + multiple-joiner corruption**; unhandled Supabase send/subscribe errors; 4-char room code with no uniqueness/auth; peer deck id trusted with divergent fallbacks. | `net/match.ts` `createMatch`/`joinMatch` | Handshake robustness gaps; a stray joiner can corrupt an in-progress match. |
 | **Med** | **Two version sources to keep in sync** (`version.ts` and `package.json`, both `1.0.2`); **no `prefers-reduced-motion`** despite `repeat:Infinity` loops. | `package.json`, `src/version.ts`, `ui/ImpactFx.tsx` | Regressions land unnoticed; accessibility/versioning drift. |
-| **Low** | `spellTrigger` loop reads a live-mutated array (`reducer.ts` `castSorcery`); `destroy` isn't truly unconditional (>9999 toughness survives); unbounded net resend history; dead `STARTER_DECKS` export; click-only cards with no keyboard path. | various | Latent hazards + accessibility gaps. |
+| **Low** | **No audio settings beyond on/off** (no volume slider); `spellTrigger` loop reads a live-mutated array (`reducer.ts` `castSorcery`); `destroy` isn't truly unconditional (>9999 toughness survives); unbounded net resend history; dead `STARTER_DECKS` export; click-only cards with no keyboard path. | various | Latent hazards + accessibility gaps. |
 
 ---
 
