@@ -8,7 +8,7 @@ first, then the code. Every claim is anchored to `file:line`.
 ## 1. What it is
 
 Arcanum TCG (labeled "Entity Duel" in some UI) is a Magic-inspired trading card game.
-~8,500 LOC, ~44 source files. Modes: **vs AI** (heuristic, in-browser, offline), **local
+~7,100 lines of TypeScript across ~42 source files. Modes: **vs AI** (heuristic, in-browser, offline), **local
 hotseat**, and **online PvP**. Web + mobile (Capacitor).
 
 Stack:
@@ -178,10 +178,9 @@ avoid fighting framer's transform ownership), and a single lazy-loaded three.js 
 transform during shake that would break `position:fixed` descendants.
 
 **Build — root config.** Deliberately minimal: 5 npm scripts, one `vite.config.ts` doubling as the
-Vitest config (`environment:'node'`, no DOM). `tsconfig.json` is `strict:true` but the `build`
-script is `vite build` alone with **no `tsc` step** — type errors do not fail the build (run
-`npx tsc --noEmit` manually). Secrets hygiene is clean (only the public anon key; `.env*`
-gitignored). Assets are the weight problem: ~17 MB of uncompressed PNGs in `public/ui/`.
+Vitest config (`environment:'node'`, no DOM). `tsconfig.json` is `strict:true` and the `build`
+script runs `tsc --noEmit && vite build`, so type errors fail the build. CI (`.github/workflows/ci.yml`) runs tsc, tests and build on every PR. Secrets hygiene is clean (only the public anon key; `.env*`
+gitignored). Assets were the weight problem (17 MB of 4000×4000 PNGs in `public/ui/` plus a 7.5 MB GIF); they are now resized/re-encoded and `public/` is ~8 MB.
 
 ---
 
@@ -199,8 +198,8 @@ gitignored). Assets are the weight problem: ~17 MB of uncompressed PNGs in `publ
   stay pure.
 - **PvP disables telegraphs** and applies actions immediately then broadcasts — keep new UI
   animations out of the PvP action path or they'll desync timing.
-- **No `tsc` in the build.** CI/pre-commit does not exist yet; run `npm test` and `npx tsc --noEmit`
-  before pushing.
+- **CI runs tsc + tests + build** on PRs and pushes to `main`; run `npm test` and `npx tsc --noEmit`
+  locally before pushing.
 - **The store is not unit-testable** under the current `environment:'node'` Vitest config (it touches
   `localStorage` / `import.meta.env`). Push logic worth testing down into the pure engine and test it
   there.
@@ -216,21 +215,20 @@ from this list.
 |-----|-------|----------|----------------|
 | **High** | **No reconnect / no state resync.** `leave()` tears down with no rejoin; a >12s stall forfeits; a reload loses `buffer`/`appliedCount`/`sentHistory`. | `net/match.ts` `leave`, watchdog | Any transient blip permanently ends a match. |
 | **High** | **Trust-the-peer cheat surface.** `validateAction` checks legality but never authenticates the sender; both hands/libraries live in every client's `GameState`. | `rules.ts` `validateAction`; `net/match.ts` | Hidden info isn't hidden; a modified client can act out of turn. Deferral is acknowledged in-code. |
-| **High** | **Type-checking never runs at build.** `build` is `vite build` alone; strict TS is editor-only. | `package.json` scripts | A type error ships silently. Fix: `"build": "tsc --noEmit && vite build"`. |
-| **High** | **~17 MB uncompressed PNGs shipped.** `shield.png` 13.9 MB + `sword.png` 3.4 MB, no image pipeline. | `public/ui/` | Severe payload for mobile + web first load. |
 | **High** | **`Board.tsx` god component + whole-`game` subscription.** 919 lines; effects depend on `[game]` so any change re-renders the whole tree; no memoization on `CardView`/`PlayerBar`. | `ui/Board.tsx`, `ui/BoardFx.tsx` | One spell → dozens of re-renders; hard to test/change. |
 | **Med** | **AI never casts instants / combat tricks**, and duplicates the engine's legality model instead of using `rules.legalActions`. | `ai/ai.ts` | Biggest play-strength gap; AI can emit actions the reducer rejects when the two drift. |
 | **Med** | **`pickAttacks` swings with everything**, ignoring blockers/lethal crackback. | `ai/ai.ts` `pickAttacks` | Feeds creatures into losing trades. |
 | **Med** | **No double-deck-out terminal.** Deck-out is only checked on a forced draw. | `reducer.ts` `drawCard` | A both-empty board has no terminal condition (unlikely at 20 life / 30 cards). |
 | **Med** | **Host/join race + multiple-joiner corruption**; unhandled Supabase send/subscribe errors; 4-char room code with no uniqueness/auth; peer deck id trusted with divergent fallbacks. | `net/match.ts` `createMatch`/`joinMatch` | Handshake robustness gaps; a stray joiner can corrupt an in-progress match. |
-| **Med** | **No CI, no lint** (an `eslint-disable` in `Vfx.tsx` is inert — ESLint isn't installed); **two unsynced version sources** (`version.ts` `1.0.2` vs `package.json` `0.1.0`); **no `prefers-reduced-motion`** despite `repeat:Infinity` loops. | `package.json`, `src/version.ts`, `ui/ImpactFx.tsx` | Regressions land unnoticed; accessibility/versioning drift. |
+| **Med** | **No lint** (an `eslint-disable` in `Vfx.tsx` is inert — ESLint isn't installed); **two version sources to keep in sync** (`version.ts` and `package.json`, both `1.0.2`); **no `prefers-reduced-motion`** despite `repeat:Infinity` loops. | `package.json`, `src/version.ts`, `ui/ImpactFx.tsx` | Regressions land unnoticed; accessibility/versioning drift. |
 | **Low** | `spellTrigger` loop reads a live-mutated array (`reducer.ts` `castSorcery`); `destroy` isn't truly unconditional (>9999 toughness survives); unbounded net resend history; dead `STARTER_DECKS` export; click-only cards with no keyboard path. | various | Latent hazards + accessibility gaps. |
 
 ---
 
 ## 7. Recent fixes
 
-Two High-severity PvP-integrity bugs were fixed. Both were rooted in the §3 actor model.
+The type-check/asset/CI/version items were resolved in a later cleanup and removed from §6.
+Two High-severity PvP-integrity bugs were fixed earlier. Both were rooted in the §3 actor model.
 
 ### (a) Seq-collision desync — fixed by a store actor-guard
 The lockstep transport stamps every action with a single shared `appliedCount` counter and
@@ -259,7 +257,7 @@ reducer, the validator, and the store.
 
 **Tests** (`src/engine/__tests__/engine.test.ts`): `actorOf` returns the right player per phase; a
 block declared for an attacker that died mid-`combat_block` throws a clean `Error`, not a
-`TypeError`. Full suite: 49 tests green; `npx tsc --noEmit` clean.
+`TypeError`. Full suite: 47 tests green; `npx tsc --noEmit` clean.
 
 ---
 
