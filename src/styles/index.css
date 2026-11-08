@@ -1465,6 +1465,41 @@ input {
 
 .resume-btn { border-color: var(--gold); color: var(--gold); }
 
-@media (prefers-reduced-motion: reduce) {
-  .net-stale-dot { animation: none; opacity: 0.8; }
+/* ---- Keyboard access ---- */
+/* Cards are the main game interaction and are focusable buttons, so focus has to
+   be obvious. :focus-visible keeps the ring off mouse clicks. */
+.card:focus-visible,
+button:focus-visible,
+[role='button']:focus-visible,
+summary:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 3px;
+  border-radius: 4px;
 }
+/* The board scales/rotates cards, where a plain outline can be clipped. */
+.card:focus-visible { box-shadow: 0 0 0 3px var(--frame), 0 0 0 6px var(--gold); outline: none; }
+
+/* ---- Reduced motion ---- */
+/* Honour the OS setting. Every looping glow in this file is keyed 0%,100% = dim
+   and 50% = bright, so collapsing to a single iteration lands on a frame that
+   STILL SHOWS the glow — the state a player reads off a castable instant, a
+   blitzed creature or a valid drop target survives, only the pulsing stops.
+   framer-motion is handled separately by <MotionConfig reducedMotion="user">. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .net-stale-dot { opacity: 0.85; }
+  /* The home background is a looping animation in its own right. */
+  .home-bg { background-image: none; }
+}
+
+/* Focus-restore targets: they take focus programmatically when a focused card
+   leaves the DOM, so they must not draw a ring of their own. */
+.hand:focus, .row.creatures:focus { outline: none; }

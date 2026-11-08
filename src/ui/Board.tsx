@@ -433,7 +433,7 @@ export function Board() {
         className={'battlefield' + (mine && dragActive ? ' drop-active' : '')}
         ref={mine ? myFieldRef : undefined}
       >
-        <div className="row creatures">
+        <div className="row creatures" data-focus-zone tabIndex={-1}>
           <AnimatePresence>
             {creatures.map((c) => (
               <motion.div
@@ -693,7 +693,9 @@ export function Board() {
           <section className="player-zone me">
             {permanents(localId, localId, true)}
             <div className="player-dock">
-              <div className="hand">
+              {/* tabIndex -1: not a tab stop itself, but a place to put focus back
+                  when the focused card is played and leaves the DOM. */}
+              <div className="hand" data-focus-zone tabIndex={-1}>
                 <AnimatePresence>
                   {me.hand.map((c) => (
                     <CardView

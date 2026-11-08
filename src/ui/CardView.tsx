@@ -36,6 +36,31 @@ function artFallback(e: React.SyntheticEvent<HTMLImageElement>) {
 // reorder, tap, and hover. CSS keeps colors, borders, glows (non-transform).
 const spring = { type: 'spring' as const, stiffness: 500, damping: 32 };
 
+/**
+ * Activating a card usually removes it from the DOM (played, destroyed), which
+ * drops focus to <body> — so a keyboard player would have to tab from the top of
+ * the page again after every single play. Hand focus back to the zone the card
+ * lived in. Checked twice because framer keeps the node mounted, and focused,
+ * until its exit animation finishes.
+ */
+function restoreFocusLater(from: HTMLElement): void {
+  const zone = from.closest('[data-focus-zone]') as HTMLElement | null;
+  if (!zone) return;
+  let tries = 0;
+  const tick = () => {
+    // framer keeps the node mounted — and focused — for the length of its exit
+    // animation, whose spring settles at no fixed time, so poll until the card
+    // is really detached rather than guessing a delay.
+    if (document.contains(from)) {
+      if (++tries < 90) requestAnimationFrame(tick); // ~1.5s cap, then give up
+      return;
+    }
+    const a = document.activeElement;
+    if (!a || a === document.body) zone.focus(); // only if focus actually dropped
+  };
+  requestAnimationFrame(tick);
+}
+
 export function CardView({
   inst,
   faceDown,
@@ -67,6 +92,17 @@ export function CardView({
     clearTimeout(pressTimer.current);
     setHover(null); // finger lifted -> always dismiss the preview (drag or long-press)
   }
+  // Keyboard path. Cards are the primary game interaction and were pointer-only,
+  // so the whole game was unreachable without a mouse. Enter/Space activate;
+  // preventDefault stops Space from scrolling the board away under the player.
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    const from = e.currentTarget as HTMLElement;
+    onClick?.(); // not handleClick: touch/drag guards are meaningless for keys
+    restoreFocusLater(from);
+  }
+
   function handleClick() {
     if (longPressed.current) {
       longPressed.current = false; // consumed by the long-press preview
@@ -80,6 +116,8 @@ export function CardView({
     return (
       <motion.div
         className="card card-back"
+        role="img"
+        aria-label="Face-down card"
         layout
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -114,12 +152,28 @@ export function CardView({
         (def.text ? `. ${def.text}` : '');
   const arenaToken = arena && isCreature;
   const finalCls = arenaToken ? cls + ' arena' : cls;
+  const interactive = !!onClick;
+  // The same sentence the mouse user gets as a tooltip, plus the state a sighted
+  // player reads off the card's glow.
+  const label =
+    titleText +
+    (inst.tapped ? '. Tapped' : '') +
+    (targetable ? '. Targetable' : '') +
+    (selected ? '. Selected' : '');
 
   return (
     <motion.div
       className={finalCls}
       data-iid={inst.iid}
       onClick={handleClick}
+      role={interactive ? 'button' : 'img'}
+      tabIndex={interactive ? 0 : undefined}
+      aria-label={label}
+      aria-pressed={interactive && selected ? true : undefined}
+      onKeyDown={interactive ? handleKeyDown : undefined}
+      // Keyboard focus should surface the same big preview that hovering does.
+      onFocus={() => setHover(inst)}
+      onBlur={() => setHover(null)}
       // suppress the synthetic hover a touch tap generates — see lastTouchTs above
       onMouseEnter={() => {
         if (Date.now() - lastTouchTs < 700) return;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
 import { useGame } from './store/gameStore';
 import { MainMenu } from './ui/MainMenu';
 import { Lobby } from './ui/Lobby';
@@ -15,10 +15,10 @@ export default function App() {
     if (mode === 'menu') setShowLobby(false);
   }, [mode]);
 
-  if (mode !== 'menu' && game) return <Board />;
+  if (mode !== 'menu' && game) return wrap(<Board />);
 
   // Slide/fade between the menu and the online lobby (same transition as home <-> deck).
-  return (
+  return wrap(
     <div className="screen-stack">
       <AnimatePresence initial={false}>
         <motion.div
@@ -38,6 +38,16 @@ export default function App() {
       </AnimatePresence>
       {/* tiny build tag — intentionally faint; only devs should really notice it */}
       <span className="build-tag" aria-hidden>v{APP_VERSION}</span>
-    </div>
+    </div>,
   );
+}
+
+/**
+ * One switch for every framer-motion animation in the app: with
+ * `reducedMotion="user"` framer drops transform and layout animation for anyone
+ * whose OS asks for reduced motion, while keeping opacity so state changes stay
+ * legible. CSS animations are handled separately, in styles/index.css.
+ */
+function wrap(children: React.ReactNode) {
+  return <MotionConfig reducedMotion="user">{children}</MotionConfig>;
 }
