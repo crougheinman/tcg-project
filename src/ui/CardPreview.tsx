@@ -2,16 +2,11 @@ import { motion } from 'framer-motion';
 import { getDef } from '../cards/cards';
 import { power, toughness } from '../engine/rules';
 import type { CardInstance } from '../engine/types';
+import { artFallback } from './artFallback';
 
 // Large hover preview — parchment card frame (name ribbon, cost orb, art window,
 // type banner, rules scroll, P/T shield). Springs in on the right, click-through.
 const spring = { type: 'spring' as const, stiffness: 400, damping: 30 };
-
-function artFallback(e: React.SyntheticEvent<HTMLImageElement>) {
-  const img = e.currentTarget;
-  if (img.src.endsWith('.png')) img.src = img.src.replace(/\.png$/, '.svg');
-  else img.style.visibility = 'hidden';
-}
 
 export function CardPreview({ inst, side = 'left' }: { inst: CardInstance; side?: 'left' | 'right' }) {
   const def = getDef(inst.def);

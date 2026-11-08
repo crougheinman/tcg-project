@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { circle } from './ImpactFx';
+import { circle } from './fxShapes';
 
 // Destruction sequence on a dying card — pure framer motion (no spritesheets):
 // shockwave + white-hot flash, embers flung outward that fall as they fade,

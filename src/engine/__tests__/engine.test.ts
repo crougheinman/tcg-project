@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialState, MAX_DECK_SIZE } from '../state';
 import { applyAction } from '../reducer';
-import { isLand, isCreature, canAttack, availableMana, power, toughness, actorOf, findCreature } from '../rules';
+import { isLand, canAttack, availableMana, power, toughness, actorOf, findCreature } from '../rules';
 import type { Action, CardInstance, GameState } from '../types';
 import { DECK_EMBERWOOD, DECK_SKYWARD, DECK_LIST, DECK_IRONBLOSSOM, DECK_GRAVETIDE } from '../../cards/decks';
 import { getDef } from '../../cards/cards';

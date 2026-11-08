@@ -150,6 +150,21 @@ Take Counter and Grasp from the Grave live. `pickBlocks` is the strongest routin
 harness (`ai/__tests__/ai.test.ts`) runs every deck pairing across seeds with a 4000-step cap and
 asserts termination, a winner, and that every picked action was one `legalActions` offered.
 
+**Deck building — `src/cards/customDecks.ts` + `ui/DeckBuilder.tsx`.** Players build their own
+30-card decks. Because cards are already pure data, this is UI only — the engine never learns a deck
+was hand-built. `validateDeck` is pure and tested: exactly 30 cards, at most `MAX_COPIES` (6) of any
+non-land, at least one land, no unknown ids, and no tokens. The copy limit is 6 precisely so that
+**every starter deck is itself a legal custom deck** (Skyward runs 6 Stoneback Cub), which is
+asserted in a test — if the builder could not express a starter, it would not be enforcing the
+game's own rules. The token blacklist is derived from the `token` effects that create Wolves and
+Zombies, so a new token is excluded the moment something references it. Custom decks are
+**local-only (vs AI / hotseat)**: the PvP handshake exchanges deck *ids* and each client resolves
+them from its own catalog, so a custom id the peer has never seen would build two different decks
+from one seed — a guaranteed desync. Sending the card list over the wire would lift that, but it is
+a protocol change that also widens the peer-trust surface. Use `resolveDeck(id)` wherever a
+player-chosen deck becomes cards; plain `deckById` knows only starters and silently falls back to
+Emberwood.
+
 **Cards — `src/cards`.** A fully data-driven catalog of 41 `CardDef`s (`cards.ts`) plus 8 starter
 decks of 30 (`decks.ts`). Effects are a discriminated union of 8 kinds (`types.ts`), **every one
 implemented** in the `applyEffect` switch (`reducer.ts:189`). All 3 keywords (haste/flying/defender)
@@ -183,6 +198,17 @@ avoid fighting framer's transform ownership), and a single lazy-loaded three.js 
 (`Vfx.tsx`). Fx overlays render as siblings of `.board` (not children) because `.board` gets a CSS
 transform during shake that would break `position:fixed` descendants.
 
+**Audio — `src/audio`.** Synthesized, zero-asset sound, mirroring what `ImpactFx` does for visuals
+("pure framer-motion, no spritesheets"): every effect is built at runtime from oscillators and
+filtered noise, so the whole system costs no payload — which matters for a game whose `public/` is
+already its heaviest part. Split in two: `cues.ts` decides WHICH sound an applied action deserves
+(pure, diffing before/after state for deaths and the winner, tested in the `engine` project) and
+`sfx.ts` is the synth (browser-only, silent no-op when WebAudio is missing, so jsdom tests and old
+webviews need no guards). The `AudioContext` is created on first play, not at import, because
+browsers start it suspended until a user gesture. Cues fire from the store's apply path, not the UI,
+so local, AI and peer actions all sound identical and `BoardFx` stays purely visual. Mute persists
+to `localStorage` and genuinely silences the synth.
+
 **Build — root config.** Deliberately minimal: 5 npm scripts, one `vite.config.ts` doubling as the
 Vitest config (`environment:'node'`, no DOM). `tsconfig.json` is `strict:true` and the `build`
 script runs `tsc --noEmit && vite build`, so type errors fail the build. CI (`.github/workflows/ci.yml`) runs tsc, tests and build on every PR. Secrets hygiene is clean (only the public anon key; `.env*`
@@ -206,9 +232,12 @@ gitignored). Assets were the weight problem (17 MB of 4000×4000 PNGs in `public
   animations out of the PvP action path or they'll desync timing.
 - **CI runs tsc + tests + build** on PRs and pushes to `main`; run `npm test` and `npx tsc --noEmit`
   locally before pushing.
-- **The store is not unit-testable** under the current `environment:'node'` Vitest config (it touches
-  `localStorage` / `import.meta.env`). Push logic worth testing down into a pure module and test it
-  there — `net/lockstep.ts` is the pattern: all the sequencing logic, none of the transport.
+- **Two Vitest projects** (`vitest.workspace.ts`): `engine` runs the pure core under node, `ui` runs
+  the store and components under jsdom. Prefer the `engine` project — push logic worth testing down
+  into a pure module and test it there; `net/lockstep.ts` is the pattern (all the sequencing logic,
+  none of the transport). The `ui` project is for code that genuinely needs a DOM.
+- **Lint runs in CI** (`npm run lint`, `--max-warnings 0`). Fix findings rather than disabling rules;
+  an `eslint-disable` sat inert in this repo for its whole life because ESLint was never installed.
 - **The AI ranks, it does not generate.** New card behaviour goes in `legalActions` (so the move
   exists) and `scoreAction` (so the AI knows what it is worth). Never hand-roll candidate moves.
 
@@ -227,8 +256,8 @@ from this list.
 | **Med** | **`pickAttacks` swings with everything**, ignoring blockers/lethal crackback. | `ai/ai.ts` `pickAttacks` | Feeds creatures into losing trades. |
 | **Med** | **No double-deck-out terminal.** Deck-out is only checked on a forced draw. | `reducer.ts` `drawCard` | A both-empty board has no terminal condition (unlikely at 20 life / 30 cards). |
 | **Med** | **Host/join race + multiple-joiner corruption**; unhandled Supabase send/subscribe errors; 4-char room code with no uniqueness/auth; peer deck id trusted with divergent fallbacks. | `net/match.ts` `createMatch`/`joinMatch` | Handshake robustness gaps; a stray joiner can corrupt an in-progress match. |
-| **Med** | **No lint** (an `eslint-disable` in `Vfx.tsx` is inert — ESLint isn't installed); **two version sources to keep in sync** (`version.ts` and `package.json`, both `1.0.2`); **no `prefers-reduced-motion`** despite `repeat:Infinity` loops. | `package.json`, `src/version.ts`, `ui/ImpactFx.tsx` | Regressions land unnoticed; accessibility/versioning drift. |
-| **Low** | `spellTrigger` loop reads a live-mutated array (`reducer.ts` `castSorcery`); `destroy` isn't truly unconditional (>9999 toughness survives); unbounded net resend history; dead `STARTER_DECKS` export; click-only cards with no keyboard path. | various | Latent hazards + accessibility gaps. |
+| **Med** | **Two version sources to keep in sync** (`version.ts` and `package.json`, both `1.0.2`); **no `prefers-reduced-motion`** despite `repeat:Infinity` loops. | `package.json`, `src/version.ts`, `ui/ImpactFx.tsx` | Regressions land unnoticed; accessibility/versioning drift. |
+| **Low** | **No audio settings beyond on/off** (no volume slider); `spellTrigger` loop reads a live-mutated array (`reducer.ts` `castSorcery`); `destroy` isn't truly unconditional (>9999 toughness survives); unbounded net resend history; click-only cards with no keyboard path. | various | Latent hazards + accessibility gaps. |
 
 ---
 
@@ -353,7 +382,8 @@ Two measurement traps worth remembering, both of which produced convincing wrong
 ```bash
 npm install
 npm run dev       # http://localhost:5173 — vs AI / hotseat work with no setup
-npm test          # engine + AI tests (vitest, node env)
+npm test          # all tests (vitest: `engine` project on node, `ui` project on jsdom)
+npm run lint      # eslint, zero warnings tolerated
 npx tsc --noEmit  # type-check (the build does NOT do this)
 npm run build     # production build into dist/
 ```

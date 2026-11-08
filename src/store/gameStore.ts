@@ -3,7 +3,10 @@ import { createInitialState } from '../engine/state';
 import { applyAction } from '../engine/reducer';
 import type { Action, GameState, PlayerId, Target } from '../engine/types';
 import { actorOf } from '../engine/rules';
+import { cuesFor } from '../audio/cues';
+import { isMuted, playCues, setMuted as persistMuted } from '../audio/sfx';
 import { deckById, randomDeck } from '../cards/decks';
+import { resolveDeck } from '../cards/customDecks';
 import { getDef } from '../cards/cards';
 import { aiShouldAct, pickAction } from '../ai/ai';
 import { CHARGE_MS, CHARGE_SPELLS, HEAL_MS, HEAL_SPELLS, SMOKE_MS, SMOKE_SPELLS } from '../ui/spellTiming';
@@ -34,6 +37,9 @@ interface Store {
   // backgrounded tab). Purely presentational — the engine is untouched, and the
   // transport resyncs by itself if the peer comes back.
   peerStale: boolean;
+  // Sound on/off. Persisted; the synth itself is a no-op while muted.
+  muted: boolean;
+  setMuted: (v: boolean) => void;
   // Guided mode: contextual coach bubbles that teach the game. Persisted; ON by
   // default so newcomers get help immediately.
   guided: boolean;
@@ -107,7 +113,9 @@ export const useGame = create<Store>((set, get) => {
           const cur = get();
           if (cur.mode !== 'ai' || !cur.game) return;
           try {
-            set({ game: applyAction(cur.game, action), charging: null });
+            const next = applyAction(cur.game, action);
+            sfx(action, cur.game, next);
+            set({ game: next, charging: null });
           } catch (e) {
             set({ error: `AI error: ${(e as Error).message}`, charging: null });
             return;
@@ -123,6 +131,13 @@ export const useGame = create<Store>((set, get) => {
       },
       st.guided ? AI_DELAY_GUIDED_MS : AI_DELAY_MS,
     );
+  }
+
+  // Sound effects hang off the apply path rather than the UI, so local, AI and
+  // peer actions all sound identical and BoardFx stays a pure visual layer.
+  // (The store is already the only place in the app with side effects.)
+  function sfx(action: Action, before: GameState, after: GameState) {
+    playCues(cuesFor(action, before, after, get().myId));
   }
 
   // Show a chat bubble over `side`, replacing any current one. Auto-clears after
@@ -148,6 +163,11 @@ export const useGame = create<Store>((set, get) => {
     forfeit: null,
     charging: null,
     peerStale: false,
+    muted: isMuted(),
+    setMuted: (v) => {
+      persistMuted(v);
+      set({ muted: v });
+    },
     guided: localStorage.getItem('guided') !== '0', // default ON
     setGuided: (v) => {
       localStorage.setItem('guided', v ? '1' : '0');
@@ -158,7 +178,7 @@ export const useGame = create<Store>((set, get) => {
     startAI: (deckId, oppDeckId) => {
       const seed = Math.floor(Math.random() * 0x7fffffff);
       // AI plays the pre-picked deck (shown in the face-off), else a random one.
-      const aiDeck = oppDeckId ? deckById(oppDeckId) : randomDeck();
+      const aiDeck = oppDeckId ? resolveDeck(oppDeckId) : randomDeck();
       set({
         mode: 'ai',
         myId: 'A',
@@ -168,7 +188,7 @@ export const useGame = create<Store>((set, get) => {
         forfeit: null,
         charging: null,
         lastAiDecks: { deck: deckId, oppDeck: aiDeck.id },
-        game: createInitialState(seed, deckById(deckId).cards, aiDeck.cards),
+        game: createInitialState(seed, resolveDeck(deckId).cards, aiDeck.cards),
       });
       scheduleAi(); // in case AI ever goes first (it doesn't on turn 1, but safe)
     },
@@ -183,7 +203,7 @@ export const useGame = create<Store>((set, get) => {
         error: null,
         forfeit: null,
         charging: null,
-        game: createInitialState(seed, deckById(deckA).cards, deckById(deckB).cards),
+        game: createInitialState(seed, resolveDeck(deckA).cards, resolveDeck(deckB).cards),
       });
     },
 
@@ -208,6 +228,7 @@ export const useGame = create<Store>((set, get) => {
         if (!s.game) return;
         try {
           const next = applyAction(s.game, action);
+          sfx(action, s.game, next);
           if (next.winner) clearMatch(); // finished — nothing left to reconnect to
           set({ game: next });
         } catch (e) {
@@ -270,6 +291,7 @@ export const useGame = create<Store>((set, get) => {
           set({ error: (e as Error).message, charging: null });
           return;
         }
+        sfx(action, cur.game, next);
         set({ game: next, error: null, charging: null });
         if (next.winner) clearMatch(); // finished — nothing left to reconnect to
         if (cur.mode === 'pvp' && cur.net) cur.net.sendAction(action);

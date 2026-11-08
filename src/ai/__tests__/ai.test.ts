@@ -132,7 +132,7 @@ describe('AI combat tricks', () => {
   it('does not burn a face that is not lethal', () => {
     // Cinderbolt in hand, opponent at full life and no creatures to kill: the
     // AI should develop or pass rather than throw the burn away.
-    let g = createInitialState(11, DECK_EMBERWOOD, DECK_SKYWARD);
+    const g = createInitialState(11, DECK_EMBERWOOD, DECK_SKYWARD);
     g.players.A.battlefield = [inst('aether_well'), inst('aether_well')];
     g.players.A.hand = [inst('cinderbolt')];
     g.players.B.battlefield = [];
@@ -142,7 +142,7 @@ describe('AI combat tricks', () => {
   });
 
   it('burns the face when it is exactly lethal', () => {
-    let g = createInitialState(11, DECK_EMBERWOOD, DECK_SKYWARD);
+    const g = createInitialState(11, DECK_EMBERWOOD, DECK_SKYWARD);
     g.players.A.battlefield = [inst('aether_well'), inst('aether_well')];
     g.players.A.hand = [inst('cinderbolt')];
     g.players.B.battlefield = [];

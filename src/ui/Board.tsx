@@ -36,6 +36,8 @@ export function Board() {
   const [confirmAbort, setConfirmAbort] = useState(false); // abort confirmation
   const [rulesOpen, setRulesOpen] = useState(false); // "How to Play" (controlled Rulebook)
   const guided = useGame((s) => s.guided);
+  const muted = useGame((s) => s.muted);
+  const setMuted = useGame((s) => s.setMuted);
   const setGuided = useGame((s) => s.setGuided);
   const [hushed, setHushed] = useState<Set<string>>(new Set()); // per-session dismissed tips
   const [sorceryIid, setSorceryIid] = useState<string | null>(null);
@@ -380,7 +382,8 @@ export function Board() {
       if (!canAttack(c)) return;
       setAttackers((prev) => {
         const next = new Set(prev);
-        next.has(c.iid) ? next.delete(c.iid) : next.add(c.iid);
+        if (next.has(c.iid)) next.delete(c.iid);
+        else next.add(c.iid);
         return next;
       });
     } else if (game.phase === 'combat_block') {
@@ -864,6 +867,15 @@ export function Board() {
                   Guided Mode
                   <span className="toggle-pill" aria-hidden>
                     {guided ? 'ON' : 'OFF'}
+                  </span>
+                </button>
+                <button
+                  className={'game-menu-item toggle' + (!muted ? ' on' : '')}
+                  onClick={() => setMuted(!muted)}
+                >
+                  Sound
+                  <span className="toggle-pill" aria-hidden>
+                    {muted ? 'OFF' : 'ON'}
                   </span>
                 </button>
               </motion.div>
