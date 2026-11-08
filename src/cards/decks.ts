@@ -117,7 +117,8 @@ export const DECK_LIST: DeckMeta[] = [
     id: 'emberwood',
     name: 'Emberwood',
     style: 'Aggro · Beasts & Burn',
-    desc: 'Swift creatures and direct damage. Pressure early, then burn them out before they stabilize.',
+    desc:
+      'Swift beasts and open flame. Spend everything early — there is no plan for turn eight.',
     emblem: 'ember_sprite',
     cards: DECK_EMBERWOOD,
   },
@@ -125,7 +126,8 @@ export const DECK_LIST: DeckMeta[] = [
     id: 'skyward',
     name: 'Skyward',
     style: 'Control · Flyers',
-    desc: 'Evasive flyers and sturdy walls. Survive the early game, then rule the skies.',
+    desc:
+      'Walls hold the ground so the sky can win it. Survive the early game, then never land.',
     emblem: 'storm_drake',
     cards: DECK_SKYWARD,
   },
@@ -133,7 +135,8 @@ export const DECK_LIST: DeckMeta[] = [
     id: 'pyromancer',
     name: 'Pyromancer',
     style: 'Spellslinger · Burn',
-    desc: 'Spell-heavy with few creatures. Pyre Adept punishes every sorcery — burn them out from the deck.',
+    desc:
+      'Few creatures, endless fire. Every sorcery through a Pyre Adept costs them life directly.',
     emblem: 'pyre_adept',
     cards: DECK_PYROMANCER,
   },
@@ -141,7 +144,8 @@ export const DECK_LIST: DeckMeta[] = [
     id: 'wildblitz',
     name: 'Wildblitz',
     style: 'Swarm · Beast Tribal',
-    desc: 'Flood the board with beasts and Wolves, then overrun with Kunoichi’s Beast Blitz anthem.',
+    desc:
+      'Many small lives, freely given. Flood the board, then lift the whole pack with Beast Blitz.',
     emblem: 'kunoichi',
     cards: DECK_WILDBLITZ,
   },
@@ -149,7 +153,8 @@ export const DECK_LIST: DeckMeta[] = [
     id: 'wildwood',
     name: 'Wildwood Titans',
     style: 'Ramp · Big Stompy',
-    desc: 'Overgrowth ramps you into giants early. Crash in with Treants, Drakes, and the Dread Maw.',
+    desc:
+      'The forest hands you mana it was never lent. Ramp early, then crash in with giants.',
     emblem: 'ancient_treant',
     cards: DECK_WILDWOOD,
   },
@@ -157,7 +162,8 @@ export const DECK_LIST: DeckMeta[] = [
     id: 'stonewall',
     name: 'Stonewall',
     style: 'Control · Defensive',
-    desc: 'Walls, removal, and lifegain. Outlast everything, then close with a lone Storm Drake.',
+    desc:
+      'Owe nothing, outlast everything. Walls, removal and lifegain, closing with a lone drake.',
     emblem: 'granite_sentinel',
     cards: DECK_STONEWALL,
   },
@@ -165,7 +171,8 @@ export const DECK_LIST: DeckMeta[] = [
     id: 'ironblossom',
     name: 'Iron Blossom',
     style: 'Aggro · Bushido Tempo',
-    desc: 'Swift, disciplined blades and instant combat tricks. Strike first, strike true, and end it before they draw steel.',
+    desc:
+      'A debt is settled in one cut. Swift blades and instant tricks — strike first, strike once.',
     emblem: 'kensei_duelist',
     cards: DECK_IRONBLOSSOM,
   },
@@ -173,7 +180,8 @@ export const DECK_LIST: DeckMeta[] = [
     id: 'gravetide',
     name: 'Grave Tide',
     style: 'Swarm · Undead & Drain',
-    desc: 'Raise a horde of expendable dead, bleed them with each dark ritual, and drag their attackers into the grave.',
+    desc:
+      'The dead have already paid. Raise them again, bleed with each ritual, drag attackers down.',
     emblem: 'grave_necromancer',
     cards: DECK_GRAVETIDE,
   },
