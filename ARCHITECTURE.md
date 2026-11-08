@@ -223,7 +223,6 @@ from this list.
 |-----|-------|----------|----------------|
 | **High** | **Trust-the-peer cheat surface.** `validateAction` checks legality but never authenticates the sender; both hands/libraries live in every client's `GameState`. | `rules.ts` `validateAction`; `net/match.ts` | Hidden info isn't hidden; a modified client can act out of turn. Deferral is acknowledged in-code. |
 | **High** | **`Board.tsx` god component + whole-`game` subscription.** 919 lines; effects depend on `[game]` so any change re-renders the whole tree; no memoization on `CardView`/`PlayerBar`. | `ui/Board.tsx`, `ui/BoardFx.tsx` | One spell → dozens of re-renders; hard to test/change. |
-| **High** | **Deck balance is stale.** The ~44–56% win band was tuned against an AI that could not cast instants. Now that it can, a 2,240-game self-play run spreads 38.9%–65.2% (Grave Tide 45.0 → 65.2 on 2× Grasp from the Grave). | `cards/decks.ts` | The advertised balance no longer holds; needs a retune against the current AI. |
 | **Med** | **AI still ignores buff-style combat tricks** (Iaijutsu Strike, Warding Stance): `COMBAT_TRICK_MIN` admits removal only, because pumping correctly needs block-assignment context. | `ai/ai.ts` | Iron Blossom's identity cards go unused, which is part of why it now sits low in the band. |
 | **Med** | **`pickAttacks` swings with everything**, ignoring blockers/lethal crackback. | `ai/ai.ts` `pickAttacks` | Feeds creatures into losing trades. |
 | **Med** | **No double-deck-out terminal.** Deck-out is only checked on a forced draw. | `reducer.ts` `drawCard` | A both-empty board has no terminal condition (unlikely at 20 life / 30 cards). |
@@ -288,9 +287,30 @@ Measured over 2,240 self-play games (all 56 deck pairings × 40 seeds):
 | refactor, tricks off | 0 | 0 | 83.8 | 43.0 – 57.5 |
 | refactor, tricks on | 0 | 0 | 86.3 | 38.9 – 65.2 |
 
-The middle row is the control: the scoring rewrite is behaviour-preserving. The whole spread comes
-from the new capability, which is why deck balance is now a High risk in §6 rather than a settled
-claim.
+The middle row is the control: the scoring rewrite is behaviour-preserving, so the whole spread
+comes from the new capability. (At 40 seeds each deck sees only ~560 games, ≈2pp of sampling
+error, so these bands are noisier than they look — see §7(d).)
+
+### (d) Balance retune
+Teaching the AI to use instants invalidated the old ~44–56% tuning, which had been set against a
+pilot that could not cast them. Re-measured at **120 seeds** (~1,680 games per deck, ≈1.2pp error),
+the shipped decks spread **43.2 – 60.5** with Grave Tide at 60.5.
+
+Four data-only changes (no engine code) bring it to **44.0 – 55.4**:
+
+| Deck | Change | Why |
+|---|---|---|
+| Grave Tide | Withering Touch 4→3 damage; Shambling Ghoul 2/3→2/2; one Grasp → Ghoul | 4 damage for 2 at instant speed answered everything |
+| Wildblitz | 12→10 lands, +2 Swift Lancer | a 1–3 curve deck was flooding; this was worth ~7pp |
+| Pyromancer | 12→11 lands, +1 Pyre Adept | same flood, milder |
+| Stonewall | one Storm Drake → Granite Sentinel | best blockers and best finisher was too much |
+
+Two methodology notes worth keeping:
+- **Mana flood was the dominant lever**, not card power. Cutting a single land moved Wildblitz
+  ~7pp — more than any stat change tested.
+- **Tune on one seed set, confirm on another.** Several promising tweaks at 40 seeds reversed sign
+  on held-out seeds; they were fitting noise. The rig lives in the scratchpad, not the repo, since
+  it is a measurement tool rather than a test.
 
 ## 8. Run it
 

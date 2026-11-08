@@ -148,6 +148,10 @@ function scoreSpell(
       if (a.target?.kind !== 'creature') return score(BAND.never);
       const found = findCreature(state, a.target.iid);
       if (!found || found.controller !== ai) return score(BAND.never); // only pump our own
+      // NOTE: `buff` in this engine is PERMANENT (it writes buffP/buffT), not a
+      // until-end-of-turn pump. So casting it on your own main phase compounds
+      // over every later turn and measurably beats holding it as a combat trick
+      // (tested: holding costs Iron Blossom ~9pp of win rate). Cast it early.
       return score(BAND.buff, power(found.card) * 20 + thrift);
     }
     case 'draw':
@@ -210,6 +214,52 @@ function pickWhipflash(state: GameState, ai: PlayerId): Action {
   return best?.action ?? shots[0];
 }
 
+/** A block we actually want: the blocker kills the attacker and lives through it. */
+function favorableBlock(blk: { p: number; t: number }, atk: CardInstance): boolean {
+  return blk.p >= toughness(atk) && blk.t > power(atk);
+}
+
+/**
+ * A pump held for the block step — the reason instants exist. Worth casting only
+ * when it converts a block we would lose into one we win: the blocker kills the
+ * attacker AND survives, where it did neither before. Anything less is a
+ * main-phase buff, which `scoreAction` already handles at BAND.buff.
+ *
+ * Self-limiting: once a pair is favorable the condition stops firing for it, and
+ * every cast spends mana, so this cannot loop.
+ */
+function pickCombatBuff(state: GameState, ai: PlayerId): Action | null {
+  const attackers = (state.combat?.attackers ?? [])
+    .map((iid) => findCreature(state, iid)?.card)
+    .filter((c): c is CardInstance => !!c);
+  if (!attackers.length) return null;
+
+  let best: { action: Action; gain: number } | null = null;
+  for (const a of legalActions(state, ai)) {
+    if (a.type !== 'castSorcery' || a.target?.kind !== 'creature') continue;
+    const card = handCard(state, ai, a.iid);
+    if (!card) continue;
+    const def = getDef(card.def);
+    if (def.effect?.type !== 'buff') continue;
+    const found = findCreature(state, a.target.iid);
+    if (!found || found.controller !== ai) continue; // only pump our own
+    const blk = found.card;
+    if (blk.tapped || !isCreature(blk)) continue; // a tapped creature cannot block
+
+    const before = { p: power(blk), t: toughness(blk) };
+    const after = { p: before.p + def.effect.power, t: before.t + def.effect.toughness };
+
+    for (const atk of attackers) {
+      if (hasKeyword(atk, 'flying') && !hasKeyword(blk, 'flying')) continue; // illegal block
+      if (favorableBlock(before, atk)) continue; // already winning without it
+      if (!favorableBlock(after, atk)) continue; // the pump doesn't get us there
+      const gain = power(atk) * 10 - def.cost; // biggest threat first, cheapest trick
+      if (!best || gain > best.gain) best = { action: a, gain };
+    }
+  }
+  return best?.action ?? null;
+}
+
 function pickBlocks(state: GameState, ai: PlayerId): Action {
   // The defender holds priority here, so block-only instants (Take Counter,
   // Grasp from the Grave) are finally live. Killing a tapped attacker outright
@@ -217,6 +267,9 @@ function pickBlocks(state: GameState, ai: PlayerId): Action {
   // smaller combat. Each cast spends mana, so this always terminates.
   const trick = bestLegal(state, ai);
   if (trick && trick.score >= COMBAT_TRICK_MIN) return trick.action;
+  // Removing an attacker always beats pumping through it, so tricks come first.
+  const pump = pickCombatBuff(state, ai);
+  if (pump) return pump;
 
   const me = state.players[ai];
   const combat = state.combat!;

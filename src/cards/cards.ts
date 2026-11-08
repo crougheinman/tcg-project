@@ -212,7 +212,7 @@ export const CARDS: Record<string, CardDef> = {
     type: 'creature',
     cost: 2,
     power: 2,
-    toughness: 3,
+    toughness: 2,
     flavor: 'It shambles ever forward, and never tires.',
   },
   plague_priest: {
@@ -390,8 +390,8 @@ export const CARDS: Record<string, CardDef> = {
     name: 'Withering Touch',
     type: 'instant',
     cost: 2,
-    effect: { type: 'damage', amount: 4, targets: 'any' },
-    text: 'Instant — deal 4 damage to any target.',
+    effect: { type: 'damage', amount: 3, targets: 'any' },
+    text: 'Instant — deal 3 damage to any target.',
     flavor: 'Flesh sloughs from bone at the lightest caress.',
   },
   soul_siphon: {

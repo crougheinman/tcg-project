@@ -574,6 +574,12 @@ describe('deck size limit', () => {
   it('every starter deck is within the limit', () => {
     for (const d of DECK_LIST) expect(d.cards.length).toBeLessThanOrEqual(MAX_DECK_SIZE);
   });
+
+  it('every starter deck is exactly 30 cards', () => {
+    // Balance passes swap cards in and out by hand; this catches an edit that
+    // drops or duplicates one and silently changes a deck's consistency.
+    for (const d of DECK_LIST) expect(d.cards.length, `deck ${d.id}`).toBe(30);
+  });
 });
 
 describe('new decks (Iron Blossom / Grave Tide)', () => {
