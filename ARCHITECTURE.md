@@ -206,9 +206,12 @@ gitignored). Assets were the weight problem (17 MB of 4000×4000 PNGs in `public
   animations out of the PvP action path or they'll desync timing.
 - **CI runs tsc + tests + build** on PRs and pushes to `main`; run `npm test` and `npx tsc --noEmit`
   locally before pushing.
-- **The store is not unit-testable** under the current `environment:'node'` Vitest config (it touches
-  `localStorage` / `import.meta.env`). Push logic worth testing down into a pure module and test it
-  there — `net/lockstep.ts` is the pattern: all the sequencing logic, none of the transport.
+- **Two Vitest projects** (`vitest.workspace.ts`): `engine` runs the pure core under node, `ui` runs
+  the store and components under jsdom. Prefer the `engine` project — push logic worth testing down
+  into a pure module and test it there; `net/lockstep.ts` is the pattern (all the sequencing logic,
+  none of the transport). The `ui` project is for code that genuinely needs a DOM.
+- **Lint runs in CI** (`npm run lint`, `--max-warnings 0`). Fix findings rather than disabling rules;
+  an `eslint-disable` sat inert in this repo for its whole life because ESLint was never installed.
 - **The AI ranks, it does not generate.** New card behaviour goes in `legalActions` (so the move
   exists) and `scoreAction` (so the AI knows what it is worth). Never hand-roll candidate moves.
 
@@ -227,7 +230,7 @@ from this list.
 | **Med** | **`pickAttacks` swings with everything**, ignoring blockers/lethal crackback. | `ai/ai.ts` `pickAttacks` | Feeds creatures into losing trades. |
 | **Med** | **No double-deck-out terminal.** Deck-out is only checked on a forced draw. | `reducer.ts` `drawCard` | A both-empty board has no terminal condition (unlikely at 20 life / 30 cards). |
 | **Med** | **Host/join race + multiple-joiner corruption**; unhandled Supabase send/subscribe errors; 4-char room code with no uniqueness/auth; peer deck id trusted with divergent fallbacks. | `net/match.ts` `createMatch`/`joinMatch` | Handshake robustness gaps; a stray joiner can corrupt an in-progress match. |
-| **Med** | **No lint** (an `eslint-disable` in `Vfx.tsx` is inert — ESLint isn't installed); **two version sources to keep in sync** (`version.ts` and `package.json`, both `1.0.2`); **no `prefers-reduced-motion`** despite `repeat:Infinity` loops. | `package.json`, `src/version.ts`, `ui/ImpactFx.tsx` | Regressions land unnoticed; accessibility/versioning drift. |
+| **Med** | **Two version sources to keep in sync** (`version.ts` and `package.json`, both `1.0.2`); **no `prefers-reduced-motion`** despite `repeat:Infinity` loops. | `package.json`, `src/version.ts`, `ui/ImpactFx.tsx` | Regressions land unnoticed; accessibility/versioning drift. |
 | **Low** | `spellTrigger` loop reads a live-mutated array (`reducer.ts` `castSorcery`); `destroy` isn't truly unconditional (>9999 toughness survives); unbounded net resend history; dead `STARTER_DECKS` export; click-only cards with no keyboard path. | various | Latent hazards + accessibility gaps. |
 
 ---
@@ -353,7 +356,8 @@ Two measurement traps worth remembering, both of which produced convincing wrong
 ```bash
 npm install
 npm run dev       # http://localhost:5173 — vs AI / hotseat work with no setup
-npm test          # engine + AI tests (vitest, node env)
+npm test          # all tests (vitest: `engine` project on node, `ui` project on jsdom)
+npm run lint      # eslint, zero warnings tolerated
 npx tsc --noEmit  # type-check (the build does NOT do this)
 npm run build     # production build into dist/
 ```
