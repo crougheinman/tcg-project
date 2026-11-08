@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { getDef } from '../cards/cards';
-import { availableMana, canAttack, isCreature, isLand } from '../engine/rules';
+import { actorOf, availableMana, canAttack, isCreature, isLand } from '../engine/rules';
 import type { CardInstance, PlayerId } from '../engine/types';
 import { needsTarget, opponentOf } from '../engine/types';
 import { CardView } from './CardView';
@@ -198,7 +198,7 @@ export function Board() {
     setAnnounce({ id: announceId.current++, text, ms: 2400 });
   }, [game, myId, mode]);
 
-  const actor: PlayerId = game.phase === 'combat_block' ? opponentOf(game.active) : game.active;
+  const actor: PlayerId = actorOf(game); // never re-inline the combat_block ternary
   const localId: PlayerId = mode === 'hotseat' ? actor : myId;
   const oppId = opponentOf(localId);
   const canAct = !game.winner && (mode === 'hotseat' || actor === myId);

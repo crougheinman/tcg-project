@@ -222,7 +222,7 @@ from this list.
 | Sev | Issue | Location | Why it matters |
 |-----|-------|----------|----------------|
 | **High** | **Trust-the-peer cheat surface.** `validateAction` checks legality but never authenticates the sender; both hands/libraries live in every client's `GameState`. | `rules.ts` `validateAction`; `net/match.ts` | Hidden info isn't hidden; a modified client can act out of turn. Deferral is acknowledged in-code. |
-| **High** | **`Board.tsx` god component + whole-`game` subscription.** 919 lines; effects depend on `[game]` so any change re-renders the whole tree; no memoization on `CardView`/`PlayerBar`. | `ui/Board.tsx`, `ui/BoardFx.tsx` | One spell → dozens of re-renders; hard to test/change. |
+| **Med** | **`Board.tsx` god component.** 919 lines owning every piece of interaction state. | `ui/Board.tsx` | Hard to test and change. **Note: this is a maintainability problem, not a performance one** — see §7(e). |
 | **Med** | **AI still ignores buff-style combat tricks** (Iaijutsu Strike, Warding Stance): `COMBAT_TRICK_MIN` admits removal only, because pumping correctly needs block-assignment context. | `ai/ai.ts` | Iron Blossom's identity cards go unused, which is part of why it now sits low in the band. |
 | **Med** | **`pickAttacks` swings with everything**, ignoring blockers/lethal crackback. | `ai/ai.ts` `pickAttacks` | Feeds creatures into losing trades. |
 | **Med** | **No double-deck-out terminal.** Deck-out is only checked on a forced draw. | `reducer.ts` `drawCard` | A both-empty board has no terminal condition (unlikely at 20 life / 30 cards). |
@@ -311,6 +311,42 @@ Two methodology notes worth keeping:
 - **Tune on one seed set, confirm on another.** Several promising tweaks at 40 seeds reversed sign
   on held-out seeds; they were fitting noise. The rig lives in the scratchpad, not the repo, since
   it is a measurement tool rather than a test.
+
+### (e) The re-render "problem" was measured, and is not one
+`Board` subscribes to the whole `game`, nothing is memoized, and a single state change
+re-renders every `CardView` on screen. That was previously filed as a High-severity performance
+risk ("one spell → dozens of re-renders"). It was measured instead of assumed, and the premise
+does not hold.
+
+`React.memo` on `CardView` (with a field-wise comparator, since every action `structuredClone`s
+the state and hands each card a fresh object) plus `useEvent`-stabilised handlers in `Board` took
+card re-renders from 42 per update to **0**. Chrome CDP `Performance.getMetrics`, 30 updates per
+run, 3 runs, 42 cards on screen:
+
+| | card re-renders | script ms/update |
+|---|---|---|
+| as shipped | 42 | 26.3 / 26.6 / 27.5 |
+| memoized | 0 | 26.3 / 26.9 / 27.8 |
+| no framer `layout` prop | 42 | 24.3 / 25.3 / 26.6 |
+
+Eliminating **every** card re-render changed script time by less than 1% — inside run-to-run
+noise. The work is in framer-motion's per-element machinery (`renderHTML`, `MotionComponent`,
+`animateChanges`) and the browser's style/paint, all of which run whether or not React re-renders
+the component. Dropping the `layout` prop saves perhaps 1.3ms and costs the card-reorder
+animation; not a trade worth making.
+
+**The memoization was therefore reverted rather than shipped**: a custom comparator and an extra
+indirection are real stale-UI surface area, and they bought nothing measurable. Re-splitting
+`Board` is still worth doing for readability — just not in the name of speed.
+
+Two measurement traps worth remembering, both of which produced convincing wrong answers here:
+- Timing `setState` → two `requestAnimationFrame`s measures the **frame rate**, not the render.
+  Headless Chromium paces at ~30fps, so every result sat on a flat 33ms floor.
+- Timing `setState` → forced layout flush measures **scheduling**, not rendering: React 18 renders
+  asynchronously, so the flush happens before any component runs. Sub-millisecond numbers are the
+  tell.
+  Use `Performance.getMetrics` (ScriptDuration / RecalcStyleDuration / LayoutDuration) and a
+  control run.
 
 ## 8. Run it
 
