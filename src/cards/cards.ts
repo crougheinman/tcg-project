@@ -265,6 +265,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 1,
     effect: { type: 'damage', amount: 3, targets: 'any' },
     text: 'Deal 3 damage to any target.',
+    flavor: 'A handful of the old warmth, spent all at once.',
   },
   scorch: {
     id: 'scorch',
@@ -273,6 +274,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 3,
     effect: { type: 'damage', amount: 5, targets: 'any' },
     text: 'Deal 5 damage to any target.',
+    flavor: 'More of the warmth than any one person should hold.',
   },
   insight: {
     id: 'insight',
@@ -281,6 +283,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 2,
     effect: { type: 'draw', amount: 2 },
     text: 'Draw two cards.',
+    flavor: 'The one thing four traditions agree is worth paying for.',
   },
   wild_growth: {
     id: 'wild_growth',
@@ -289,6 +292,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 1,
     effect: { type: 'buff', power: 2, toughness: 2, targets: 'creature' },
     text: 'Target creature gets +2/+2.',
+    flavor: 'It never wears off. The forest is not in the habit of taking back.',
   },
   pyroblast: {
     id: 'pyroblast',
