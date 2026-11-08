@@ -136,13 +136,19 @@ Wild-Growth-style buff survives when the aura ends. Types live in `types.ts` (th
 is at `types.ts:107`).
 
 **AI — `src/ai/ai.ts`.** A stateless, greedy, no-look-ahead heuristic returning one `Action` per
-call. `aiShouldAct` gates on whose turn/phase it is; `pickAction` dispatches to
-`pickMain`/`pickAttacks`/`pickBlocks`/`pickWhipflash`. `pickMain` hand-rolls an 11-rung priority
-ladder (land → lethal burn → removal → destroy → topple → best creature → tokens → ramp → heal →
-buff → draw → advance) — note it does **not** consume `rules.legalActions`, so the two can drift
-(a known gap, §6). `pickBlocks` is the strongest routine. The self-play harness
-(`ai/__tests__/ai.test.ts`) runs every deck pairing across seeds with a 4000-step cap and asserts
-termination + a winner.
+call. `aiShouldAct` is just `actorOf(state) === ai`; `pickAction` dispatches to
+`pickMain`/`pickAttacks`/`pickBlocks`/`pickWhipflash`. Candidates come from
+`rules.legalActions` — the AI **ranks**, it does not generate, so it cannot emit an action the
+reducer rejects and the two legality models cannot drift. `scoreAction` assigns a priority BAND
+(land → lethal burn → removal → destroy → topple → creature → token → ramp → heal → buff → draw →
+advance, with `never` for legal-but-unwanted moves like wasted burn) plus a within-band tiebreak
+(biggest threat first, cheapest card that does the job). The two combinatorial actions —
+`declareAttackers` and `declareBlockers` — are still built directly, since enumerating every
+subset/assignment is exponential. `pickAttacks`/`pickBlocks` first look for a combat trick scoring
+at or above `COMBAT_TRICK_MIN` (removal only), which is what finally makes block-only instants like
+Take Counter and Grasp from the Grave live. `pickBlocks` is the strongest routine. The self-play
+harness (`ai/__tests__/ai.test.ts`) runs every deck pairing across seeds with a 4000-step cap and
+asserts termination, a winner, and that every picked action was one `legalActions` offered.
 
 **Cards — `src/cards`.** A fully data-driven catalog of 41 `CardDef`s (`cards.ts`) plus 8 starter
 decks of 30 (`decks.ts`). Effects are a discriminated union of 8 kinds (`types.ts`), **every one
@@ -201,8 +207,10 @@ gitignored). Assets were the weight problem (17 MB of 4000×4000 PNGs in `public
 - **CI runs tsc + tests + build** on PRs and pushes to `main`; run `npm test` and `npx tsc --noEmit`
   locally before pushing.
 - **The store is not unit-testable** under the current `environment:'node'` Vitest config (it touches
-  `localStorage` / `import.meta.env`). Push logic worth testing down into the pure engine and test it
-  there.
+  `localStorage` / `import.meta.env`). Push logic worth testing down into a pure module and test it
+  there — `net/lockstep.ts` is the pattern: all the sequencing logic, none of the transport.
+- **The AI ranks, it does not generate.** New card behaviour goes in `legalActions` (so the move
+  exists) and `scoreAction` (so the AI knows what it is worth). Never hand-roll candidate moves.
 
 ---
 
@@ -213,10 +221,10 @@ from this list.
 
 | Sev | Issue | Location | Why it matters |
 |-----|-------|----------|----------------|
-| **High** | **No reconnect / no state resync.** `leave()` tears down with no rejoin; a >12s stall forfeits; a reload loses `buffer`/`appliedCount`/`sentHistory`. | `net/match.ts` `leave`, watchdog | Any transient blip permanently ends a match. |
 | **High** | **Trust-the-peer cheat surface.** `validateAction` checks legality but never authenticates the sender; both hands/libraries live in every client's `GameState`. | `rules.ts` `validateAction`; `net/match.ts` | Hidden info isn't hidden; a modified client can act out of turn. Deferral is acknowledged in-code. |
 | **High** | **`Board.tsx` god component + whole-`game` subscription.** 919 lines; effects depend on `[game]` so any change re-renders the whole tree; no memoization on `CardView`/`PlayerBar`. | `ui/Board.tsx`, `ui/BoardFx.tsx` | One spell → dozens of re-renders; hard to test/change. |
-| **Med** | **AI never casts instants / combat tricks**, and duplicates the engine's legality model instead of using `rules.legalActions`. | `ai/ai.ts` | Biggest play-strength gap; AI can emit actions the reducer rejects when the two drift. |
+| **High** | **Deck balance is stale.** The ~44–56% win band was tuned against an AI that could not cast instants. Now that it can, a 2,240-game self-play run spreads 38.9%–65.2% (Grave Tide 45.0 → 65.2 on 2× Grasp from the Grave). | `cards/decks.ts` | The advertised balance no longer holds; needs a retune against the current AI. |
+| **Med** | **AI still ignores buff-style combat tricks** (Iaijutsu Strike, Warding Stance): `COMBAT_TRICK_MIN` admits removal only, because pumping correctly needs block-assignment context. | `ai/ai.ts` | Iron Blossom's identity cards go unused, which is part of why it now sits low in the band. |
 | **Med** | **`pickAttacks` swings with everything**, ignoring blockers/lethal crackback. | `ai/ai.ts` `pickAttacks` | Feeds creatures into losing trades. |
 | **Med** | **No double-deck-out terminal.** Deck-out is only checked on a forced draw. | `reducer.ts` `drawCard` | A both-empty board has no terminal condition (unlikely at 20 life / 30 cards). |
 | **Med** | **Host/join race + multiple-joiner corruption**; unhandled Supabase send/subscribe errors; 4-char room code with no uniqueness/auth; peer deck id trusted with divergent fallbacks. | `net/match.ts` `createMatch`/`joinMatch` | Handshake robustness gaps; a stray joiner can corrupt an in-progress match. |
@@ -225,41 +233,64 @@ from this list.
 
 ---
 
-## 7. Recent fixes
+## 7. Recent work
 
-The type-check/asset/CI/version items were resolved in a later cleanup and removed from §6.
-Two High-severity PvP-integrity bugs were fixed earlier. Both were rooted in the §3 actor model.
+### (a) Two documented-but-absent fixes, made real
+An earlier revision of this document described `actorOf`, a PvP actor guard in the store, and a
+null-guard in `declareBlockers` validation as *done*. **None of them were in the tree.** Both
+underlying bugs were live until they were fixed for real:
 
-### (a) Seq-collision desync — fixed by a store actor-guard
-The lockstep transport stamps every action with a single shared `appliedCount` counter and
-assumes "one legal actor per phase." Nothing enforced that: the store's `dispatch` never checked
-turn ownership and `advance` has no engine-level actor guard, so in PvP the *non-actor* client
-could originate an action (e.g. the active player firing `advance` during `combat_block` while the
-defender blocks), both clients would stamp the same `seq`, and each would drop the other's copy as
-"already applied" → permanent, silent divergence.
+- **Seq-collision desync.** The lockstep transport stamps every action with one shared
+  `appliedCount` and assumes "one legal actor per phase," but nothing enforced it. The non-actor
+  client could originate an action (the active player firing `advance` during `combat_block` while
+  the defender blocks), both clients would stamp the same `seq`, and each would drop the other's
+  copy as "already applied" → permanent, silent divergence.
+  **Fix:** `actorOf(state)` now exists in `src/engine/rules.ts` and is the single source of truth
+  for "who acts now" (reused by the validator, the store and the AI). `dispatch` drops any local
+  PvP action when `myId !== actorOf(game)`, making the invariant true by construction.
+- **`declareBlockers` validation crash.** `validateAction` did `findCreature(state, atkIid)!.card`.
+  If the defender's instant killed the tapped attacker mid-`combat_block`, it was still listed in
+  `combat.attackers`, so validation reached it and the non-null assertion threw an uncaught
+  `TypeError`. **Fix:** null-checked, throwing a clean `Error('attacker no longer in play')`.
 
-**Fix:** make the invariant true by construction. `dispatch` now drops any local PvP action when
-`myId !== actorOf(game)` (`src/store/gameStore.ts` `dispatch`). The transport is unchanged.
+Both are covered by tests that fail if the guard is removed.
 
-### (b) `declareBlockers` validation crash — fixed by a null-guard
-`validateAction`'s `declareBlockers` case did `findCreature(state, atkIid)!.card`. If the attacker
-left the battlefield mid-`combat_block` (the defender's instant killed the tapped attacker), it is
-still listed in `combat.attackers`, so validation reached it and the non-null assertion threw an
-uncaught `TypeError`.
+### (b) PvP reconnect
+`leave()` used to tear down with no way back, a >12s stall forfeited, and a reload lost the
+in-closure `buffer`/`appliedCount`/`sentHistory` — so any transient blip permanently ended a match.
 
-**Fix:** `findCreature(...)` is null-checked and throws a clean `Error('attacker no longer in play')`
-(`src/engine/rules.ts` `declareBlockers` case), mirroring the reducer's existing
-`?.card; if (!atk) continue` guard in `resolveCombat`.
+- The sequencing core moved to **`src/net/lockstep.ts`**: pure, no Supabase, no timers, no DOM, and
+  therefore unit-testable under the repo's `environment:'node'` config (16 tests). `match.ts` now
+  owns only the wire — channel wiring, liveness, handshakes.
+- It keeps the **full applied log** rather than a send-only history. Two payoffs: either client can
+  answer a resend for any `seq` (not just ones it originated), and the log doubles as a replayable
+  match record.
+- **Reconnect is replay.** `{seed, deck ids, log}` goes to `sessionStorage` (`net/resume.ts`); on
+  rejoin the store rebuilds `createInitialState` and folds the log forward. No `GameState` is ever
+  serialized — determinism does the work.
+- A **`rejoin` handshake** pulls whatever the peer applied while we were away. It is reused for
+  in-place resync when a stale peer returns, which covers the one gap the resend path cannot see:
+  a drop at the *end* of the stream, where nothing newer arrives to reveal it.
+- The watchdog is now two-stage: **stale** at 9s (recoverable, shows a banner) and **gone** at 45s
+  (forfeits). `createMatch`/`joinMatch` also ignore a second joiner.
 
-**Supporting change:** the `combat_block ? defender : active` expression, previously copy-pasted in
-three files, is now the exported `actorOf(state)` helper in `src/engine/rules.ts`, reused by the
-reducer, the validator, and the store.
+### (c) AI consumes `rules.legalActions`
+`legalActions` was **dead code** — exported, imported nowhere — while `pickMain` hand-rolled a
+parallel legality model. The AI now ranks candidates the rules enumerate instead of generating its
+own, so the drift class is gone; `legalActions` itself became actor-aware and now enumerates
+instants in the combat steps and whipflash targets.
 
-**Tests** (`src/engine/__tests__/engine.test.ts`): `actorOf` returns the right player per phase; a
-block declared for an attacker that died mid-`combat_block` throws a clean `Error`, not a
-`TypeError`. Full suite: 47 tests green; `npx tsc --noEmit` clean.
+Measured over 2,240 self-play games (all 56 deck pairings × 40 seeds):
 
----
+| | errors | stalls | avg steps | win-rate band |
+|---|---|---|---|---|
+| before | 0 | 0 | 83.8 | 43.0 – 58.6 |
+| refactor, tricks off | 0 | 0 | 83.8 | 43.0 – 57.5 |
+| refactor, tricks on | 0 | 0 | 86.3 | 38.9 – 65.2 |
+
+The middle row is the control: the scoring rewrite is behaviour-preserving. The whole spread comes
+from the new capability, which is why deck balance is now a High risk in §6 rather than a settled
+claim.
 
 ## 8. Run it
 

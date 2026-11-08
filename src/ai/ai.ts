@@ -2,25 +2,31 @@ import { getDef } from '../cards/cards';
 import type { Action, CardInstance, GameState, PlayerId } from '../engine/types';
 import { opponentOf } from '../engine/types';
 import {
+  actorOf,
   canAttack,
   findCreature,
   hasKeyword,
   isCreature,
-  isLand,
+  legalActions,
   power,
   toughness,
-  availableMana,
 } from '../engine/rules';
 
 // Heuristic in-browser AI. One decision per call; the driver applies it and
 // calls again, so mana/board state are always re-read fresh.
+//
+// Candidates come from `rules.legalActions` — the AI never generates moves of its
+// own, it only RANKS the ones the rules say are available. That removes a whole
+// bug class: the AI cannot emit an action the reducer will reject, and the two
+// legality models cannot drift apart as cards are added. The only exceptions are
+// the combinatorial combat declarations (attack sets, block assignments), which
+// are built directly in `pickAttacks` / `pickBlocks`.
+//
 // ponytail: greedy heuristic, no look-ahead. Swap in minimax later if too weak.
 
 export function aiShouldAct(state: GameState, ai: PlayerId): boolean {
   if (state.winner) return false;
-  if (state.pending) return state.active === ai; // the caster resolves their trigger
-  if (state.phase === 'combat_block') return state.active !== ai; // AI is defender
-  return state.active === ai;
+  return actorOf(state) === ai;
 }
 
 export function pickAction(state: GameState, ai: PlayerId): Action {
@@ -36,107 +42,145 @@ export function pickAction(state: GameState, ai: PlayerId): Action {
   }
 }
 
-function pickMain(state: GameState, ai: PlayerId): Action {
+// ---- Scoring -------------------------------------------------------------
+//
+// Priority bands, highest first. These reproduce the hand-rolled ladder this AI
+// used before it consumed `legalActions`: the preferences are unchanged, they are
+// just expressed as a ranking over candidates the AI no longer generates itself.
+const BAND = {
+  land: 100, // always develop mana
+  lethalBurn: 90, // burn that closes the game out
+  removalKill: 80, // burn that kills a creature
+  destroy: 78, // hard removal on a tapped creature
+  tapAll: 76, // Topple, when it actually catches something
+  creature: 70, // biggest body we can afford
+  token: 60,
+  ramp: 58,
+  heal: 56, // only when genuinely low
+  buff: 50,
+  draw: 40,
+  advance: 0, // the floor: do nothing else
+  never: -1, // legal but never wanted (wasted burn, healing at full life, ...)
+} as const;
+
+const SCALE = 1000;
+
+/** Compose a band with a within-band tiebreak (clamped to 0..SCALE-1). */
+function score(band: number, tiebreak = 0): number {
+  return band * SCALE + Math.max(0, Math.min(SCALE - 1, Math.round(tiebreak)));
+}
+
+/** Only cast a trick mid-combat if it removes something — never chip value away. */
+const COMBAT_TRICK_MIN = score(BAND.destroy);
+
+function handCard(state: GameState, player: PlayerId, iid: string): CardInstance | null {
+  return state.players[player].hand.find((c) => c.iid === iid) ?? null;
+}
+
+function scoreAction(state: GameState, ai: PlayerId, a: Action): number {
+  switch (a.type) {
+    case 'playLand':
+      return score(BAND.land);
+    case 'castCreature': {
+      const card = handCard(state, ai, a.iid);
+      if (!card) return score(BAND.never);
+      return score(BAND.creature, getDef(card.def).cost * 10); // biggest first
+    }
+    case 'castSorcery':
+      return scoreSpell(state, ai, a);
+    case 'advance':
+      return score(BAND.advance);
+    default:
+      return score(BAND.never);
+  }
+}
+
+function scoreSpell(
+  state: GameState,
+  ai: PlayerId,
+  a: Extract<Action, { type: 'castSorcery' }>,
+): number {
   const me = state.players[ai];
   const oppId = opponentOf(ai);
   const opp = state.players[oppId];
-  const mana = availableMana(me);
+  const card = handCard(state, ai, a.iid);
+  if (!card) return score(BAND.never);
+  const def = getDef(card.def);
+  const eff = def.effect;
+  if (!eff) return score(BAND.never);
+  // Within a band, spend the cheapest card that does the job.
+  const thrift = Math.max(0, 20 - def.cost);
 
-  // 1. Always develop mana.
-  const land = me.hand.find((c) => getDef(c.def).type === 'land');
-  if (land && !me.landPlayedThisTurn) return { type: 'playLand', iid: land.iid };
-
-  const burns = me.hand.filter((c) => getDef(c.def).effect?.type === 'damage');
-
-  // 2. Lethal burn to the face.
-  for (const b of burns) {
-    const def = getDef(b.def);
-    const amount = (def.effect as { amount: number }).amount;
-    if (def.cost <= mana && amount >= opp.life) {
-      return { type: 'castSorcery', iid: b.iid, target: { kind: 'player', player: oppId } };
+  switch (eff.type) {
+    case 'damage': {
+      if (!a.target) return score(BAND.never);
+      if (a.target.kind === 'player') {
+        // Only ever point burn at a face to actually finish the game.
+        if (a.target.player === oppId && eff.amount >= opp.life)
+          return score(BAND.lethalBurn, thrift);
+        return score(BAND.never);
+      }
+      const found = findCreature(state, a.target.iid);
+      if (!found || found.controller === ai) return score(BAND.never); // never shoot our own
+      const victim = found.card;
+      if (toughness(victim) - victim.damage > eff.amount) return score(BAND.never); // wouldn't kill
+      return score(BAND.removalKill, power(victim) * 20 + thrift); // biggest threat first
     }
-  }
-
-  // 3. Removal: kill the biggest enemy creature we can.
-  const enemyCreatures = opp.battlefield.filter(isCreature);
-  for (const b of burns) {
-    const def = getDef(b.def);
-    if (def.cost > mana) continue;
-    const amount = (def.effect as { amount: number }).amount;
-    const killable = enemyCreatures
-      .filter((c) => toughness(c) - c.damage <= amount)
-      .sort((x, y) => power(y) - power(x));
-    if (killable.length) {
-      return { type: 'castSorcery', iid: b.iid, target: { kind: 'creature', iid: killable[0].iid } };
+    case 'destroy': {
+      if (a.target?.kind !== 'creature') return score(BAND.never);
+      const found = findCreature(state, a.target.iid);
+      if (!found || found.controller === ai) return score(BAND.never);
+      return score(BAND.destroy, power(found.card) * 20 + thrift);
     }
-  }
-
-  // 3b. Take Counter: destroy a tapped enemy creature (biggest first).
-  // Skip block-only instants — they can't be cast on our own turn.
-  const destroyer = me.hand.find(
-    (c) =>
-      getDef(c.def).effect?.type === 'destroy' &&
-      !getDef(c.def).blockOnly &&
-      getDef(c.def).cost <= mana,
-  );
-  if (destroyer) {
-    const tapped = enemyCreatures.filter((c) => c.tapped).sort((x, y) => power(y) - power(x));
-    if (tapped.length) {
-      return {
-        type: 'castSorcery',
-        iid: destroyer.iid,
-        target: { kind: 'creature', iid: tapped[0].iid },
-      };
+    case 'tapAll': {
+      const catches = opp.battlefield.some(
+        (c) => isCreature(c) && !c.tapped && toughness(c) <= eff.maxToughness,
+      );
+      return catches ? score(BAND.tapAll, thrift) : score(BAND.never);
     }
-  }
-
-  // 3c. Topple: tap small attackers if it actually hits something.
-  const toppler = me.hand.find(
-    (c) => getDef(c.def).effect?.type === 'tapAll' && getDef(c.def).cost <= mana,
-  );
-  if (toppler) {
-    const maxT = (getDef(toppler.def).effect as { maxToughness: number }).maxToughness;
-    if (enemyCreatures.some((c) => !c.tapped && toughness(c) <= maxT)) {
-      return { type: 'castSorcery', iid: toppler.iid };
+    case 'token':
+      return score(BAND.token, thrift);
+    case 'ramp':
+      return score(BAND.ramp, thrift); // legalActions already checked a land is in hand
+    case 'heal':
+      return me.life < 12 ? score(BAND.heal, thrift) : score(BAND.never);
+    case 'buff': {
+      if (a.target?.kind !== 'creature') return score(BAND.never);
+      const found = findCreature(state, a.target.iid);
+      if (!found || found.controller !== ai) return score(BAND.never); // only pump our own
+      return score(BAND.buff, power(found.card) * 20 + thrift);
     }
+    case 'draw':
+      return score(BAND.draw, thrift);
+    default:
+      return score(BAND.never);
   }
+}
 
-  // 4. Cast the biggest creature we can afford.
-  const creatures = me.hand
-    .filter((c) => getDef(c.def).type === 'creature' && getDef(c.def).cost <= mana)
-    .sort((x, y) => getDef(y.def).cost - getDef(x.def).cost);
-  if (creatures.length) return { type: 'castCreature', iid: creatures[0].iid };
-
-  // 4b. Utility: tokens (board), ramp (if a land is in hand), heal (only when low).
-  const tokener = me.hand.find(
-    (c) => getDef(c.def).effect?.type === 'token' && getDef(c.def).cost <= mana,
-  );
-  if (tokener) return { type: 'castSorcery', iid: tokener.iid };
-  const ramper = me.hand.find(
-    (c) => getDef(c.def).effect?.type === 'ramp' && getDef(c.def).cost <= mana,
-  );
-  if (ramper && me.hand.some(isLand)) return { type: 'castSorcery', iid: ramper.iid };
-  const healer = me.hand.find(
-    (c) => getDef(c.def).effect?.type === 'heal' && getDef(c.def).cost <= mana,
-  );
-  if (healer && me.life < 12) return { type: 'castSorcery', iid: healer.iid };
-
-  // 5. Buff our best creature.
-  const buff = me.hand.find((c) => getDef(c.def).effect?.type === 'buff');
-  if (buff && getDef(buff.def).cost <= mana) {
-    const own = me.battlefield.filter(isCreature).sort((x, y) => power(y) - power(x));
-    if (own.length)
-      return { type: 'castSorcery', iid: buff.iid, target: { kind: 'creature', iid: own[0].iid } };
+/** Highest-scoring legal action, or null if there are none. Ties go to the first. */
+function bestLegal(state: GameState, ai: PlayerId): { action: Action; score: number } | null {
+  let best: { action: Action; score: number } | null = null;
+  for (const a of legalActions(state, ai)) {
+    const s = scoreAction(state, ai, a);
+    if (!best || s > best.score) best = { action: a, score: s };
   }
+  return best;
+}
 
-  // 6. Card draw if we have spare mana and nothing better.
-  const draw = me.hand.find((c) => getDef(c.def).effect?.type === 'draw');
-  if (draw && getDef(draw.def).cost <= mana) return { type: 'castSorcery', iid: draw.iid };
+// ---- Per-phase decisions -------------------------------------------------
 
-  return { type: 'advance' }; // nothing left to do -> combat
+function pickMain(state: GameState, ai: PlayerId): Action {
+  // `advance` is always among the legal actions here and scores the floor, so the
+  // AI moves to combat exactly when nothing else is worth doing.
+  return bestLegal(state, ai)?.action ?? { type: 'advance' };
 }
 
 function pickAttacks(state: GameState, ai: PlayerId): Action {
+  // Instants are legal in the attack step: clear a blocker (or steal the win)
+  // before committing the swing. Anything less decisive waits.
+  const trick = bestLegal(state, ai);
+  if (trick && trick.score >= COMBAT_TRICK_MIN) return trick.action;
+
   const me = state.players[ai];
   // Aggressive: swing with everything that can attack.
   // ponytail: ignores unfavorable trades; add board eval before attacking later.
@@ -145,22 +189,35 @@ function pickAttacks(state: GameState, ai: PlayerId): Action {
 }
 
 function pickWhipflash(state: GameState, ai: PlayerId): Action {
-  const src = state.pending!.source;
   const oppId = opponentOf(ai);
-  const candidates = [...state.players.A.battlefield, ...state.players.B.battlefield].filter(
-    (c) => isCreature(c) && c.iid !== src,
+  const shots = legalActions(state, ai).filter(
+    (a): a is Extract<Action, { type: 'whipflash' }> => a.type === 'whipflash',
   );
-  const enemies = state.players[oppId].battlefield.filter(
-    (c) => isCreature(c) && c.iid !== src,
-  );
-  // Prefer to kill an enemy (1 toughness left), else weakest enemy, else weakest anything.
-  const kill = enemies.filter((c) => toughness(c) - c.damage <= 1).sort((a, b) => power(b) - power(a));
-  const pool = enemies.length ? enemies : candidates;
-  const target = kill[0] ?? pool.slice().sort((a, b) => toughness(a) - toughness(b))[0] ?? candidates[0];
-  return { type: 'whipflash', target: target.iid };
+  if (!shots.length) return { type: 'advance' }; // no legal target (shouldn't happen)
+
+  // Prefer to kill an enemy, else hit the weakest enemy, else the weakest thing.
+  let best: { action: Action; s: number } | null = null;
+  for (const a of shots) {
+    const found = findCreature(state, a.target);
+    if (!found) continue;
+    const c = found.card;
+    const enemy = found.controller === oppId;
+    const kills = toughness(c) - c.damage <= 1;
+    const band = enemy ? (kills ? 2 : 1) : 0;
+    const s = band * SCALE + (kills && enemy ? power(c) : -toughness(c));
+    if (!best || s > best.s) best = { action: a, s };
+  }
+  return best?.action ?? shots[0];
 }
 
 function pickBlocks(state: GameState, ai: PlayerId): Action {
+  // The defender holds priority here, so block-only instants (Take Counter,
+  // Grasp from the Grave) are finally live. Killing a tapped attacker outright
+  // beats any block assignment, so resolve tricks first and re-enter with a
+  // smaller combat. Each cast spends mana, so this always terminates.
+  const trick = bestLegal(state, ai);
+  if (trick && trick.score >= COMBAT_TRICK_MIN) return trick.action;
+
   const me = state.players[ai];
   const combat = state.combat!;
   const pool = me.battlefield.filter((c) => isCreature(c) && !c.tapped);

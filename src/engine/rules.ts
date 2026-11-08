@@ -73,13 +73,36 @@ function inHand(p: PlayerState, iid: string): CardInstance | null {
 
 // ---- Legal action enumeration (used by the AI; UI gates via validateAction) ----
 
+/**
+ * Every discrete action the given player may legally take right now.
+ *
+ * This is the AI's single source of candidate moves: it mirrors `validateAction`
+ * exactly, so the AI can never emit something the reducer will reject. Keep the
+ * two in step — if you add a rule to the validator, add it here.
+ *
+ * Combat DECLARATIONS are deliberately excluded: `declareAttackers` /
+ * `declareBlockers` are combinatorial (every subset / assignment), so enumerating
+ * them is exponential. The AI builds those two directly in `pickAttacks` /
+ * `pickBlocks`. Everything else — lands, creatures, spells, triggers, advance —
+ * is enumerated here.
+ */
 export function legalActions(state: GameState, player: PlayerId): Action[] {
   if (state.winner) return [];
-  if (state.active !== player) {
-    // Off-turn, the only input is blocking during the active player's combat.
-    if (state.phase === 'combat_block') return []; // blocks enumerated separately by AI
-    return [];
+  if (actorOf(state) !== player) return []; // not this player's move to make
+
+  // A pending trigger must be resolved before anything else is legal.
+  if (state.pending) {
+    if (state.pending.kind !== 'whipflash') return [];
+    const src = state.pending.source;
+    const out: Action[] = [];
+    for (const pid of ['A', 'B'] as PlayerId[]) {
+      for (const c of state.players[pid].battlefield) {
+        if (isCreature(c) && c.iid !== src) out.push({ type: 'whipflash', target: c.iid });
+      }
+    }
+    return out;
   }
+
   const p = state.players[player];
   const actions: Action[] = [];
 
@@ -91,38 +114,62 @@ export function legalActions(state: GameState, player: PlayerId): Action[] {
         actions.push({ type: 'playLand', iid: c.iid });
       } else if (def.type === 'creature' && def.cost <= mana) {
         actions.push({ type: 'castCreature', iid: c.iid });
-      } else if (
-        (def.type === 'sorcery' || def.type === 'instant') &&
-        !def.blockOnly && // block-only instants aren't castable on your turn
-        def.cost <= mana &&
-        def.effect
-      ) {
-        const eff = def.effect;
-        if (!needsTarget(eff)) {
-          if (eff.type !== 'ramp' || p.hand.some(isLand)) {
-            actions.push({ type: 'castSorcery', iid: c.iid });
-          }
-        } else if (eff.type === 'damage' || eff.type === 'buff') {
-          for (const t of legalTargets(state, player, eff.targets)) {
-            actions.push({ type: 'castSorcery', iid: c.iid, target: t });
-          }
-        } else if (eff.type === 'destroy') {
-          // only tapped creatures are valid targets
-          for (const pid of ['A', 'B'] as PlayerId[]) {
-            for (const cc of state.players[pid].battlefield) {
-              if (isCreature(cc) && cc.tapped) {
-                actions.push({ type: 'castSorcery', iid: c.iid, target: { kind: 'creature', iid: cc.iid } });
-              }
-            }
+      }
+    }
+    actions.push(...spellActions(state, player));
+    actions.push({ type: 'advance' }); // move to combat
+  } else if (state.phase === 'combat_attack') {
+    // Instants only — sorceries are main-phase. declareAttackers is built by the AI.
+    actions.push(...spellActions(state, player));
+    actions.push({ type: 'advance' });
+  } else if (state.phase === 'combat_block') {
+    // The defender acts here: block-only instants become available, and
+    // declareBlockers itself is built by the AI.
+    actions.push(...spellActions(state, player));
+  } else if (state.phase === 'end') {
+    actions.push({ type: 'advance' });
+  }
+  return actions;
+}
+
+/**
+ * Castable spells in hand for `caster`, with every legal target enumerated.
+ * Mirrors the `castSorcery` arm of `validateAction`: sorceries are main-phase
+ * only, block-only instants require `combat_block`, and instants are otherwise
+ * free-timing for whoever currently holds priority.
+ */
+function spellActions(state: GameState, caster: PlayerId): Action[] {
+  const p = state.players[caster];
+  const mana = availableMana(p);
+  const out: Action[] = [];
+
+  for (const c of p.hand) {
+    const def = getDef(c.def);
+    if (def.type !== 'sorcery' && def.type !== 'instant') continue;
+    if (def.type === 'sorcery' && state.phase !== 'main1') continue;
+    if (def.blockOnly && state.phase !== 'combat_block') continue;
+    if (def.cost > mana || !def.effect) continue;
+
+    const eff = def.effect;
+    if (!needsTarget(eff)) {
+      // Ramp with no land in hand is a legal cast but a guaranteed blank.
+      if (eff.type !== 'ramp' || p.hand.some(isLand)) out.push({ type: 'castSorcery', iid: c.iid });
+    } else if (eff.type === 'damage' || eff.type === 'buff') {
+      for (const t of legalTargets(state, caster, eff.targets)) {
+        out.push({ type: 'castSorcery', iid: c.iid, target: t });
+      }
+    } else if (eff.type === 'destroy') {
+      // Only tapped creatures are valid targets.
+      for (const pid of ['A', 'B'] as PlayerId[]) {
+        for (const cc of state.players[pid].battlefield) {
+          if (isCreature(cc) && cc.tapped) {
+            out.push({ type: 'castSorcery', iid: c.iid, target: { kind: 'creature', iid: cc.iid } });
           }
         }
       }
     }
-    actions.push({ type: 'advance' }); // move to combat
-  } else if (state.phase === 'combat_attack' || state.phase === 'end') {
-    actions.push({ type: 'advance' });
   }
-  return actions;
+  return out;
 }
 
 export function legalTargets(
