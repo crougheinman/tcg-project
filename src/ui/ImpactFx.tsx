@@ -1,4 +1,5 @@
 import { motion, useReducedMotion } from 'framer-motion';
+import { circle } from './fxShapes';
 
 // Pure framer-motion impact effects — no spritesheets. Each is a burst of
 // primitive shapes (rings / flashes / shards) themed by color.
@@ -12,8 +13,6 @@ export interface SpellTheme {
 
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
-/** Inline sizing for a centered circle (framer owns transform, so center by margin). */
-export const circle = (d: number) => ({ width: d, height: d, marginLeft: -d / 2, marginTop: -d / 2 });
 
 /** One-shot spell impact: core flash + double shockwave + 8 radial shards + afterglow. */
 export function SpellImpactFx({ x, y, theme }: { x: number; y: number; theme: SpellTheme }) {

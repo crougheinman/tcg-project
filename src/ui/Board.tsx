@@ -380,7 +380,8 @@ export function Board() {
       if (!canAttack(c)) return;
       setAttackers((prev) => {
         const next = new Set(prev);
-        next.has(c.iid) ? next.delete(c.iid) : next.add(c.iid);
+        if (next.has(c.iid)) next.delete(c.iid);
+        else next.add(c.iid);
         return next;
       });
     } else if (game.phase === 'combat_block') {
