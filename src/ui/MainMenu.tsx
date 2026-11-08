@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { hasSupabase } from '../net/supabase';
+import { loadMatch } from '../net/resume';
 import { randomDeck } from '../cards/decks';
 import { Rulebook } from './Rulebook';
 import { DeckSelect } from './DeckSelect';
@@ -46,6 +47,10 @@ const PATCH_NOTES: { deck: string; kind: 'buff' | 'nerf'; change: string; why: s
 export function MainMenu({ onOnline }: { onOnline: () => void }) {
   const startAI = useGame((s) => s.startAI);
   const startHotseat = useGame((s) => s.startHotseat);
+  const resumePvp = useGame((s) => s.resumePvp);
+  // An unfinished PvP match from this tab (reload / crash). Read once on mount so
+  // the button doesn't vanish mid-render once the record is cleared.
+  const [resumable] = useState(() => loadMatch());
   // After picking a mode, choose a deck before the game starts.
   const [picking, setPicking] = useState<'ai' | 'hotseat' | null>(null);
   const [p1Deck, setP1Deck] = useState<string | null>(null); // hotseat: player 1's deck
@@ -111,6 +116,11 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
             <button onClick={onOnline} disabled={!hasSupabase}>
               Online PvP{!hasSupabase ? ' (set Supabase keys)' : ''}
             </button>
+            {resumable && hasSupabase && (
+              <button className="resume-btn" onClick={resumePvp}>
+                ⟳ Reconnect to match {resumable.roomId}
+              </button>
+            )}
             <button onClick={() => setShowGallery(true)}>Card Codex</button>
             <Rulebook icon={false} />
           </div>

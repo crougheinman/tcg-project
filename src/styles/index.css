@@ -1449,3 +1449,22 @@ input {
   .preview-overlay { align-items: start; padding-top: 6px; }
   .preview-overlay .pcard { transform: scale(0.64); transform-origin: top center; }
 }
+
+/* ---- PvP connection states ---- */
+/* Recoverable peer silence: informational, not an error, so it reads as calm
+   (panel + gold) rather than the red error toast, and sits above it. */
+.toast.net-stale {
+  background: var(--panel); color: var(--gold); border: 1px solid var(--gold);
+  bottom: 56px; cursor: default; display: flex; align-items: center; gap: 8px;
+}
+.net-stale-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--gold);
+  animation: net-pulse 1.1s ease-in-out infinite;
+}
+@keyframes net-pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+
+.resume-btn { border-color: var(--gold); color: var(--gold); }
+
+@media (prefers-reduced-motion: reduce) {
+  .net-stale-dot { animation: none; opacity: 0.8; }
+}

@@ -29,6 +29,7 @@ export function Board() {
   const playAgain = useGame((s) => s.playAgain);
   const forfeit = useGame((s) => s.forfeit);
   const error = useGame((s) => s.error);
+  const peerStale = useGame((s) => s.peerStale);
   const clearError = useGame((s) => s.clearError);
 
   const [menuOpen, setMenuOpen] = useState(false); // burger menu modal
@@ -798,6 +799,16 @@ export function Board() {
         {error && (
           <div className="toast" onClick={clearError}>
             {error}
+          </div>
+        )}
+
+        {/* The peer went quiet but the match is still recoverable: the transport
+            resyncs by itself if they come back, and only gives up after a long
+            grace period. Informational only — play is already blocked because it
+            is not this client's turn to act. */}
+        {mode === 'pvp' && peerStale && !game.winner && (
+          <div className="toast net-stale" role="status">
+            <span className="net-stale-dot" aria-hidden /> Opponent connection lost — reconnecting…
           </div>
         )}
 

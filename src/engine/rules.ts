@@ -50,6 +50,23 @@ export function findCreature(
   return null;
 }
 
+/**
+ * The single player who may legally originate an action right now.
+ *
+ * At every point in the game exactly one player is the actor. During
+ * `combat_block` that is the DEFENDER (they declare blocks and cast block-only
+ * instants); while a trigger is pending it is the caster (the active player);
+ * otherwise it is the active player.
+ *
+ * The lockstep PvP transport depends on this invariant — a single global `seq`
+ * counter is only coherent while one side acts at a time. Reuse this helper
+ * everywhere the "who acts now" question is asked; do NOT re-inline the ternary.
+ */
+export function actorOf(state: GameState): PlayerId {
+  if (state.pending) return state.active; // the caster resolves their own trigger
+  return state.phase === 'combat_block' ? opponentOf(state.active) : state.active;
+}
+
 function inHand(p: PlayerState, iid: string): CardInstance | null {
   return p.hand.find((c) => c.iid === iid) ?? null;
 }
@@ -165,7 +182,7 @@ export function validateAction(state: GameState, action: Action): void {
     case 'castSorcery': {
       // Sorceries: your main phase only. Instants: any phase — cast by the active
       // player on their turn, or by the defender during combat_block (off-turn).
-      const casterId = state.phase === 'combat_block' ? opponentOf(state.active) : state.active;
+      const casterId = actorOf(state);
       const caster = state.players[casterId];
       const c = inHand(caster, action.iid);
       const type = c && getDef(c.def).type;
@@ -215,7 +232,12 @@ export function validateAction(state: GameState, action: Action): void {
         if (!blk || !isCreature(blk)) throw new Error('invalid blocker');
         if (blk.tapped) throw new Error('tapped creature cannot block');
         if (!attackers.includes(atkIid)) throw new Error('not attacking');
-        const atk = findCreature(state, atkIid)!.card;
+        // The attacker may have left the battlefield mid-combat_block (e.g. the
+        // defender's instant killed it) while still listed in combat.attackers.
+        // Guard, or the non-null assertion throws an uncaught TypeError.
+        const atkFound = findCreature(state, atkIid);
+        if (!atkFound) throw new Error('attacker no longer in play');
+        const atk = atkFound.card;
         if (hasKeyword(atk, 'flying') && !hasKeyword(blk, 'flying'))
           throw new Error('only flyers can block a flyer');
       }
