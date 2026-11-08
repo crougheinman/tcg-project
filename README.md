@@ -1,4 +1,4 @@
-# Arcanum TCG
+# Entity Duel (Arcanum TCG)
 
 A tiny Magic-inspired trading card game. Web + mobile (Capacitor), **Player vs AI** and
 **Player vs Player**. 100% free stack.
@@ -18,7 +18,8 @@ A tiny Magic-inspired trading card game. Web + mobile (Capacitor), **Player vs A
 npm install
 npm run dev      # http://localhost:5173  — Play vs AI / Hotseat work with no setup
 npm test         # engine + AI tests
-npm run build    # production build into dist/
+npx tsc --noEmit # type-check (also runs as part of `npm run build`)
+npm run build    # type-check + production build into dist/
 ```
 
 ## Online PvP (optional, free)
@@ -52,16 +53,18 @@ use a seeded PRNG threaded through the state, so the same seed + same actions al
 same game. That determinism is what makes PvP free: clients agree on a seed and exchange only
 actions.
 
-### Cards & rules (MVP)
+### Cards & rules
 
 Single mana resource (lands tap for one mana). Card types: **land**, **creature**,
-**sorcery**. Phases: Main → Combat (attack → block → damage) → End. Keywords: **haste**,
-**flying**. Win by reducing opponent to 0 life (or decking them out). Card data lives in
-`src/cards/cards.ts`; effects are data-driven (`damage` / `draw` / `buff`), so most new cards
-are data, not code.
+**sorcery** and **instant**. Phases: Main → Combat (attack → block → damage) → End. Keywords:
+**haste**, **flying**, **defender**. Instants can be cast in the attack and block steps (during
+the block step only the defender acts). Win by reducing the opponent to 0 life (or decking them
+out). Card data lives in `src/cards/cards.ts`; effects are data-driven (`damage`, `draw`, `buff`,
+`heal`, `ramp`, `token`, `tapAll`, `destroy`), so most new cards are data, not code. See
+`ARCHITECTURE.md` for the engine deep-dive.
 
-### Not in MVP (deliberate)
+### Not implemented (deliberate)
 
-Instants/priority stack, multicolor mana, deck builder UI, accounts, server-authoritative
+A full priority stack, multicolor mana, deck builder UI, accounts, server-authoritative
 anti-cheat. PvP is client-authoritative lockstep with per-client validation; the upgrade path is
 a Supabase Edge Function running the same engine unchanged.

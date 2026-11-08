@@ -77,7 +77,7 @@ input {
 /* ---- menu ---- */
 .home-bg {
   position: fixed; inset: 0; z-index: -1; pointer-events: none;
-  background: url('/cards/home_animation.gif') center / cover no-repeat;
+  background: url('/cards/home_animation.webp') center / cover no-repeat;
   opacity: 0.15;
 }
 /* home <-> deck-select share this stack so they can crossfade/slide between each
