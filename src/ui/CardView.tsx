@@ -13,6 +13,26 @@ const LONG_PRESS_MS = 320;
 // synthetic hovers are ignored — on touch, ONLY a long-press opens the preview.
 let lastTouchTs = 0;
 
+/**
+ * Did this focus come from the keyboard?
+ *
+ * A touch or mouse press focuses the card too, and on some browsers that focus
+ * lands AFTER touchend — i.e. after `endPress` has already dismissed the
+ * preview — which leaves the card revealed on a plain tap. `:focus-visible` is
+ * the browser's own answer to "should this focus be shown", so it separates a
+ * keyboard tab from a finger without us guessing at event order.
+ *
+ * Falls back to false where the selector is unsupported: a very old browser
+ * loses preview-on-tab, which is far better than every tap popping a card.
+ */
+function isKeyboardFocus(el: Element): boolean {
+  try {
+    return el.matches(':focus-visible');
+  } catch {
+    return false;
+  }
+}
+
 interface Props {
   inst: CardInstance;
   faceDown?: boolean;
@@ -84,6 +104,12 @@ export function CardView({
     }, LONG_PRESS_MS);
   }
   function endPress() {
+    // Re-stamp on the way out. The synthetic mouse events a touch generates
+    // arrive AFTER touchend, so the suppression window has to be measured from
+    // the END of the touch, not its start — otherwise any press held longer
+    // than the window lets the synthetic mouseenter through, which re-opens the
+    // preview that releasing just dismissed and leaves it stuck on screen.
+    lastTouchTs = Date.now();
     clearTimeout(pressTimer.current);
     setHover(null); // finger lifted -> always dismiss the preview (drag or long-press)
   }
@@ -166,9 +192,15 @@ export function CardView({
       aria-label={label}
       aria-pressed={interactive && selected ? true : undefined}
       onKeyDown={interactive ? handleKeyDown : undefined}
-      // Keyboard focus should surface the same big preview that hovering does.
-      onFocus={() => setHover(inst)}
+      // Keyboard focus surfaces the same big preview that hovering does — but
+      // ONLY keyboard focus. See isKeyboardFocus: a tap focuses the card as well.
+      onFocus={(e) => {
+        if (isKeyboardFocus(e.currentTarget)) setHover(inst);
+      }}
       onBlur={() => setHover(null)}
+      // Android fires contextmenu on a long press, which would fight the
+      // hold-to-preview gesture with the browser's own menu.
+      onContextMenu={(e) => e.preventDefault()}
       // suppress the synthetic hover a touch tap generates — see lastTouchTs above
       onMouseEnter={() => {
         if (Date.now() - lastTouchTs < 700) return;
@@ -178,7 +210,10 @@ export function CardView({
       onTouchStart={onTouchStart}
       onTouchEnd={endPress}
       onTouchCancel={endPress}
-      onTouchMove={() => clearTimeout(pressTimer.current)}
+      onTouchMove={() => {
+        lastTouchTs = Date.now(); // a drag is still touch input; keep hover suppressed
+        clearTimeout(pressTimer.current);
+      }}
       title={titleText}
       layout
       // Battlefield creatures SLAM down from above (MTG Arena thunk); hand cards
