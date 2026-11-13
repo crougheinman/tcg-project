@@ -19,21 +19,24 @@ import {
 } from './ImpactFx';
 import { LandAbsorbFx, type LandAbsorb } from './LandAbsorbFx';
 import { ProjectileFx, type Projectile } from './Projectile';
-import { CHARGE_MS, HEAL_SPELLS, PROJECTILE_TRAVEL_MS, SMOKE_SPELLS } from './spellTiming';
+import {
+  CHARGE_MS,
+  HEAL_SPELLS,
+  IMPACT_MS,
+  LUNGE_MS,
+  PROJECTILE_TRAVEL_MS,
+  SLAM_DUST_MS,
+  SMOKE_SPELLS,
+  STRIKE_STAGGER_MS,
+  TRIGGER_CHARGE_MS,
+  travelMsFor,
+} from './fxTiming';
+import { useTimers } from './useTimers';
 import type { Burst } from './Vfx';
 
 // three.js is heavy — split it into its own chunk, loaded only in-game.
 const VfxCanvas = lazy(() => import('./Vfx').then((m) => ({ default: m.VfxCanvas })));
 
-// Combat pacing (MTG Arena style): attackers strike one after another, and each
-// strike's feedback (slash / shake / damage numbers) lands at the lunge's impact
-// moment — not on declaration.
-const STRIKE_STAGGER_MS = 260; // gap between consecutive attacker strikes
-const IMPACT_MS = 150; // time into a lunge when the hit "lands" (~40% of 360ms)
-
-// Creature spell-trigger (e.g. Pyre Adept): a quick charge at the creature card,
-// then a bolt fired at the opponent — a mini version of the burn-spell cadence.
-const TRIGGER_CHARGE_MS = 650;
 const TRIGGER_THEME: SpellTheme = { core: '#fff2cf', glow: '#ff8a33', ring: '#ff5a2a' };
 
 /**
@@ -69,6 +72,9 @@ export function BoardFx({ game }: { game: GameState }) {
     { id: number; x: number; y: number; theme: SpellTheme; ms: number }[]
   >([]);
 
+  // Every delayed step below goes through `later`, so leaving the board or
+  // starting a new game cannot leave a strike or an explosion armed.
+  const { later, clearAll } = useTimers();
   const prevGame = useRef<GameState>(game);
   const burstId = useRef(0);
   const dmgId = useRef(0);
@@ -147,6 +153,19 @@ export function BoardFx({ game }: { game: GameState }) {
     const before = prevGame.current;
     prevGame.current = game;
     if (!before || before === game) return;
+    // A different game replaced this one (Play Again). Diffing the old table
+    // against a fresh one reads every creature as "destroyed" and used to set
+    // them all on fire; there is nothing to animate between two games.
+    if (before.seed !== game.seed || game.turn < before.turn) {
+      clearAll();
+      creatureRects.current = {};
+      setDestroys([]);
+      setProjectiles([]);
+      setCharges([]);
+      setSlashes([]);
+      setDusts([]);
+      return;
+    }
     const add: Burst[] = [];
     const spawnAt = (sel: string, color: string, n: number) => {
       const el = document.querySelector(sel);
@@ -166,7 +185,11 @@ export function BoardFx({ game }: { game: GameState }) {
           const t = getDef(c.def).type;
           if (t === 'sorcery' || t === 'instant') newSpells.push({ def: c.def, owner: pid });
         }
-    const spellDamage = newSpells.some((sp) => getDef(sp.def).effect?.type === 'damage');
+    const dmgSpell = newSpells.find((sp) => getDef(sp.def).effect?.type === 'damage');
+    const spellDamage = !!dmgSpell;
+    // Impact feedback waits for THIS projectile's flight; a shuriken is quicker
+    // than a bolt, and its damage numbers used to trail it by the difference.
+    const boltMs = dmgSpell ? travelMsFor(dmgSpell.def) : 0;
     // A creature spell-trigger (Pyre Adept) will charge + shoot this action? Used to
     // hold a non-damage-spell's damage numbers until that trigger bolt lands.
     const triggerShot = newSpells.some((sp) => {
@@ -223,9 +246,9 @@ export function BoardFx({ game }: { game: GameState }) {
       if (add.length) setBursts((b) => [...b, ...add]);
       if (newDmgNums.length) setDmgNums((n) => [...n, ...newDmgNums]);
     };
-    if (combatHit && faceDmgDelay) setTimeout(flushDamage, faceDmgDelay);
-    else if (spellDamage) setTimeout(flushDamage, PROJECTILE_TRAVEL_MS);
-    else if (triggerShot) setTimeout(flushDamage, TRIGGER_CHARGE_MS + PROJECTILE_TRAVEL_MS);
+    if (combatHit && faceDmgDelay) later(flushDamage, faceDmgDelay);
+    else if (spellDamage) later(flushDamage, boltMs);
+    else if (triggerShot) later(flushDamage, TRIGGER_CHARGE_MS + PROJECTILE_TRAVEL_MS);
     else flushDamage();
 
     // Creature stat changes -> a floating number at the creature (green up / red down),
@@ -356,7 +379,7 @@ export function BoardFx({ game }: { game: GameState }) {
           ...c,
           { id: chId, x: fromX, y: fromY, theme: TRIGGER_THEME, ms: TRIGGER_CHARGE_MS },
         ]);
-        setTimeout(() => {
+        later(() => {
           setCharges((c) => c.filter((x) => x.id !== chId));
           setProjectiles((p) => [
             ...p,
@@ -412,8 +435,8 @@ export function BoardFx({ game }: { game: GameState }) {
           if (!el) continue;
           const r = el.getBoundingClientRect();
           const d = { id: dmgId.current++, x: r.left + r.width / 2, y: r.top + r.height * 0.78 };
-          setTimeout(() => setDusts((s) => [...s, d]), 140);
-          setTimeout(() => setDusts((s) => s.filter((x) => x.id !== d.id)), 140 + 800);
+          later(() => setDusts((s) => [...s, d]), SLAM_DUST_MS);
+          later(() => setDusts((s) => s.filter((x) => x.id !== d.id)), SLAM_DUST_MS + 800);
         }
       }
     }
@@ -428,7 +451,7 @@ export function BoardFx({ game }: { game: GameState }) {
         const r = el.getBoundingClientRect();
         const id = dmgId.current++;
         setSlashes((s) => [...s, { id, x: r.left + r.width / 2, y: r.top + r.height / 2 }]);
-        setTimeout(() => setSlashes((s) => s.filter((n) => n.id !== id)), 600);
+        later(() => setSlashes((s) => s.filter((n) => n.id !== id)), 600);
       };
       const spawnBlock = (el: Element | null) => {
         if (!el) return;
@@ -440,19 +463,19 @@ export function BoardFx({ game }: { game: GameState }) {
       };
       resolved.attackers.forEach((atk, i) => {
         const blk = blockerByAtk[atk];
-        setTimeout(() => {
+        later(() => {
           // re-query at strike time — dying cards are still in the DOM (exit fade)
           const atkEl = stackEl(atk);
           if (blk) {
             lungeTo(atkEl, stackEl(blk)); // clash with the blocker
-            setTimeout(() => {
+            later(() => {
               shakeEl(stackEl(blk));
               spawnSlash(stackEl(blk));
               spawnBlock(stackEl(blk)); // shield-pop so the block reads clearly
             }, IMPACT_MS);
           } else {
             lungeTo(atkEl, defenderShield); // straight at the player
-            setTimeout(() => {
+            later(() => {
               spawnSlash(defenderShield);
               document
                 .querySelector('.board')
@@ -492,7 +515,7 @@ export function BoardFx({ game }: { game: GameState }) {
         return bi >= 0 ? strikeDelay(bi) : 0;
       }
       if (graspKill || witherKill) return 0; // smoke already played; fade now
-      if (spellDamage) return PROJECTILE_TRAVEL_MS; // explode when the bolt lands
+      if (spellDamage) return boltMs; // explode when the bolt lands
       return 0;
     };
     for (const pid of ['A', 'B'] as PlayerId[]) {
@@ -502,12 +525,12 @@ export function BoardFx({ game }: { game: GameState }) {
           if (!r) continue;
           const fx = { id: dmgId.current++, x: r.x, y: r.y, style: deathStyle };
           const delay = deathDelay(c.iid);
-          if (delay) setTimeout(() => setDestroys((d) => [...d, fx]), delay);
+          if (delay) later(() => setDestroys((d) => [...d, fx]), delay);
           else setDestroys((d) => [...d, fx]);
           // fire (DestroyFx) removes itself via onDone; debris/wither are one-shot
           // framer sequences, so auto-clear them after they finish playing.
           if (fx.style !== 'fire') {
-            setTimeout(() => setDestroys((d) => d.filter((x) => x.id !== fx.id)), delay + 1700);
+            later(() => setDestroys((d) => d.filter((x) => x.id !== fx.id)), delay + 1700);
           }
         }
       }
@@ -526,7 +549,7 @@ export function BoardFx({ game }: { game: GameState }) {
       }
     }
     creatureRects.current = rects;
-  }, [game]);
+  }, [game, later, clearAll]);
 
   useEffect(() => {
     if (!spellFx) return;
@@ -551,11 +574,11 @@ export function BoardFx({ game }: { game: GameState }) {
       // metallic hit: a quick slash spark, not a fireball burst
       const id = dmgId.current++;
       setSlashes((s) => [...s, { id, x: p.toX, y: p.toY }]);
-      setTimeout(() => setSlashes((s) => s.filter((n) => n.id !== id)), 600);
+      later(() => setSlashes((s) => s.filter((n) => n.id !== id)), 600);
       return;
     }
     setSpellFx({ id: dmgId.current++, theme: p.theme, x: p.toX, y: p.toY });
-  }, []);
+  }, [later]);
 
   return (
     <>
@@ -696,7 +719,7 @@ function lungeTo(from: HTMLElement | null, to: Element | null) {
       { transform: `translate(${dx * 0.45}px, ${dy * 0.45}px)`, offset: 0.4 },
       { transform: 'translate(0,0)' },
     ],
-    { duration: 360, easing: 'cubic-bezier(.3,.85,.3,1)' },
+    { duration: LUNGE_MS, easing: 'cubic-bezier(.3,.85,.3,1)' },
   );
 }
 function shakeEl(el: HTMLElement | null) {

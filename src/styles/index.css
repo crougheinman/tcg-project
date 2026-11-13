@@ -1636,3 +1636,55 @@ a:focus-visible {
 
 /* Buttons are tapped constantly too; same reasoning as .card above. */
 button, [role='button'] { touch-action: manipulation; }
+
+/* ---- 3D table (.board.depth-3d) ---- */
+/* Each battlefield is tilted back like a tabletop seen from a seat: the far edge
+   recedes, the near edge stays put.
+
+   Each one carries its OWN perspective() and is flattened into its panel. The
+   obvious alternative — one perspective on .board with preserve-3d down the tree —
+   was tried first and fails: the far half of each battlefield rotates BEHIND its
+   own .player-zone panel, which then hides the cards and swallows their clicks.
+
+   Both rotate about their bottom edge, so nothing ever grows past its flat size
+   (a top-edge pivot magnifies the near side into the hand on a phone). --seam
+   shrinks the opponent's field to roughly the scale your far edge has receded to
+   — persp / (persp + fieldHeight * sin(tilt)) — so the two read as one receding
+   surface instead of two identical steps. Nothing here moves: it is a static
+   projection, and every effect that aims at a card still works because
+   getBoundingClientRect reports the projected box. */
+.board.depth-3d {
+  --tilt: 20deg;
+  --tilt-persp: 900px;
+  --seam: 0.93;
+}
+.board.depth-3d .battlefield {
+  transform: perspective(var(--tilt-persp)) rotateX(var(--tilt));
+  transform-origin: 50% 100%;
+}
+.board.depth-3d .player-zone.opp .battlefield {
+  transform: perspective(var(--tilt-persp)) scale(var(--seam)) rotateX(var(--tilt));
+}
+/* A tilted row that hugs the left edge leans; centred, it recedes symmetrically. */
+.board.depth-3d .row.creatures { justify-content: center; }
+/* The surface itself: a soft pool of light and a far-edge horizon line, so the
+   plane reads as a table even with nothing on it. */
+.board.depth-3d .battlefield {
+  background:
+    radial-gradient(120% 90% at 50% 100%, rgba(217, 182, 90, 0.07), transparent 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 30%);
+  box-shadow: inset 0 1px 0 rgba(217, 182, 90, 0.22);
+}
+.board.depth-3d .battlefield.drop-active {
+  background: rgba(127, 212, 106, 0.1);
+  box-shadow: inset 0 0 0 2px var(--good), 0 0 18px rgba(84, 201, 138, 0.5);
+}
+/* Cards rest ON the surface: a contact shadow thrown toward the viewer. */
+.board.depth-3d .battlefield .stack { filter: drop-shadow(0 9px 6px rgba(0, 0, 0, 0.55)); }
+
+/* Phones: a shallower angle. The cards are small already, and a steep tilt costs
+   more legibility than it buys depth. */
+@media (max-width: 640px), (orientation: landscape) and (max-height: 500px) {
+  .board.depth-3d { --tilt: 13deg; --seam: 0.96; }
+  .board.depth-3d .battlefield .stack { filter: drop-shadow(0 5px 4px rgba(0, 0, 0, 0.5)); }
+}

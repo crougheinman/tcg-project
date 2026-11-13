@@ -198,6 +198,26 @@ avoid fighting framer's transform ownership), and a single lazy-loaded three.js 
 (`Vfx.tsx`). Fx overlays render as siblings of `.board` (not children) because `.board` gets a CSS
 transform during shake that would break `position:fixed` descendants.
 
+**Depth — the 3D table (`ui/depth.ts`, `.board.depth-3d` in `styles/index.css`).** The battlefields
+are tilted back with CSS 3D; the DOM, hit-testing and every effect stay exactly as they were. Each
+battlefield carries its **own** `perspective()` and is flattened into its panel. The obvious
+alternative — one `perspective` on `.board` with `preserve-3d` down the tree — was tried first and
+fails: the far half of each battlefield rotates *behind* its own `.player-zone` panel, which then
+hides the cards and swallows their clicks. Effects need no changes because they aim with
+`getBoundingClientRect`, which reports the projected box. Two known approximations: the two
+battlefields are separate planes matched by a `--seam` scale rather than one true surface, and
+`lungeTo` translates in the tilted plane's space, so a lunge's vertical reach is foreshortened by a
+few percent. Depth is presentation only and never touches timing, so it is safe in PvP. It defaults
+on, except for reduced-motion or low-memory/two-core devices, and the in-game menu toggle overrides
+the default either way.
+
+**Effect timing — `ui/fxTiming.ts` and `ui/useTimers.ts`.** Every choreography constant (telegraph
+windows, projectile flight, strike stagger, impact point) lives in `fxTiming.ts`; the store reads
+its telegraph delays from the same file, so the delay and the visual cannot drift. `BoardFx` queues
+every delayed step through `useTimers().later`, which cancels on unmount, and it drops everything
+when a different game replaces the current one. Timers are deliberately **not** cancelled when the
+state merely advances — an effect queued by one action must still play after the next arrives.
+
 **Audio — `src/audio`.** Synthesized, zero-asset sound, mirroring what `ImpactFx` does for visuals
 ("pure framer-motion, no spritesheets"): every effect is built at runtime from oscillators and
 filtered noise, so the whole system costs no payload — which matters for a game whose `public/` is

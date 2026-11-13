@@ -7,9 +7,10 @@ import { cuesFor } from '../audio/cues';
 import { isMuted, playCues, setMuted as persistMuted } from '../audio/sfx';
 import { deckById, randomDeck } from '../cards/decks';
 import { resolveDeck } from '../cards/customDecks';
+import { readDepth, saveDepth } from '../ui/depth';
 import { getDef } from '../cards/cards';
 import { aiShouldAct, pickAction } from '../ai/ai';
-import { CHARGE_MS, CHARGE_SPELLS, HEAL_MS, HEAL_SPELLS, SMOKE_MS, SMOKE_SPELLS } from '../ui/spellTiming';
+import { CHARGE_MS, CHARGE_SPELLS, HEAL_MS, HEAL_SPELLS, SMOKE_MS, SMOKE_SPELLS } from '../ui/fxTiming';
 import type { MatchConnection } from '../net/match';
 import { rejoinMatch } from '../net/match';
 import { clearMatch, loadMatch } from '../net/resume';
@@ -37,6 +38,9 @@ interface Store {
   // backgrounded tab). Purely presentational — the engine is untouched, and the
   // transport resyncs by itself if the peer comes back.
   peerStale: boolean;
+  // 3D table on/off. Presentation only — see ui/depth.ts for the default.
+  depth: boolean;
+  setDepth: (v: boolean) => void;
   // Sound on/off. Persisted; the synth itself is a no-op while muted.
   muted: boolean;
   setMuted: (v: boolean) => void;
@@ -163,6 +167,11 @@ export const useGame = create<Store>((set, get) => {
     forfeit: null,
     charging: null,
     peerStale: false,
+    depth: readDepth(),
+    setDepth: (v) => {
+      saveDepth(v);
+      set({ depth: v });
+    },
     muted: isMuted(),
     setMuted: (v) => {
       persistMuted(v);
