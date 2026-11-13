@@ -211,6 +211,18 @@ few percent. Depth is presentation only and never touches timing, so it is safe 
 on, except for reduced-motion or low-memory/two-core devices, and the in-game menu toggle overrides
 the default either way.
 
+**HUD — `ui/PlayerBar.tsx`, `ui/PhaseBar.tsx`.** Each player's badge is the shield (`data-player`,
+the element every spell and attack aims at — keep that attribute on it), life, mana and, for the
+opponent only, the counts a player cannot otherwise see: hand size, deck size and a button that
+opens their graveyard. Life counts to its new value (`useRolling`) and flashes the way it moved;
+mana is one crystal per land, falling back to a number past ten lands and on the phone's compact
+opponent row. The player the game is waiting on (`actorOf`) gets a gold ring, and the lit phase
+step is gold on your turn and red on theirs, because phones drop the "Your turn" label. `.mana`
+must stay in the DOM: `LandAbsorbFx` anchors its "Mana +1" float to it. One CSS trap worth
+knowing: card-size overrides for a zone belong on the **zone**, not on `.card`, because the
+battlefield's `min-height` reads `--card-h` too — with the override on `.card` the phone layout
+reserved 148px for 108px cards.
+
 **Effect timing — `ui/fxTiming.ts` and `ui/useTimers.ts`.** Every choreography constant (telegraph
 windows, projectile flight, strike stagger, impact point) lives in `fxTiming.ts`; the store reads
 its telegraph delays from the same file, so the delay and the visual cannot drift. `BoardFx` queues

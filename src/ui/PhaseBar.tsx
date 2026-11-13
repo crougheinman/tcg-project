@@ -12,11 +12,17 @@ export function PhaseBar({ game, myId }: { game: GameState; myId: PlayerId }) {
   const yourTurn = game.active === myId;
   const step = stepOf(game.phase);
   return (
-    <div className="phasebar">
+    // The owner class tints the lit step, so whose turn it is still reads on a
+    // phone, where the "Your turn" label is dropped for space.
+    <div className={'phasebar ' + (yourTurn ? 'you' : 'them')}>
       <span className="turn">Turn {game.turn}</span>
       <div className="phase-steps">
         {STEPS.map((s, i) => (
-          <span key={s} className={'pstep' + (i === step ? ' on' : '') + (i < step ? ' done' : '')}>
+          <span
+            key={s}
+            className={'pstep' + (i === step ? ' on' : '') + (i < step ? ' done' : '')}
+            aria-current={i === step ? 'step' : undefined}
+          >
             {s}
           </span>
         ))}

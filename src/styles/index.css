@@ -1407,8 +1407,12 @@ input {
   .player-zone.opp .mana { grid-area: mana; justify-self: start; font-size: 11px; }
   .player-zone.opp .counts { grid-area: counts; justify-self: center; }
 
-  /* opponent creatures: smaller cards, single row ~one card tall + padding (no scroll) */
-  .player-zone.opp .card { --card-w: 60px; --card-h: 108px; }
+  /* opponent creatures: smaller cards, single row ~one card tall + padding (no scroll).
+     The size is set on the ZONE, not on .card: the two min-heights below read
+     --card-h too, and with the override on .card they resolved the full-size
+     value instead — reserving 148px for 108px cards, ~40px of dead space that
+     squeezed the player's own side on every phone. */
+  .player-zone.opp { --card-w: 60px; --card-h: 108px; }
   .player-zone.opp .battlefield { min-height: calc(var(--card-h) + 8px); }
   .player-zone.opp .row.creatures { min-height: var(--card-h); }
   /* Both boards: keep creatures on ONE row and let them shrink to fit rather than
@@ -1446,7 +1450,7 @@ input {
 
   .player-zone { padding: 3px 8px; gap: 1px; }
   .player-zone.opp { max-height: 34%; }
-  .player-zone.opp .card { --card-w: 50px; --card-h: 68px; }
+  .player-zone.opp { --card-w: 50px; --card-h: 68px; } /* on the zone: see the note in the block above */
   .player-zone.opp .battlefield { min-height: calc(var(--card-h) + 6px); }
 
   /* At ~375px tall a full creature row can't clear the bottom hand fan, so the
@@ -1687,4 +1691,104 @@ button, [role='button'] { touch-action: manipulation; }
 @media (max-width: 640px), (orientation: landscape) and (max-height: 500px) {
   .board.depth-3d { --tilt: 13deg; --seam: 0.96; }
   .board.depth-3d .battlefield .stack { filter: drop-shadow(0 5px 4px rgba(0, 0, 0, 0.5)); }
+}
+
+/* ---- HUD ---- */
+/* Life: counts to its new value (useRolling) and flashes the way it moved. */
+.playerbar .life {
+  display: inline-block; font-variant-numeric: tabular-nums;
+  transition: transform 0.15s ease-out, color 0.15s, text-shadow 0.15s;
+}
+.playerbar.me .life { font-size: 18px; }
+.playerbar .life.down { color: #ffb3a3; text-shadow: 0 0 10px rgba(224, 87, 62, 0.95); transform: scale(1.22); }
+.playerbar .life.up { color: #9af0c1; text-shadow: 0 0 10px rgba(84, 201, 138, 0.95); transform: scale(1.22); }
+/* Nearly dead: a slow pulse. Keyed 0/100 dim, 50 bright, so with reduced motion it
+   settles on a frame that still reads as a warning. */
+.playerbar .life.low { animation: lifelow 1.1s ease-in-out infinite; }
+@keyframes lifelow {
+  0%, 100% { text-shadow: 0 0 4px rgba(224, 87, 62, 0.55); }
+  50% { text-shadow: 0 0 14px rgba(255, 90, 60, 1); }
+}
+
+/* Mana: one crystal per land — lit while it can still pay, hollow once spent. */
+.playerbar .mana.pips { display: inline-flex; align-items: center; gap: 4px; padding: 4px 2px 2px; }
+.pip {
+  width: 7px; height: 7px; transform: rotate(45deg); border-radius: 1px;
+  border: 1px solid var(--accent); opacity: 0.4;
+}
+.pip.full {
+  opacity: 1; background: linear-gradient(135deg, #cfe6ff, var(--accent));
+  box-shadow: 0 0 5px rgba(106, 169, 255, 0.85);
+}
+.playerbar.me .pip { width: 8px; height: 8px; }
+.playerbar .mana.pips.pulse { animation: pipspulse 0.5s ease-in-out 4; }
+@keyframes pipspulse {
+  0%, 100% { transform: scale(1); filter: none; }
+  50% { transform: scale(1.18); filter: brightness(1.5); }
+}
+
+/* Whoever the game is waiting on gets a breathing gold ring on their shield.
+   (drop-shadow, not box-shadow: the shield is a clip-path, which clips shadows.) */
+.playerbar.acting .shield-avatar { animation: actglow 1.6s ease-in-out infinite; }
+@keyframes actglow {
+  0%, 100% { filter: drop-shadow(0 0 3px rgba(255, 211, 106, 0.7)) drop-shadow(0 3px 5px rgba(0, 0, 0, 0.55)); }
+  50% { filter: drop-shadow(0 0 11px rgba(255, 211, 106, 1)) drop-shadow(0 3px 5px rgba(0, 0, 0, 0.55)); }
+}
+/* An animation outranks a plain declaration, so it would erase the blue
+   "this is a legal target" glow exactly when the player needs to see it. */
+.playerbar.acting .shield-avatar.targetable { animation: none; }
+
+/* Crystals OR the number, never both: the number takes over when there are too
+   many lands for crystals (no .pips class) and on the phone's opponent row. */
+.playerbar .mana.pips .mana-num { display: none; }
+.pmeta { display: flex; flex-direction: column; align-items: center; }
+
+/* Opponent's hidden zones: hand size, deck size, graveyard (the last is viewable). */
+.playerbar .counts { display: inline-flex; gap: 5px; margin-top: 4px; }
+.count-chip {
+  display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px;
+  font: inherit; font-size: 11px; font-weight: 600; line-height: 1.5;
+  font-variant-numeric: tabular-nums; color: #b9c1cf;
+  background: rgba(255, 255, 255, 0.05); border: 1px solid #2c3645; border-radius: 9px;
+}
+button.count-chip { cursor: pointer; }
+button.count-chip:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); transform: none; }
+.count-chip.low { color: #ff9c8a; border-color: var(--danger); }
+
+/* Your own deck running out: you lose by drawing from an empty one. */
+.zone-btn.low { color: #ff9c8a; border-color: var(--danger); }
+
+/* Whose turn it is, without words: the lit phase step is gold on your turn and
+   red on theirs. The "Your turn" label is hidden on phones, so until now a phone
+   showed no turn owner at all. */
+.phasebar.them .pstep.on {
+  color: #fff; background: linear-gradient(180deg, #e8806a, #b8412b);
+  border-color: var(--danger); box-shadow: 0 0 10px rgba(224, 87, 62, 0.55);
+}
+
+@media (max-width: 640px), (orientation: landscape) and (max-height: 500px) {
+  /* Phone: the opponent's shield keeps life beside it, and mana joins the counts
+     in one centred row underneath. Mana used to sit to the right of the shield,
+     which on a narrow phone is exactly where the Activity pill floats, hiding it. */
+  .player-zone.opp .pmeta {
+    grid-area: counts; justify-self: center;
+    flex-direction: row; align-items: center; gap: 6px;
+  }
+  .player-zone.opp .counts { margin-top: 0; gap: 4px; }
+  .player-zone.opp .count-chip { font-size: 10px; padding: 0 6px; }
+  .player-zone.opp .mana.pips { padding: 0; }
+  .player-zone.opp .mana.pips .pip { display: none; }
+  .player-zone.opp .mana.pips .mana-num { display: inline; }
+  .player-zone.opp .mana { font-size: 11px; }
+  .playerbar.me .life { font-size: 16px; }
+}
+
+/* Landscape phones: height is the scarce axis and width is abundant, so mana and
+   the counts share the shield's row instead of sitting under it. They go on the
+   LEFT and life moves to the right: the Activity panel floats over the right end
+   of this row, and a graveyard button underneath it could not be pressed. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .player-zone.opp .playerbar { grid-template-areas: "counts avatar life"; }
+  .player-zone.opp .pmeta { justify-self: end; }
+  .player-zone.opp .life { justify-self: start; }
 }

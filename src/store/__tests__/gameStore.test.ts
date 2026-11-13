@@ -90,8 +90,16 @@ describe('PvP actor guard', () => {
 
   it('does not guard hotseat, where one client legitimately drives both sides', () => {
     useGame.getState().startHotseat(DECK_A, DECK_B);
-    const g = useGame.getState().game!;
-    const land = g.players.A.hand.find((c) => c.def === 'aether_well')!;
+    // startHotseat seeds from Math.random, so the opening hand may hold no land.
+    // Put one there rather than depend on the shuffle.
+    const g = structuredClone(useGame.getState().game!);
+    const land = {
+      iid: 'hotseat-land', def: 'aether_well', owner: 'A' as const, tapped: false,
+      summoningSick: false, damage: 0, buffP: 0, buffT: 0, blitz: false,
+    };
+    g.players.A.hand.push(land);
+    g.players.A.battlefield = [];
+    useGame.setState({ game: g });
     useGame.getState().dispatch({ type: 'playLand', iid: land.iid });
     expect(useGame.getState().game!.players.A.battlefield).toHaveLength(1);
   });
