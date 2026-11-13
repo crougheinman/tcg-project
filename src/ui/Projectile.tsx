@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 
 import type { SpellTheme } from './ImpactFx';
+import { PROJECTILE_TRAVEL_MS, SHURIKEN_TRAVEL_MS } from './fxTiming';
 
 // A fast projectile that flies from the caster to the exact target (a creature or
 // a player), shaking it on impact. onImpact fires the themed burst at the target so
@@ -21,9 +22,6 @@ export interface Projectile {
   kind?: 'bolt' | 'shuriken';
 }
 
-const TRAVEL_MS = 340;
-const SHURIKEN_MS = 210; // shurikens are quick
-
 export function ProjectileFx({
   fx,
   onImpact,
@@ -39,7 +37,7 @@ export function ProjectileFx({
   useEffect(() => {
     const dx = fx.toX - fx.fromX;
     const dy = fx.toY - fx.fromY;
-    const dur = shuriken ? SHURIKEN_MS : TRAVEL_MS;
+    const dur = shuriken ? SHURIKEN_TRAVEL_MS : PROJECTILE_TRAVEL_MS;
     const impact = () => {
       // Shake the target — the `.stack` wrapper for a creature (so we don't fight
       // framer's transform on the card), or the element itself for a player.

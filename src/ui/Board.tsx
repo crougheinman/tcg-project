@@ -36,6 +36,8 @@ export function Board() {
   const [confirmAbort, setConfirmAbort] = useState(false); // abort confirmation
   const [rulesOpen, setRulesOpen] = useState(false); // "How to Play" (controlled Rulebook)
   const guided = useGame((s) => s.guided);
+  const depth = useGame((s) => s.depth);
+  const setDepth = useGame((s) => s.setDepth);
   const muted = useGame((s) => s.muted);
   const setMuted = useGame((s) => s.setMuted);
   const setGuided = useGame((s) => s.setGuided);
@@ -659,7 +661,7 @@ export function Board() {
   return (
     <HoverCtx.Provider value={setHovered}>
       <LayoutGroup>
-        <div className="board">
+        <div className={'board' + (depth ? ' depth-3d' : '')}>
           <header className="topbar">
             <button className="menu-btn" onClick={() => setMenuOpen(true)} aria-label="Menu" title="Menu">
               ☰
@@ -867,6 +869,15 @@ export function Board() {
                   Guided Mode
                   <span className="toggle-pill" aria-hidden>
                     {guided ? 'ON' : 'OFF'}
+                  </span>
+                </button>
+                <button
+                  className={'game-menu-item toggle' + (depth ? ' on' : '')}
+                  onClick={() => setDepth(!depth)}
+                >
+                  3D Table
+                  <span className="toggle-pill" aria-hidden>
+                    {depth ? 'ON' : 'OFF'}
                   </span>
                 </button>
                 <button
