@@ -88,7 +88,7 @@ export function Board() {
   const dragBounds = useRef<HTMLDivElement>(null);
 
   // Deck / graveyard viewer.
-  const [zone, setZone] = useState<'deck' | 'graveyard' | null>(null);
+  const [zone, setZone] = useState<'deck' | 'graveyard' | 'oppGraveyard' | null>(null);
 
   // Drag a hand card onto the battlefield to play it.
   const [dragActive, setDragActive] = useState(false);
@@ -681,6 +681,8 @@ export function Board() {
               mana={{ avail: availableMana(opp), total: opp.battlefield.filter(isLand).length }}
               onFace={() => faceClick(oppId)}
               targetable={!!sorceryIid}
+              acting={!game.winner && actor === oppId}
+              onGraveyard={() => setZone('oppGraveyard')}
             />
             <div className="hand opp-hand">
               <AnimatePresence>
@@ -730,9 +732,19 @@ export function Board() {
                   mana={{ avail: availableMana(me), total: me.battlefield.filter(isLand).length }}
                   onFace={() => faceClick(localId)}
                   targetable={!!sorceryIid}
+                  acting={!game.winner && actor === localId}
                   self
                 />
-                <button className="zone-btn right" onClick={() => setZone('deck')} title="View deck">
+                <button
+                  // You lose by drawing from an empty deck, so the last few cards matter.
+                  className={'zone-btn right' + (me.library.length <= 5 ? ' low' : '')}
+                  onClick={() => setZone('deck')}
+                  title={
+                    me.library.length <= 5
+                      ? `View deck — only ${me.library.length} left; you lose if you must draw from an empty deck`
+                      : 'View deck'
+                  }
+                >
                   🂠 {me.library.length}
                 </button>
               </div>
@@ -760,8 +772,10 @@ export function Board() {
           {zone && (
             <ZoneViewer
               key={zone}
-              title={zone === 'deck' ? 'Your Deck' : 'Graveyard'}
-              cards={zone === 'deck' ? me.library : me.graveyard}
+              title={
+                zone === 'deck' ? 'Your Deck' : zone === 'graveyard' ? 'Graveyard' : "Opponent's Graveyard"
+              }
+              cards={zone === 'deck' ? me.library : zone === 'graveyard' ? me.graveyard : opp.graveyard}
               onClose={() => setZone(null)}
             />
           )}

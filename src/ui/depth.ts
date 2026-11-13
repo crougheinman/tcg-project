@@ -1,8 +1,11 @@
+import { prefersReducedMotion } from './motionPref';
+
 // The 3D table switch.
 //
 // Depth is presentation only: it never changes what a card does or when. It
 // defaults ON, except where the device or the person has told us otherwise, and
 // an explicit choice in the game menu always wins over the default.
+
 
 const KEY = 'depth';
 
@@ -24,14 +27,11 @@ function readEnv(): DepthEnv {
   const nav = (typeof navigator !== 'undefined' ? navigator : {}) as Navigator & {
     deviceMemory?: number;
   };
-  let reducedMotion = false;
-  try {
-    // matchMedia is missing in some test and embedded environments
-    reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-  } catch {
-    reducedMotion = false;
-  }
-  return { reducedMotion, deviceMemory: nav.deviceMemory, cores: nav.hardwareConcurrency };
+  return {
+    reducedMotion: prefersReducedMotion(),
+    deviceMemory: nav.deviceMemory,
+    cores: nav.hardwareConcurrency,
+  };
 }
 
 /** The saved choice if there is one, else the default for this device. */
