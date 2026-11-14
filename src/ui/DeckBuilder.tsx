@@ -113,7 +113,6 @@ export function DeckBuilder({ onBack }: { onBack: () => void }) {
   if (!draft) {
     return (
       <div className="gallery">
-        <div className="home-bg" aria-hidden />
         <header className="gallery-bar">
           <div className="gallery-top">
             <button className="book-btn gallery-back" onClick={onBack}>
@@ -170,7 +169,6 @@ export function DeckBuilder({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="gallery">
-      <div className="home-bg" aria-hidden />
       <header className="gallery-bar">
         <div className="gallery-top">
           <button className="book-btn gallery-back" onClick={() => setDraft(null)}>
