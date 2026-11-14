@@ -56,8 +56,6 @@ export function CardGallery({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="gallery">
-      <div className="home-bg" aria-hidden />
-
       <header className="gallery-bar">
         <div className="gallery-top">
           <button className="book-btn gallery-back" onClick={onBack}>

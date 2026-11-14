@@ -38,8 +38,11 @@ export function Lobby({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <div className="menu">
-      <h2>Online PvP</h2>
+    <div className="menu lobby-screen">
+      <button className="lobby-back" onClick={onBack}>
+        ← Back
+      </button>
+      <h2 className="deck-title">Online PvP</h2>
       <p className="hint">
         Deck: <strong>{deckById(deck).name}</strong> ·{' '}
         <button className="link" onClick={() => setDeck(null)}>
@@ -64,9 +67,6 @@ export function Lobby({ onBack }: { onBack: () => void }) {
         </div>
       </div>
       {status && <p className="hint">{status}</p>}
-      <button className="link" onClick={onBack}>
-        ← Back
-      </button>
     </div>
   );
 }

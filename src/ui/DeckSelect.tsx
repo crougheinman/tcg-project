@@ -100,7 +100,7 @@ export function DeckSelect({
                     animate={{ scale: [0, 1.4, 1], opacity: 1 }}
                     transition={{ delay: 0.6, duration: 0.45, times: [0, 0.55, 1], ease: 'easeOut' }}
                   >
-                    VS
+                    <b>VS</b>
                   </motion.span>
                   <FaceOffCard deck={deckById(vsDeckId)} from="right" />
                 </div>
