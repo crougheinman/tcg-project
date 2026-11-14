@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { hasSupabase } from '../net/supabase';
@@ -12,6 +12,7 @@ import { APP_VERSION } from '../version';
 
 // Home-page patch notes. Balance pass tuned across ~5,000 simulated AI-vs-AI duels
 // so every deck lands in a ~44–56% win band with real strengths and weaknesses.
+// Shown as the scrolling ticker along the bottom of the home screen.
 const PATCH_NOTES: { deck: string; kind: 'buff' | 'nerf'; change: string; why: string }[] = [
   {
     deck: 'Grave Tide',
@@ -38,6 +39,26 @@ const PATCH_NOTES: { deck: string; kind: 'buff' | 'nerf'; change: string; why: s
     why: 'Great blockers AND the best finisher was too much of both.',
   },
 ];
+
+// Arrow keys walk the home menu like a game menu. Only the row buttons count —
+// the rulebook's own overlay buttons live inside the list too, and must be left alone.
+const ROW_BUTTONS = ':scope > li > button:not(:disabled)';
+
+function menuKeys(e: KeyboardEvent<HTMLUListElement>) {
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  const rows = [...e.currentTarget.querySelectorAll<HTMLButtonElement>(ROW_BUTTONS)];
+  const at = rows.indexOf(document.activeElement as HTMLButtonElement);
+  if (at < 0) return;
+  e.preventDefault();
+  const step = e.key === 'ArrowDown' ? 1 : -1;
+  rows[(at + step + rows.length) % rows.length].focus();
+}
+
+// Hovering a row makes it the hot one, so mouse and keyboard share one highlight.
+function menuHover(e: MouseEvent<HTMLUListElement>) {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.vs-menu > li > button');
+  if (btn && !btn.disabled && btn !== document.activeElement) btn.focus({ preventScroll: true });
+}
 
 export function MainMenu({ onOnline }: { onOnline: () => void }) {
   const startAI = useGame((s) => s.startAI);
@@ -96,69 +117,108 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
     );
   } else {
     screen = 'home';
+    // The ticker runs as two identical sets so the loop is seamless; only the first is read aloud.
+    const notes = (hidden: boolean) => (
+      <div className="vs-run-set" aria-hidden={hidden || undefined}>
+        {PATCH_NOTES.map((n) => (
+          <span key={n.deck} className={n.kind}>
+            <b>{n.kind === 'buff' ? '▲ BUFF' : '▼ NERF'}</b> {n.deck} — {n.change}
+          </span>
+        ))}
+      </div>
+    );
     content = (
-      <div className="menu home">
-        <div className="home-bg" aria-hidden />
-        <h1 className="logo">ENTITY DUEL</h1>
-        <p className="tagline">a tiny trading card game</p>
-        <div className="menu-row">
-          <div className="menu-buttons">
-            <button
-              onClick={() => {
-                setAiDeck(randomDeck().id); // pick now so the face-off can show it
-                setPicking('ai');
-              }}
-            >
-              Play vs AI
-            </button>
-            <button onClick={() => setPicking('hotseat')}>Hotseat (2 players, 1 device)</button>
-            <button onClick={onOnline} disabled={!hasSupabase}>
-              Online PvP{!hasSupabase ? ' (set Supabase keys)' : ''}
-            </button>
-            {resumable && hasSupabase && (
-              <button className="resume-btn" onClick={resumePvp}>
-                ⟳ Reconnect to match {resumable.roomId}
+      <div className="vs-home">
+        <div className="vs-side vs-left" aria-hidden>
+          <img src="/cards/iron_shogun.png" alt="" />
+          <div className="vs-tag">
+            Iron Shogun<small>IRON BLOSSOM</small>
+          </div>
+        </div>
+        <div className="vs-side vs-right" aria-hidden>
+          <img src="/cards/storm_drake.png" alt="" />
+          <div className="vs-tag">
+            Storm Drake<small>SKYWARD</small>
+          </div>
+        </div>
+        <div className="vs-seam" aria-hidden />
+
+        <main className="vs-center">
+          <h1 className="vs-logo" aria-label="Entity Duel">
+            <span className="e" aria-hidden>Entity</span>
+            <i aria-hidden>
+              <b>VS</b>
+            </i>
+            <span className="d" aria-hidden>Duel</span>
+          </h1>
+          <p className="vs-sub">
+            A TINY TRADING CARD GAME
+            <br />
+            <b aria-hidden>▶</b> CHOOSE YOUR MATCH
+          </p>
+
+          <ul className="vs-menu" onKeyDown={menuKeys} onMouseOver={menuHover}>
+            <li className="main">
+              <button
+                autoFocus
+                onClick={() => {
+                  setAiDeck(randomDeck().id); // pick now so the face-off can show it
+                  setPicking('ai');
+                }}
+              >
+                Play vs AI <small>SOLO</small>
               </button>
+            </li>
+            <li>
+              <button onClick={() => setPicking('hotseat')}>
+                Hotseat <small>2 PLAYERS</small>
+              </button>
+            </li>
+            <li>
+              <button onClick={onOnline} disabled={!hasSupabase}>
+                Online PvP <small>{hasSupabase ? 'ROOM CODE' : 'SET KEYS'}</small>
+              </button>
+            </li>
+            {resumable && hasSupabase && (
+              <li>
+                <button onClick={resumePvp}>
+                  Reconnect <small>{resumable.roomId}</small>
+                </button>
+              </li>
             )}
-            <button onClick={() => setShowGallery(true)}>Card Codex</button>
-            <button onClick={() => setShowBuilder(true)}>Deck Builder</button>
-            <Rulebook icon={false} />
+            <li>
+              <button onClick={() => setShowGallery(true)}>
+                Card Codex <small>BROWSE</small>
+              </button>
+            </li>
+            <li>
+              <button onClick={() => setShowBuilder(true)}>
+                Deck Builder <small>30 CARDS</small>
+              </button>
+            </li>
+            <li>
+              <Rulebook icon={false} />
+            </li>
+          </ul>
+          <div className="vs-keys" aria-hidden>
+            <kbd>↑</kbd> <kbd>↓</kbd> SELECT &nbsp; <kbd>ENTER</kbd> CONFIRM
           </div>
 
-          <details className="changelog" open>
-            <summary>
-              <span className="changelog-badge">⚖ Balance Update</span>
-              <span className="changelog-ver">v{APP_VERSION}</span>
-            </summary>
-            <div className="changelog-scroll">
-              <p className="changelog-intro">
-                Tuned across thousands of simulated duels so every deck has real strengths — and real
-                weaknesses.
-              </p>
-              <ul className="changelog-list">
-                {PATCH_NOTES.map((n) => (
-                  <li key={n.deck} className={'changelog-item ' + n.kind}>
-                    <span className={'chip ' + n.kind}>{n.kind === 'buff' ? '▲ BUFF' : '▼ NERF'}</span>
-                    <div className="changelog-body">
-                      <b>{n.deck}</b> — {n.change}
-                      <span className="changelog-why">{n.why}</span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              <p className="changelog-foot">
-                Emberwood, Wildblitz &amp; Wildwood Titans are unchanged.
-              </p>
-            </div>
-          </details>
-        </div>
+          {!hasSupabase && (
+            <p className="hint vs-hint">
+              Online needs a free Supabase project. Copy <code>.env.local.example</code> to{' '}
+              <code>.env.local</code> and add your URL + anon key.
+            </p>
+          )}
+        </main>
 
-        {!hasSupabase && (
-          <p className="hint">
-            Online needs a free Supabase project. Copy <code>.env.local.example</code> to{' '}
-            <code>.env.local</code> and add your URL + anon key.
-          </p>
-        )}
+        <div className="vs-ticker" role="region" aria-label={`Balance update v${APP_VERSION}`}>
+          <div className="vs-lab">PATCH {APP_VERSION}</div>
+          <div className="vs-run">
+            {notes(false)}
+            {notes(true)}
+          </div>
+        </div>
       </div>
     );
   }
