@@ -13,7 +13,7 @@ import {
   actorOf, canAttack, hasKeyword, isCreature, legalActions, power, toughness,
 } from '../../src/engine/rules';
 import { DECK_LIST } from '../../src/cards/decks';
-import { getDef } from '../../src/cards/cards';
+import { CARDS, getDef } from '../../src/cards/cards';
 import type { Action, CardInstance, GameState, PlayerId } from '../../src/engine/types';
 import { opponentOf } from '../../src/engine/types';
 import * as fs from 'node:fs';
@@ -63,36 +63,71 @@ function expectedLife(before: GameState, a: Action): Record<PlayerId, number> {
     }
   }
   if (a.type === 'declareBlockers') {
-    const def = opponentOf(before.active);
-    const blocked = new Map<string, string[]>();
-    for (const [b, atk] of Object.entries(a.blocks)) blocked.set(atk, [...(blocked.get(atk) ?? []), b]);
-    for (const atkIid of before.combat?.attackers ?? []) {
-      const atk = all(before).find((c) => c.iid === atkIid);
-      if (!atk) continue; // gone before damage
-      const live = (blocked.get(atkIid) ?? []).filter((b) => all(before).some((c) => c.iid === b));
-      if (live.length === 0) life[def] -= power(atk);
-    }
+    const sim = simulateCombat(before, a.blocks);
+    life.A += sim.delta.A;
+    life.B += sim.delta.B;
   }
   return life;
 }
 
 function expectedCombatDeaths(before: GameState, a: Extract<Action, { type: 'declareBlockers' }>): Set<string> {
-  // damage is simultaneous: collect first, then judge
-  const dmg = new Map<string, number>();
+  return simulateCombat(before, a.blocks).dead;
+}
+
+/**
+ * Combat, re-derived from the rules text (NOT from the engine's helpers): two damage steps,
+ * deaths between them. Step 1 = first strike / double strike; step 2 = everything without first
+ * strike, plus double strikers again. Trample assigns lethal to the blocker, the rest to the player;
+ * deathtouch makes 1 damage lethal; lifelink gains the damage dealt, in the same step.
+ */
+function simulateCombat(before: GameState, blocks: Record<string, string>): { delta: Record<PlayerId, number>; dead: Set<string> } {
   const find = (iid: string) => all(before).find((c) => c.iid === iid);
-  for (const c of creatures(before)) dmg.set(c.iid, c.damage);
-  for (const atkIid of before.combat?.attackers ?? []) {
-    const atk = find(atkIid);
-    if (!atk) continue;
-    const blockers = Object.entries(a.blocks).filter(([, t]) => t === atkIid).map(([b]) => find(b)).filter(Boolean) as CardInstance[];
-    for (const b of blockers) {
-      dmg.set(b.iid, (dmg.get(b.iid) ?? 0) + power(atk));
-      dmg.set(atk.iid, (dmg.get(atk.iid) ?? 0) + power(b));
+  const side = (iid: string): PlayerId => (before.players.A.battlefield.some((c) => c.iid === iid) ? 'A' : 'B');
+  const defSide = opponentOf(before.active);
+  const marked = new Map<string, number>();
+  const alive = new Set<string>();
+  for (const c of creatures(before)) { marked.set(c.iid, c.damage); alive.add(c.iid); }
+  const delta: Record<PlayerId, number> = { A: 0, B: 0 };
+  const blockerOf = new Map<string, string>();
+  for (const [b, atk] of Object.entries(blocks)) blockerOf.set(atk, b);
+  const kw = (iid: string, k: Parameters<typeof hasKeyword>[1]) => hasKeyword(find(iid)!, k);
+  const deals = (iid: string, step: 1 | 2) => (step === 1 ? kw(iid, 'firstStrike') || kw(iid, 'doubleStrike') : kw(iid, 'doubleStrike') || !kw(iid, 'firstStrike'));
+
+  for (const step of [1, 2] as const) {
+    const hits: { src: string; dst: string | 'face'; n: number }[] = [];
+    for (const atkIid of before.combat?.attackers ?? []) {
+      if (!find(atkIid) || !alive.has(atkIid)) continue;
+      const blkIid = blockerOf.get(atkIid);
+      const blkAlive = !!blkIid && !!find(blkIid) && alive.has(blkIid);
+      if (deals(atkIid, step)) {
+        const n = power(find(atkIid)!);
+        if (!blkIid) hits.push({ src: atkIid, dst: 'face', n });
+        else if (blkAlive) {
+          if (kw(atkIid, 'trample')) {
+            const room = toughness(find(blkIid!)!) - (marked.get(blkIid!) ?? 0);
+            const need = Math.max(0, kw(atkIid, 'deathtouch') ? Math.min(1, room) : room);
+            hits.push({ src: atkIid, dst: blkIid!, n: Math.min(n, need) });
+            hits.push({ src: atkIid, dst: 'face', n: Math.max(0, n - need) });
+          } else hits.push({ src: atkIid, dst: blkIid!, n });
+        } else if (kw(atkIid, 'trample')) hits.push({ src: atkIid, dst: 'face', n });
+      }
+      if (blkAlive && deals(blkIid!, step)) hits.push({ src: blkIid!, dst: atkIid, n: power(find(blkIid!)!) });
     }
+    for (const h of hits) {
+      if (h.n <= 0) continue;
+      if (h.dst === 'face') delta[defSide] -= h.n;
+      else {
+        marked.set(h.dst, (marked.get(h.dst) ?? 0) + h.n);
+        if (kw(h.src, 'deathtouch')) marked.set(h.dst, Math.max(marked.get(h.dst)!, toughness(find(h.dst)!)));
+      }
+      if (kw(h.src, 'lifelink')) delta[side(h.src)] += h.n;
+    }
+    for (const iid of [...alive]) if ((marked.get(iid) ?? 0) >= toughness(find(iid)!)) alive.delete(iid);
+    if (before.players.A.life + delta.A <= 0 || before.players.B.life + delta.B <= 0) break; // game over: no second step
   }
   const dead = new Set<string>();
-  for (const c of creatures(before)) if ((dmg.get(c.iid) ?? 0) >= toughness(c)) dead.add(c.iid);
-  return dead;
+  for (const c of creatures(before)) if (!alive.has(c.iid)) dead.add(c.iid);
+  return { delta, dead };
 }
 
 // ---------- invariants over one transition ----------
@@ -151,7 +186,8 @@ function check(
   if (a.type === 'declareAttackers') {
     for (const iid of a.attackers) {
       const c = after.players[before.active].battlefield.find((x) => x.iid === iid);
-      if (c && !c.tapped) R('ATTACKER_NOT_TAPPED', `${c.def} attacked but is untapped`);
+      if (c && !c.tapped && !hasKeyword(c, 'vigilance')) R('ATTACKER_NOT_TAPPED', `${c.def} attacked but is untapped`);
+      if (c && c.tapped && hasKeyword(c, 'vigilance')) R('VIGILANCE_TAPPED', `${c.def} has vigilance but tapped to attack`);
     }
   }
   if (a.type === 'declareBlockers') {
@@ -164,7 +200,7 @@ function check(
     if (!after.lastCombat) R('LASTCOMBAT_MISSING', 'lastCombat not recorded');
     for (const [b, atk] of Object.entries(a.blocks)) {
       const bl = all(before).find((c) => c.iid === b), at = all(before).find((c) => c.iid === atk);
-      if (bl && at && hasKeyword(at, 'flying') && !hasKeyword(bl, 'flying')) R('FLYER_BLOCKED_BY_GROUND', `${at.def} blocked by ${bl.def}`);
+      if (bl && at && hasKeyword(at, 'flying') && !hasKeyword(bl, 'flying') && !hasKeyword(bl, 'reach')) R('FLYER_BLOCKED_BY_GROUND', `${at.def} blocked by ${bl.def}`);
       if (bl?.tapped) R('TAPPED_BLOCKER', `${bl.def} blocked while tapped`);
     }
   }
@@ -214,7 +250,7 @@ function chaosAction(s: GameState, actor: PlayerId, r: () => number): Action {
     const used = new Set<string>();
     for (const atk of atks) {
       if (r() < 0.55) continue;
-      const opts = pool.filter((b) => !used.has(b.iid) && (!hasKeyword(atk, 'flying') || hasKeyword(b, 'flying')));
+      const opts = pool.filter((b) => !used.has(b.iid) && (!hasKeyword(atk, 'flying') || hasKeyword(b, 'flying') || hasKeyword(b, 'reach')));
       if (!opts.length) continue;
       const b = opts[Math.floor(r() * opts.length)];
       blocks[b.iid] = atk.iid;
@@ -240,18 +276,36 @@ type Row = { a: string; b: string; policy: string; games: number; aWins: number;
 const rows: Row[] = [];
 const t0 = Date.now();
 
-for (const policy of ['ai', 'chaos'] as const) {
+// Keyword stress: besides the real decks, replay every policy with the new keywords sprinkled at random
+// over the decks' creatures, so every keyword combination meets every situation (not just the few
+// the shipped cards happen to carry). Keywords are restored after each game.
+const STRESS_KW = ['reach', 'vigilance', 'firstStrike', 'doubleStrike', 'trample', 'deathtouch', 'lifelink'] as const;
+function sprinkleKeywords(r: () => number): () => void {
+  const saved = new Map<string, string[] | undefined>();
+  for (const def of Object.values(CARDS)) {
+    if (def.type !== 'creature') continue;
+    saved.set(def.id, def.keywords as string[] | undefined);
+    const extra = STRESS_KW.filter(() => r() < 0.25);
+    if (extra.length) def.keywords = [...(def.keywords ?? []), ...extra];
+  }
+  return () => { for (const [id, k] of saved) CARDS[id].keywords = k as never; };
+}
+
+for (const policyName of ['ai', 'chaos', 'ai+kw', 'chaos+kw'] as const) {
+  const policy = policyName.startsWith('ai') ? 'ai' : 'chaos';
+  const stress = policyName.endsWith('+kw');
   for (const A of DECK_LIST) {
     for (const B of DECK_LIST) {
       if (A.id === B.id) continue;
-      const row: Row = { a: A.id, b: B.id, policy, games: 0, aWins: 0, bWins: 0, draws: 0, stalls: 0, throws: 0, avgTurns: 0, combats: 0, blockedAttacks: 0, unblockedHits: 0 };
+      const row: Row = { a: A.id, b: B.id, policy: policyName, games: 0, aWins: 0, bWins: 0, draws: 0, stalls: 0, throws: 0, avgTurns: 0, combats: 0, blockedAttacks: 0, unblockedHits: 0 };
       let turns = 0;
       for (let seed = 1; seed <= SEEDS; seed++) {
         const gseed = seed * 7919 + (policy === 'chaos' ? 17 : 3);
         const r = rng(gseed ^ 0x9e3779b9);
         let g = createInitialState(gseed, A.cards, B.cards);
         const sizes = { A: A.cards.length, B: B.cards.length } as Record<PlayerId, number>;
-        const ctx = { pair: `${A.id} v ${B.id}`, policy, seed: gseed, step: 0 };
+        const ctx = { pair: `${A.id} v ${B.id}`, policy: policyName, seed: gseed, step: 0 };
+        const restore = stress ? sprinkleKeywords(rng(gseed ^ 0x51ed270b)) : () => {};
         let step = 0;
         while (!g.winner && step < 3000) {
           const actor = actorOf(g);
@@ -272,6 +326,7 @@ for (const policy of ['ai', 'chaos'] as const) {
           check(g, act, next, sizes, ctx);
           g = next; step++;
         }
+        restore();
         row.games++; turns += g.turn;
         if (!g.winner) { row.stalls++; report('STALL', `no winner after ${step} steps (turn ${g.turn})`, { ...ctx, step }); }
         else if (g.winner === 'A') row.aWins++; else if (g.winner === 'B') row.bWins++; else row.draws++;

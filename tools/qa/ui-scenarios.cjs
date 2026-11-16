@@ -150,6 +150,40 @@ const ME = '.player-zone.me', OPP = '.player-zone.opp';
     rec('S13', 'The relocated Activity panel does not cover the opponent\'s creatures (10 of them, 1280px)', r.bad === 0, `${r.bad}/${r.n} covered; panel top at ${Math.round(r.log)}px`);
     await ctx.close(); }
 
+  // K1  reach: a reach creature can be tapped to block a flyer, and the engine accepts it
+  { const { ctx, page } = await boot(browser);
+    await setup(page, { phase: 'combat_block', active: 'B', a: ['aether_well', 'granite_sentinel'], b: ['sky_talon'], attackers: ['sky_talon'] });
+    const sent = await iid(page, 'A', 'granite_sentinel');
+    const c = await click(page, `${ME} ${E(sent)}`); const l1 = await lbl(page); const hint = await banner(page);
+    const conf = await click(page, '.actions button:has-text("Confirm Blocks")'); await sleep(1600);
+    const talonGone = await page.evaluate(() => !window.__game.getState().game.players.B.battlefield.some((c) => c.def === 'sky_talon'));
+    rec('K1', 'A Reach creature can block a flyer through the UI', c === true && l1.blocking === 1 && !/can't block/.test(hint) && conf === true && talonGone && !(await err(page)),
+      `tap -> blocking=${l1.blocking}, banner "${hint}"; Confirm -> flyer destroyed=${talonGone}, error=${await err(page)}`);
+    await ctx.close(); }
+
+  // K2  vigilance: a vigilant attacker attacks without tapping (the card stays upright)
+  { const { ctx, page } = await boot(browser);
+    await setup(page, { phase: 'combat_attack', active: 'A', a: ['aether_well', 'sky_talon'], b: [] });
+    const talon = await iid(page, 'A', 'sky_talon');
+    const k1 = await click(page, `${ME} ${E(talon)}`); const k2 = await click(page, '.actions button:has-text("Attack")'); await sleep(2400);
+    const r = await page.evaluate((id) => { const g = window.__game.getState().game; const c = g.players.A.battlefield.find((x) => x.iid === id); const el = document.querySelector(`.player-zone.me [data-iid="${id}"]`); return { tapped: c?.tapped, domTapped: el?.classList.contains('tapped'), oppLife: g.players.B.life }; }, talon);
+    rec('K2', 'A Vigilance attacker deals its damage and stays untapped', k1 === true && k2 === true && r.tapped === false && r.domTapped === false && r.oppLife === 18,
+      `attack clicks ${k1}/${k2}; after combat tapped=${r.tapped} dom.tapped=${r.domTapped}; opponent life ${r.oppLife} (expect 18)`);
+    await ctx.close(); }
+
+  // K3  lifelink: the life gained in combat is shown (green +N at the avatar) and is real
+  { const { ctx, page } = await boot(browser);
+    await setup(page, { phase: 'combat_attack', active: 'A', a: ['aether_well', 'carrion_colossus'], b: [] });
+    const col = await iid(page, 'A', 'carrion_colossus');
+    await page.evaluate(() => { const st = window.__game.getState(); const g = structuredClone(st.game); g.players.A.life = 10; window.__game.setState({ game: g }); }); await sleep(300);
+    const k1 = await click(page, `${ME} ${E(col)}`); const k2 = await click(page, '.actions button:has-text("Attack")');
+    let floatText = null; for (let i = 0; i < 40 && !floatText; i++) { await sleep(100); floatText = await page.evaluate(() => [...document.querySelectorAll('.stat-float.up')].map((e) => e.textContent).find((t) => /^\+7$/.test(t.trim())) || null); }
+    await sleep(800);
+    const lives = await page.evaluate(() => ({ a: window.__game.getState().game.players.A.life, b: window.__game.getState().game.players.B.life }));
+    rec('K3', 'Lifelink gains life in combat and shows a green +N float', k1 === true && k2 === true && lives.a === 17 && lives.b === 13 && floatText !== null,
+      `clicks ${k1}/${k2}; life A ${lives.a} (expect 17), B ${lives.b} (expect 13); float "${floatText}"`);
+    await ctx.close(); }
+
   // T  effective touch target = how far a tap still lands on the control (pseudo-elements and skew included)
   for (const view of ['phone', 'iphone8', 'iphone13', 'pixel5', 'landscape']) {
     const { ctx, page } = await boot(browser, view);

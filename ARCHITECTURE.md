@@ -169,8 +169,9 @@ Emberwood.
 
 **Cards — `src/cards`.** A fully data-driven catalog of 41 `CardDef`s (`cards.ts`) plus 8 starter
 decks of 30 (`decks.ts`). Effects are a discriminated union of 8 kinds (`types.ts`), **every one
-implemented** in the `applyEffect` switch (`reducer.ts:189`). All 3 keywords (haste/flying/defender)
-are consumed; `destroy` is a `damage += 9999` sentinel (`reducer.ts:254`) routed through the normal
+implemented** in the `applyEffect` switch (`reducer.ts:189`). All 10 keywords (haste, flying, defender,
+reach, vigilance, first strike, double strike, trample, deathtouch, lifelink) are consumed; their
+player-facing text lives in one table, `cards/keywords.ts`, which the Rulebook and gallery read; `destroy` is a `damage += 9999` sentinel (`reducer.ts:254`) routed through the normal
 death path. New cards are almost entirely authoring, not code. The one non-data mechanic is Beast
 Blitz, a hardcoded `BLITZ_TARGETS` list in the reducer (`reducer.ts:131`).
 
@@ -479,6 +480,23 @@ knowing:
 - Playwright's click targets the element's centre and fails when something intercepts it, which
   makes it a free hit-test — but only if the test asserts its preconditions. An earlier scenario
   "passed" because its own click silently missed.
+
+### (g) Combat keywords
+Combat damage is two steps (`resolveCombat`): creatures with first strike or double strike deal damage in
+step 1, deaths resolve, then everything without first strike (and double strikers again) deals damage in
+step 2. Helpers shared by the reducer and the AI live in `rules.ts` (`strikesIn`, `lethalFor`, `markDamage`,
+`splitDamage`). A blocked attacker stays *blocked* even if its blocker dies in step 1 (only trample sends
+the damage to the player). Deathtouch makes any damage lethal (the `damage` field is raised to toughness, as
+`destroy` does); lifelink gains the damage actually dealt, in the same step; vigilance skips the attack tap,
+which also means Take Counter ("destroy target tapped creature") cannot hit a vigilant attacker.
+
+The AI judges blocks with `duel(attacker, blocker)` (pure, in `rules.ts`) instead of comparing power and
+toughness, and uses `canBlock` instead of its own flying check. A property test holds `duel` equal to the real
+resolution over 3,000 random keyword/stat mixes, and the fuzz oracle (`tools/qa/engine-fuzz.ts`) re-derives
+combat independently and also runs a "keyword stress" mode that sprinkles the new keywords over every deck's
+creatures at random. Card assignments were tuned with the win-rate sim (all decks 44.6%-56.1% at N=80, against
+45.9%-53.8% before): the first draft gave Gravetide 76% (five deathtouch Ghouls plus lifelink on both big
+creatures), so deathtouch is held back for a rarer card and only the Colossus has lifelink.
 
 ## 8. Run it
 

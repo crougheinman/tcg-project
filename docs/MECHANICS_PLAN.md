@@ -51,7 +51,24 @@ riskier.
 
 Done when: a fresh clone can run `fuzz`, `winrate`, the 20 scenarios and the smoke batch.
 
-### Phase 1 - Combat keywords (about 2 days)
+### Phase 1 - Combat keywords (about 2 days) - DONE
+
+Done: reach, vigilance, first strike, double strike, trample, deathtouch and lifelink are implemented
+(`rules.ts`, `reducer.ts`, `cards/keywords.ts`), the AI judges blocks with the real rules (`duel`), the fuzz
+oracle models them independently (including a keyword-stress mode), and 10+ cards carry them. Deviations from
+the plan below, all driven by the win-rate sim (all decks 44.6%-56.1% at N=80):
+
+- Iron Shogun got **first strike and lost haste** (double strike put Iron Blossom at 60%).
+- **Deathtouch is on no printed card yet** (five deathtouch Ghouls plus lifelink took Gravetide to 76%).
+  Only Carrion Colossus has lifelink. Both are fully implemented and tested, waiting for a card.
+- Added trample to **Dread Maw** and vigilance to **Swift Lancer** to keep Pyromancer, Emberwood and
+  Wildblitz from sliding. Pyromancer is still near the bottom (44.6%); prowess (Phase 2) is meant for it.
+- Not done: keyword badges on the board cards (they show in card text and the preview only), and a
+  two-beat first-strike animation (the existing strike choreography plays; lifelink shows a green +N).
+- Not run: the full 56-match browser pass (the owner asked to skip the long runs). Engine fuzz ran the full
+  22,400 games with zero findings, the 23 browser scenarios and the 8-match smoke batch pass.
+
+Original scope, kept for reference:
 
 Cheap, very visible, and they give decks identity. Order matters: do the independent ones first.
 
