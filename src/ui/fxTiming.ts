@@ -22,6 +22,17 @@ export const SMOKE_MS = 1500;
 export const HEAL_SPELLS = new Set(['soothe', 'soul_siphon']);
 export const HEAL_MS: Record<string, number> = { soothe: 2000, soul_siphon: 3000 };
 
+// Every OTHER sorcery/instant gets a short spotlight window too, and so do the creatures whose
+// skill fires the moment they are cast: the card floats up, glows, and the effect waits for it.
+export const CAST_MS = 1300;
+export const SKILL_MS = 1300;
+export const SKILL_CREATURES: Record<string, string> = {
+  kunoichi: 'Beast Blitz',
+  thornwood_brute: 'Whipflash',
+};
+// A creature's spell-trigger (Pyre Adept): its card is spotlighted for the charge-up plus a beat.
+export const TRIGGER_SPOT_MS = 1000;
+
 // ---- projectiles ----
 
 export const PROJECTILE_TRAVEL_MS = 340; // a fiery bolt, caster -> target

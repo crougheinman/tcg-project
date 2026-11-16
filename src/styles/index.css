@@ -1502,7 +1502,10 @@ input {
   .hand { flex-wrap: nowrap; justify-content: center; gap: 0; max-width: 100%; }
   .player-dock .hand .card { flex: 0 0 auto; }
   .player-dock .hand .card:not(:first-child) { margin-left: -34px; } /* ~342px for 7 cards */
-  .player-dock .hand .card:hover { z-index: 10; } /* raise the card being inspected */
+  /* Raise the card being inspected — only where hover is real. On a touch screen :hover sticks to
+     the last-tapped card, and a raised card covers the left strip of the NEXT card in the fan, so
+     the next tap lands on the wrong card (or on nothing). */
+  @media (hover: hover) { .player-dock .hand .card:hover { z-index: 10; } }
 
   /* Reclaim vertical space so the board fits without scrolling. */
   .center { min-height: 44px; }
@@ -1996,3 +1999,52 @@ button.count-chip:hover:not(:disabled) { color: var(--vs-ink); background: var(-
   .prompt { font-size: 12px; line-height: 1.15; }
   .prompt-hint { font-size: 11px; line-height: 1.15; }
 }
+
+/* ---- cast spotlight: the card being cast floats up and glows ----
+   Fixed, click-through, above the hover preview (60) and below the turn banner (70).
+   The card keeps its real 292px layout box in .pcard, so the wrapper is sized to the
+   SCALED footprint (--k) and the card is scaled from its corner inside it. */
+.cast-stage {
+  --k: 0.66; --cast-h: 540px; --glow: 255, 150, 60;
+  position: fixed; inset: 0; z-index: 62; pointer-events: none;
+  display: flex; align-items: center; justify-content: center; gap: 22px;
+  padding-bottom: 3vh;
+}
+.cast-spot { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.cast-spot.spell { --glow: 255, 150, 60; }
+.cast-spot.instant { --glow: 70, 220, 205; }
+.cast-spot.skill { --glow: 255, 214, 74; }
+.cast-float { position: relative; animation: cast-bob 1.7s ease-in-out infinite; }
+.cast-card { position: relative; width: calc(292px * var(--k)); height: calc(var(--cast-h) * var(--k)); }
+.cast-card .pcard {
+  position: absolute; left: 0; top: 0; transform: scale(var(--k)); transform-origin: 0 0;
+  height: var(--cast-h); /* one height for every card, so the label below never collides */
+  animation: cast-glow 1.1s ease-in-out infinite;
+}
+/* soft halo behind the card, bigger than it, so the card reads as lit from within */
+.cast-card .pcard-rules { flex: 1; }
+.cast-aura {
+  position: absolute; inset: -34px; border-radius: 50%; z-index: -1;
+  background: radial-gradient(closest-side, rgba(var(--glow), 0.55), rgba(var(--glow), 0.18) 55%, transparent 75%);
+  animation: cast-aura 1.1s ease-in-out infinite;
+}
+.cast-spark {
+  position: absolute; left: calc(8% + var(--i) * 15%); bottom: 6%; width: 6px; height: 6px; border-radius: 50%;
+  background: rgb(var(--glow)); box-shadow: 0 0 8px 2px rgba(var(--glow), 0.9);
+  animation: cast-rise 1.5s ease-out infinite; animation-delay: calc(var(--i) * 0.23s); opacity: 0;
+}
+.cast-label {
+  font: italic 400 20px / 1 'Anton', sans-serif; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 6px 22px 8px; color: rgb(var(--glow)); background: var(--vs-ink, #0a0c13);
+  border-bottom: 4px solid rgb(var(--glow)); clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+  text-shadow: 0 0 10px rgba(var(--glow), 0.7);
+}
+@keyframes cast-bob { 0%, 100% { transform: translateY(0) rotate(-0.8deg); } 50% { transform: translateY(-9px) rotate(0.8deg); } }
+@keyframes cast-glow {
+  0%, 100% { box-shadow: 0 0 0 7px var(--frame), 0 0 0 9px var(--wood), 0 0 22px 6px rgba(var(--glow), 0.55), 0 26px 60px rgba(0, 0, 0, 0.6); }
+  50% { box-shadow: 0 0 0 7px var(--frame), 0 0 0 9px var(--wood), 0 0 46px 16px rgba(var(--glow), 0.95), 0 26px 60px rgba(0, 0, 0, 0.6); }
+}
+@keyframes cast-aura { 0%, 100% { opacity: 0.65; transform: scale(0.96); } 50% { opacity: 1; transform: scale(1.06); } }
+@keyframes cast-rise { 0% { transform: translateY(0) scale(1); opacity: 0; } 15% { opacity: 1; } 100% { transform: translateY(-190px) scale(0.3); opacity: 0; } }
+@media (max-width: 640px) { .cast-stage { --k: 0.5; gap: 10px; padding-bottom: 8vh; } .cast-label { font-size: 15px; padding: 5px 16px 6px; } }
+@media (orientation: landscape) and (max-height: 500px) { .cast-stage { --k: 0.34; padding-bottom: 2vh; } .cast-label { font-size: 13px; } }

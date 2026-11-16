@@ -9,10 +9,6 @@ import { artFallback } from './artFallback';
 const spring = { type: 'spring' as const, stiffness: 400, damping: 30 };
 
 export function CardPreview({ inst, side = 'left' }: { inst: CardInstance; side?: 'left' | 'right' }) {
-  const def = getDef(inst.def);
-  const isCreature = def.type === 'creature';
-  const subtype = isCreature ? `Creature — ${creatureSubtype(def.id)}` : def.type;
-
   return (
     <div className={`preview-overlay side-${side}`}>
       <motion.div
@@ -22,37 +18,48 @@ export function CardPreview({ inst, side = 'left' }: { inst: CardInstance; side?
         exit={{ opacity: 0, scale: 0.85 }}
         transition={spring}
       >
-        <div className={`pcard pcard-${def.type}`}>
-        <div className="pcard-banner">
-          <span className="pcard-name">{def.name}</span>
-        </div>
-        {def.type !== 'land' && <span className="pcard-orb">{def.cost}</span>}
-
-        <div className="pcard-artwin">
-          {def.art && <img className="pcard-art" src={def.art} alt="" onError={artFallback} />}
-        </div>
-
-        <div className="pcard-typeband">
-          <span className="pcard-pip" aria-hidden>
-            ◆
-          </span>
-          {subtype}
-        </div>
-
-        <div className="pcard-rules">
-          {def.text && <p className="pcard-text">{def.text}</p>}
-          {def.flavor && <p className="pcard-flavor">{def.flavor}</p>}
-        </div>
-
-        {isCreature && (
-          <div className="pcard-shield">
-            <span className={inst.damage > 0 ? 'damaged' : ''}>
-              {power(inst)}/{toughness(inst) - inst.damage}
-            </span>
-          </div>
-        )}
-        </div>
+        <PCard inst={inst} />
       </motion.div>
+    </div>
+  );
+}
+
+/** The parchment card face itself (shared by the hover preview and the cast spotlight). */
+export function PCard({ inst }: { inst: CardInstance }) {
+  const def = getDef(inst.def);
+  const isCreature = def.type === 'creature';
+  const subtype = isCreature ? `Creature — ${creatureSubtype(def.id)}` : def.type;
+
+  return (
+    <div className={`pcard pcard-${def.type}`}>
+      <div className="pcard-banner">
+        <span className="pcard-name">{def.name}</span>
+      </div>
+      {def.type !== 'land' && <span className="pcard-orb">{def.cost}</span>}
+
+      <div className="pcard-artwin">
+        {def.art && <img className="pcard-art" src={def.art} alt="" onError={artFallback} />}
+      </div>
+
+      <div className="pcard-typeband">
+        <span className="pcard-pip" aria-hidden>
+          ◆
+        </span>
+        {subtype}
+      </div>
+
+      <div className="pcard-rules">
+        {def.text && <p className="pcard-text">{def.text}</p>}
+        {def.flavor && <p className="pcard-flavor">{def.flavor}</p>}
+      </div>
+
+      {isCreature && (
+        <div className="pcard-shield">
+          <span className={inst.damage > 0 ? 'damaged' : ''}>
+            {power(inst)}/{toughness(inst) - inst.damage}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

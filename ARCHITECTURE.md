@@ -188,7 +188,13 @@ holding a single canonical `GameState` (never mirrored) across four modes (menu/
 `dispatch` re-reads fresh state via `get()`, runs `applyAction` in try/catch (errors → `error`,
 not thrown through React), then forwards to net or re-arms the AI. Telegraphed spells set `charging`
 and defer the reducer via `setTimeout` so `BoardFx` can play a lead-in; **telegraphs are disabled
-in PvP** to avoid timing desync. `main.tsx` deliberately omits `StrictMode` to avoid double-opening
+in PvP** to avoid timing desync. Every sorcery/instant, and the creatures whose skill fires on cast
+(`SKILL_CREATURES`: Kunoichi, Thornwood Brute), gets a telegraph, because the cast itself has a
+visual: the **cast spotlight** (`ui/CastSpotlight.tsx`, driven by `spotlights[]` in the store) floats
+the card up in the middle of the table, glowing, for the length of the window. The existing
+charge/smoke/heal telegraphs keep their own lead-ins and are spotlit for their whole duration; a
+creature's spell-trigger (Pyre Adept) spotlights that creature after the spell. In PvP the
+spotlight plays *alongside* the action (local and remote), never delaying it. `main.tsx` deliberately omits `StrictMode` to avoid double-opening
 the realtime channel.
 
 **UI — `src/ui`.** ~24 files. `Board.tsx` (~919 lines) is a god component owning all interaction
@@ -290,7 +296,8 @@ gitignored). Assets were the weight problem (17 MB of 4000×4000 PNGs in `public
 - **The store is the only place with side effects** (localStorage, timers, net). The engine and AI
   stay pure.
 - **PvP disables telegraphs** and applies actions immediately then broadcasts — keep new UI
-  animations out of the PvP action path or they'll desync timing.
+  animations out of the PvP action path or they'll desync timing. (The cast spotlight is the
+  pattern: visual-only state set next to the action, never in front of it.)
 - **CI runs tsc + tests + build** on PRs and pushes to `main`; run `npm test` and `npx tsc --noEmit`
   locally before pushing.
 - **Two Vitest projects** (`vitest.workspace.ts`): `engine` runs the pure core under node, `ui` runs
