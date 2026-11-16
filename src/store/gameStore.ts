@@ -16,6 +16,7 @@ import {
   CHARGE_SPELLS,
   HEAL_MS,
   HEAL_SPELLS,
+  PHASE_PAUSE_MS,
   SKILL_CREATURES,
   SKILL_MS,
   SMOKE_MS,
@@ -150,7 +151,8 @@ export const useGame = create<Store>((set, get) => {
   }
 
   // Step the AI one action at a time so the human sees each move.
-  function scheduleAi() {
+  // `pauseMs`: extra wait after a phase/turn change, so the phase banner has time to play.
+  function scheduleAi(pauseMs = 0) {
     const st = get();
     if (st.mode !== 'ai' || !st.game || !st.aiId || st.charging) return;
     if (!aiShouldAct(st.game, st.aiId)) return;
@@ -164,15 +166,17 @@ export const useGame = create<Store>((set, get) => {
         const applyAi = () => {
           const cur = get();
           if (cur.mode !== 'ai' || !cur.game) return;
+          let pause = 0;
           try {
             const next = applyAction(cur.game, action);
             sfx(action, cur.game, next);
+            if (next.phase !== cur.game.phase || next.active !== cur.game.active) pause = PHASE_PAUSE_MS;
             set({ game: next, charging: null });
           } catch (e) {
             set({ error: `AI error: ${(e as Error).message}`, charging: null });
             return;
           }
-          scheduleAi();
+          scheduleAi(pause);
         };
         if (tel) {
           const spot = spotlightFor(s.game, action, tel.ms);
@@ -183,7 +187,7 @@ export const useGame = create<Store>((set, get) => {
           applyAi();
         }
       },
-      st.guided ? AI_DELAY_GUIDED_MS : AI_DELAY_MS,
+      (st.guided ? AI_DELAY_GUIDED_MS : AI_DELAY_MS) + pauseMs,
     );
   }
 
@@ -364,7 +368,7 @@ export const useGame = create<Store>((set, get) => {
         set({ game: next, error: null, charging: null });
         if (next.winner) clearMatch(); // finished — nothing left to reconnect to
         if (cur.mode === 'pvp' && cur.net) cur.net.sendAction(action);
-        if (cur.mode === 'ai') scheduleAi();
+        if (cur.mode === 'ai') scheduleAi(next.phase !== cur.game.phase || next.active !== cur.game.active ? PHASE_PAUSE_MS : 0);
       };
       if (tel) {
         // Telegraph first (charge orb at caster, or smoke at the target — the target

@@ -498,6 +498,24 @@ creatures at random. Card assignments were tuned with the win-rate sim (all deck
 45.9%-53.8% before): the first draft gave Gravetide 76% (five deathtouch Ghouls plus lifelink on both big
 creatures), so deathtouch is held back for a rarer card and only the Colossus has lifelink.
 
+### (h) Board readability: phase banner, seat colours, damage readout
+Cyan is **you** and red is **the enemy** everywhere on the board (tokens `--me` / `--foe` in `index.css`: the
+HUD rings, zone borders, phase bar, action buttons, result-screen stats). Whose turn it is also glows: an edge
+glow over the whole screen (`.turn-glow`) and on the zone of the player whose turn it is.
+
+`PhaseBanner` shows a click-through banner dead centre of the screen on every phase or turn change: the turn
+owner in small letters ("Your turn" / "Enemy's turn"), the phase in big ones (Main, Attack, Block, End) and a
+hint of what to do. What it says is a pure function (`phaseInfo.ts`; in the block step the hint follows the
+*defender*, who is the actor). It replaces the old "Turn N" splash. To give it time to be read, the AI waits
+`PHASE_PAUSE_MS` longer after a phase or turn change (vs AI and hotseat only; online play never delays an
+action, same rule as the cast spotlight).
+
+`combatTally.ts` computes the combined damage readout: while attacking, what the chosen attackers could deal;
+while defending, incoming / blocked / you take / life after, with a lethal warning. It uses `duel` and the
+keyword rules (double strike hits twice, trample goes over), and a test holds "you take" equal to the life
+really lost over 1,500 random fights. On short phones the readout collapses to one slim line of icons so the
+Confirm and No Blocks buttons stay clear of the creature rows (320x568 scenario).
+
 ## 8. Run it
 
 ```bash

@@ -33,6 +33,13 @@ export const SKILL_CREATURES: Record<string, string> = {
 // A creature's spell-trigger (Pyre Adept): its card is spotlighted for the charge-up plus a beat.
 export const TRIGGER_SPOT_MS = 1000;
 
+// ---- phase banner ----
+
+export const PHASE_BANNER_MS = 1400; // how long the centred "ATTACK PHASE" banner holds
+// After a phase or turn change the AI waits this much longer before its next move, so the banner can be
+// read (vs AI and hotseat only; online play never delays an action).
+export const PHASE_PAUSE_MS = 900;
+
 // ---- projectiles ----
 
 export const PROJECTILE_TRAVEL_MS = 340; // a fiery bolt, caster -> target

@@ -184,6 +184,33 @@ const ME = '.player-zone.me', OPP = '.player-zone.opp';
       `clicks ${k1}/${k2}; life A ${lives.a} (expect 17), B ${lives.b} (expect 13); float "${floatText}"`);
     await ctx.close(); }
 
+  // U1-U3  board UX: phase banner (centred, right owner/colour), turn glow + cyan buttons, damage readout
+  for (const view of ['desktop', 'phone', 'landscape']) {
+    const { ctx, page } = await boot(browser, view);
+    const bn = () => page.evaluate(() => { const b = document.querySelector('.phase-banner'); if (!b) return null; const r = b.getBoundingClientRect(); return { turn: b.querySelector('.pb-turn')?.textContent, phase: b.querySelector('.pb-phase')?.textContent, cls: b.className, dx: Math.abs(r.left + r.width / 2 - innerWidth / 2), dy: Math.abs(r.top + r.height / 2 - innerHeight / 2), fits: r.left >= 0 && r.right <= innerWidth, over: document.documentElement.scrollWidth > innerWidth + 1 }; });
+    await setup(page, { phase: 'main1', active: 'A', a: ['aether_well', 'dread_maw', 'swift_lancer'], b: ['granite_sentinel'] }); await sleep(1800);
+    await page.locator('.actions button', { hasText: 'Go to Combat' }).click(); await sleep(450);
+    const mine = await bn();
+    await sleep(1700); const gone = await bn();
+    for (const id of await page.evaluate(() => [...document.querySelectorAll('.player-zone.me .row.creatures .card')].map((c) => c.dataset.iid))) await page.locator(`.player-zone.me [data-iid="${id}"]`).first().click({ position: { x: 10, y: 16 } }).catch(() => {});
+    await sleep(400);
+    const atkTally = await page.evaluate(() => document.querySelector('.tally')?.innerText.replace(/\s+/g, ' ').trim());
+    const btn = await page.evaluate(() => getComputedStyle(document.querySelector('.actions button.primary')).backgroundColor);
+    const glowMine = await page.evaluate(() => document.querySelector('.turn-glow')?.className);
+    await setup(page, { phase: 'combat_block', active: 'B', a: ['aether_well', 'stoneback_cub', 'granite_sentinel'], b: ['dread_maw', 'swift_lancer'], attackers: ['dread_maw', 'swift_lancer'] }); await sleep(450);
+    const theirs = await bn(); const glowTheirs = await page.evaluate(() => document.querySelector('.turn-glow')?.className);
+    await sleep(1700);
+    const sent = await iid(page, 'A', 'granite_sentinel'), maw = await iid(page, 'B', 'dread_maw');
+    await click(page, `${ME} ${E(sent)}`); await click(page, `${OPP} ${E(maw)}`); await sleep(500);
+    const blkTally = await page.evaluate(() => document.querySelector('.tally')?.innerText.replace(/\s+/g, ' ').trim());
+    const centred = (b) => b && b.dx <= 2 && b.dy <= 2 && b.fits && !b.over;
+    rec(`U1-${view}`, 'Phase banner: right owner, phase and colour, dead centre, gone after its time', !!mine && mine.turn === 'Your turn' && mine.phase === 'Attack phase' && /me/.test(mine.cls) && centred(mine) && gone === null && !!theirs && theirs.turn === "Enemy's turn" && theirs.phase === 'Block phase' && /foe/.test(theirs.cls) && centred(theirs),
+      `mine ${JSON.stringify(mine)}; later ${JSON.stringify(gone)}; enemy ${JSON.stringify(theirs)}`);
+    rec(`U2-${view}`, 'Board glows cyan on my turn, red on the enemy\'s; action buttons are cyan', /me/.test(glowMine || '') && /foe/.test(glowTheirs || '') && btn === 'rgb(34, 211, 238)', `glow ${glowMine} -> ${glowTheirs}; primary button ${btn}`);
+    rec(`U3-${view}`, 'Damage readout: attack total, and incoming / blocked / you take once a block is planned', /7/.test(atkTally || '') && /13/.test(atkTally || '') && /7\D*5\D*2\D*20\D*18/.test(blkTally || ''), `attack "${atkTally}"; block "${blkTally}"`);
+    await ctx.close();
+  }
+
   // T  effective touch target = how far a tap still lands on the control (pseudo-elements and skew included)
   for (const view of ['phone', 'iphone8', 'iphone13', 'pixel5', 'landscape']) {
     const { ctx, page } = await boot(browser, view);

@@ -14,6 +14,9 @@ import { Rulebook } from './Rulebook';
 import { ZoneViewer } from './ZoneViewer';
 import { BoardFx } from './BoardFx';
 import { CastSpotlight } from './CastSpotlight';
+import { PhaseBanner } from './PhaseBanner';
+import { CombatTallyChip } from './CombatTallyChip';
+import { attackTally, blockTally } from './combatTally';
 import { PlayerBar } from './PlayerBar';
 import { ResultScreen } from './ResultScreen';
 import { CoachBubble, type Tip } from './GuideCoach';
@@ -114,11 +117,10 @@ export function Board() {
   useEffect(() => {
     if (game.log.length > prevLogLen.current) {
       const last = game.log[game.log.length - 1];
-      // Land plays get no banner — the mana-orb animation already tells the story.
-      // Turn changes get a longer, bigger splash (see the .announce.turn style).
-      if (!/ plays /.test(last)) {
-        const isTurn = /^Turn \d+/.test(last);
-        setAnnounce({ id: announceId.current++, text: humanize(last, myId), ms: isTurn ? 2400 : undefined });
+      // Land plays get no banner — the mana-orb animation already tells the story. Turn changes get none
+      // either: the phase banner (PhaseBanner) announces whose turn it is.
+      if (!/ plays /.test(last) && !/^Turn \d+/.test(last)) {
+        setAnnounce({ id: announceId.current++, text: humanize(last, myId) });
       }
     }
     prevLogLen.current = game.log.length;
@@ -531,6 +533,10 @@ export function Board() {
     );
   }
 
+  // The damage readout (attack: what the chosen attackers could deal; block: what is coming and what is left).
+  const attackTotals = game.phase === 'combat_attack' && myTurnToAct ? attackTally(game, attackers) : null;
+  const blockTotals = game.phase === 'combat_block' && myTurnToAct ? blockTally(game, blocks) : null;
+
   function actionButtons() {
     if (game.pending?.kind === 'whipflash') {
       return myTurnToAct ? (
@@ -592,6 +598,7 @@ export function Board() {
         }
         return (
           <div className="actions">
+            {attackTotals && <CombatTallyChip t={attackTotals} />}
             <span className="prompt">⚔ Select creatures to attack</span>
             <button
               className="primary"
@@ -611,6 +618,7 @@ export function Board() {
         if (!canAnyBlock) {
           return (
             <div className="actions">
+              {blockTotals && <CombatTallyChip t={blockTotals} />}
               <div className="prompt-stack">
                 <span className="prompt">🛡 No blockers available…</span>
                 {instantHint}
@@ -625,6 +633,7 @@ export function Board() {
         }
         return (
           <div className="actions">
+            {blockTotals && <CombatTallyChip t={blockTotals} />}
             <div className="prompt-stack">
               <span className="prompt">
                 {pendingBlocker ? 'Click an attacker to block' : 'Click your blocker, then its target'}
@@ -672,7 +681,7 @@ export function Board() {
             <button className="menu-btn" onClick={() => setMenuOpen(true)} aria-label="Menu" title="Menu">
               ☰
             </button>
-            <PhaseBar game={game} myId={myId} />
+            <PhaseBar game={game} myId={localId} />
             <div className="topbar-right">
               {mode === 'pvp' && <span className="role">You are {myId}</span>}
               <Rulebook label={false} />
@@ -680,7 +689,7 @@ export function Board() {
           </header>
 
           {/* Opponent */}
-          <section className="player-zone opp">
+          <section className={'player-zone opp' + (game.active === oppId && !game.winner ? ' turn' : '')}>
             <PlayerBar
               p={opp}
               side={oppId}
@@ -703,7 +712,7 @@ export function Board() {
           <section className="center">{actionButtons()}</section>
 
           {/* Me */}
-          <section className="player-zone me">
+          <section className={'player-zone me' + (game.active === localId && !game.winner ? ' turn' : '')}>
             {permanents(localId, localId, true)}
             <div className="player-dock">
               {/* tabIndex -1: not a tab stop itself, but a place to put focus back
@@ -768,6 +777,8 @@ export function Board() {
         what `.board` is doing. */}
         <BoardFx game={game} />
         <CastSpotlight />
+        {!game.winner && <div className={'turn-glow ' + (game.active === localId ? 'me' : 'foe')} aria-hidden />}
+        <PhaseBanner game={game} localId={localId} guided={guided} />
 
         <AnimatePresence>
           {hovered && !sorceryIid && !game.pending && (
@@ -806,8 +817,7 @@ export function Board() {
                 key={announce.id}
                 className={
                   'announce' +
-                  (announce.text.includes('✦') ? ' skill' : '') +
-                  (/^Turn \d+/.test(announce.text) ? ' turn' : '')
+                  (announce.text.includes('✦') ? ' skill' : '')
                 }
                 initial={{ opacity: 0, scale: 0.8, y: 10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
