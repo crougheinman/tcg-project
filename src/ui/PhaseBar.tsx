@@ -3,6 +3,7 @@ import type { GameState, PlayerId } from '../engine/types';
 const STEPS = ['Main', 'Combat', 'End'] as const;
 
 function stepOf(phase: GameState['phase']): number {
+  if (phase === 'mulligan') return -1; // before the game: no step is lit
   if (phase === 'main1') return 0;
   if (phase === 'end') return 2;
   return 1; // combat_attack / combat_block

@@ -105,6 +105,11 @@ export interface Spotlight {
   ms: number;
 }
 
+/** A card the player can cast right now by id: from the hand, or from the graveyard (flashback). */
+function castableCard(p: GameState['players'][PlayerId], iid: string): CardInstance | undefined {
+  return p.hand.find((c) => c.iid === iid) ?? p.graveyard.find((c) => c.iid === iid);
+}
+
 export const useGame = create<Store>((set, get) => {
   // Should this cast telegraph (delay its resolution so BoardFx can play a lead-in)?
   // Returns the telegraph descriptor, else null. PvP is excluded (desyncs timing).
@@ -113,7 +118,7 @@ export const useGame = create<Store>((set, get) => {
     if (action.type !== 'castSorcery' && action.type !== 'castCreature') return null;
     // instants can be cast off-turn while blocking -> caster is whoever may act now
     const casterId = actorOf(g);
-    const card = g.players[casterId].hand.find((c) => c.iid === action.iid);
+    const card = castableCard(g.players[casterId], action.iid);
     if (!card) return null;
     if (action.type === 'castCreature') {
       // only creatures whose skill fires the moment they are cast get a window
@@ -134,7 +139,7 @@ export const useGame = create<Store>((set, get) => {
   function spotlightFor(g: GameState, action: Action, ms: number): Omit<Spotlight, 'id'> | null {
     if (action.type !== 'castSorcery' && action.type !== 'castCreature') return null;
     const casterId = actorOf(g);
-    const card = g.players[casterId].hand.find((c) => c.iid === action.iid);
+    const card = castableCard(g.players[casterId], action.iid);
     if (!card) return null;
     if (action.type === 'castCreature') {
       const skill = SKILL_CREATURES[card.def];
@@ -254,7 +259,7 @@ export const useGame = create<Store>((set, get) => {
         charging: null,
         spotlights: [],
         lastAiDecks: { deck: deckId, oppDeck: aiDeck.id },
-        game: createInitialState(seed, resolveDeck(deckId).cards, aiDeck.cards),
+        game: createInitialState(seed, resolveDeck(deckId).cards, aiDeck.cards, { mulligan: true }),
       });
       scheduleAi(); // in case AI ever goes first (it doesn't on turn 1, but safe)
     },
@@ -270,7 +275,7 @@ export const useGame = create<Store>((set, get) => {
         forfeit: null,
         charging: null,
         spotlights: [],
-        game: createInitialState(seed, resolveDeck(deckA).cards, resolveDeck(deckB).cards),
+        game: createInitialState(seed, resolveDeck(deckA).cards, resolveDeck(deckB).cards, { mulligan: true }),
       });
     },
 
@@ -280,7 +285,7 @@ export const useGame = create<Store>((set, get) => {
       // engine lands byte-identical to where this client left off.
       let game: GameState;
       try {
-        game = createInitialState(net.seed, deckById(net.deckA).cards, deckById(net.deckB).cards);
+        game = createInitialState(net.seed, deckById(net.deckA).cards, deckById(net.deckB).cards, { mulligan: true });
         for (const a of net.initialLog) game = applyAction(game, a);
       } catch (e) {
         // A log that will not replay is a corrupt record, not a playable match.

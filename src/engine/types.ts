@@ -36,7 +36,9 @@ export type Effect =
   | { type: 'ramp'; amount: number } // put up to N lands from hand onto the battlefield
   | { type: 'token'; token: string; count: number } // create N token creatures
   | { type: 'tapAll'; maxToughness: number } // tap all opponent creatures with toughness <= N
-  | { type: 'destroy'; targets: 'creature' }; // destroy target (tapped) creature
+  | { type: 'destroy'; targets: 'creature' } // destroy target (tapped) creature
+  | { type: 'discard'; amount: number } // the opponent discards N cards chosen at random (deterministic, from the game's rng)
+  | { type: 'recall' }; // return the creature card that died most recently from your graveyard to your hand
 
 /** Which effects need the player to pick a target. */
 export function needsTarget(effect: Effect): boolean {
@@ -69,6 +71,7 @@ export interface CardDef {
   spellTrigger?: Effect; // creature: fires whenever its controller casts a sorcery
   spellTriggerInstant?: boolean; // creature: its spellTrigger also fires on instant casts
   blockOnly?: boolean; // instant that can be cast only during the block step (combat_block)
+  flashback?: number; // spell: may be cast from the graveyard for this much mana, and is then exiled (untargeted effects only)
   text?: string;
   flavor?: string;
   art?: string; // image path served from /public, e.g. '/cards/ember_sprite.png'
@@ -97,10 +100,12 @@ export interface PlayerState {
   hand: CardInstance[];
   battlefield: CardInstance[]; // lands + creatures
   graveyard: CardInstance[];
+  exile?: CardInstance[]; // cards removed from the game (a flashbacked spell); optional so older fixtures need nothing
   landPlayedThisTurn: boolean;
 }
 
 export type Phase =
+  | 'mulligan' // before the game: each player in turn keeps their opening hand or takes a mulligan (opt-in)
   | 'main1'
   | 'combat_attack'
   | 'combat_block'
@@ -119,6 +124,12 @@ export interface PendingTrigger {
   controller: PlayerId; // who chooses the target (the defender, when a flash creature enters in the block step)
 }
 
+/** The opening-hand decision, while `phase` is 'mulligan'. */
+export interface MulliganState {
+  deciding: PlayerId; // whose turn it is to keep or mulligan (A, the player on the play, first)
+  taken: Record<PlayerId, number>; // mulligans each player has taken (each one means one card fewer)
+}
+
 export interface GameState {
   seed: number;
   rngState: number; // current PRNG state — advances deterministically
@@ -129,6 +140,7 @@ export interface GameState {
   combat: CombatState | null;
   lastCombat: CombatState | null; // the most recently resolved combat (for UI fx/announce; not rules)
   pending: PendingTrigger | null; // must be resolved before any other action
+  mulligan?: MulliganState | null; // only present when the game was created with the mulligan option
   nextIid: number; // counter for deterministic instance ids
   winner: PlayerId | 'draw' | null;
   log: string[];
@@ -141,6 +153,8 @@ export type Action =
   | { type: 'declareAttackers'; attackers: string[] }
   | { type: 'declareBlockers'; blocks: Record<string, string> }
   | { type: 'resolveTrigger'; target: string } // choose the target of a pending enter-the-battlefield effect (e.g. Whipflash)
+  | { type: 'keepHand' } // mulligan phase: keep this opening hand
+  | { type: 'mulligan' } // mulligan phase: shuffle the hand back and draw one card fewer
   | { type: 'advance' }; // main1 -> combat, or end -> next turn
 
 export const opponentOf = (p: PlayerId): PlayerId => (p === 'A' ? 'B' : 'A');

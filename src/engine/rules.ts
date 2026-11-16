@@ -9,6 +9,7 @@ import type {
   Target,
 } from './types';
 import { needsTarget, opponentOf } from './types';
+import { MAX_MULLIGANS } from './state';
 
 // ---- Stat helpers (effective power/toughness include permanent buffs) ----
 
@@ -171,6 +172,7 @@ export function findCreature(
  */
 export function actorOf(state: GameState): PlayerId {
   if (state.pending) return state.pending.controller; // the trigger's controller chooses its target
+  if (state.phase === 'mulligan') return state.mulligan?.deciding ?? state.active; // the opening-hand decision
   return state.phase === 'combat_block' ? opponentOf(state.active) : state.active;
 }
 
@@ -212,6 +214,12 @@ export function legalActions(state: GameState, player: PlayerId): Action[] {
 
   const p = state.players[player];
   const actions: Action[] = [];
+
+  if (state.phase === 'mulligan') {
+    actions.push({ type: 'keepHand' });
+    if ((state.mulligan?.taken[player] ?? 0) < MAX_MULLIGANS) actions.push({ type: 'mulligan' });
+    return actions;
+  }
 
   if (state.phase === 'main1') {
     const mana = availableMana(p);
@@ -261,12 +269,17 @@ function spellActions(state: GameState, caster: PlayerId): Action[] {
   const mana = availableMana(p);
   const out: Action[] = [];
 
-  for (const c of p.hand) {
+  // A spell can be cast from the hand, or from the graveyard if it has flashback (at its flashback cost).
+  const castable = [
+    ...p.hand.map((c) => ({ c, cost: getDef(c.def).cost })),
+    ...p.graveyard.filter((c) => getDef(c.def).flashback !== undefined).map((c) => ({ c, cost: getDef(c.def).flashback! })),
+  ];
+  for (const { c, cost } of castable) {
     const def = getDef(c.def);
     if (def.type !== 'sorcery' && def.type !== 'instant') continue;
     if (def.type === 'sorcery' && state.phase !== 'main1') continue;
     if (def.blockOnly && state.phase !== 'combat_block') continue;
-    if (def.cost > mana || !def.effect) continue;
+    if (cost > mana || !def.effect) continue;
 
     const eff = def.effect;
     if (!needsTarget(eff)) {
@@ -322,6 +335,16 @@ export function validateAction(state: GameState, action: Action): void {
   }
   const active = state.players[state.active];
 
+  // The opening-hand decision happens before anything else, and only then.
+  if (state.phase === 'mulligan') {
+    if (action.type !== 'keepHand' && action.type !== 'mulligan') throw new Error('decide on your opening hand first');
+    if (action.type === 'mulligan' && (state.mulligan?.taken[state.mulligan.deciding] ?? 0) >= MAX_MULLIGANS) {
+      throw new Error('no more mulligans');
+    }
+    return;
+  }
+  if (action.type === 'keepHand' || action.type === 'mulligan') throw new Error('not the mulligan phase');
+
   switch (action.type) {
     case 'resolveTrigger': {
       if (state.pending?.kind !== 'enter') throw new Error('no trigger pending');
@@ -356,7 +379,9 @@ export function validateAction(state: GameState, action: Action): void {
       // player on their turn, or by the defender during combat_block (off-turn).
       const casterId = actorOf(state);
       const caster = state.players[casterId];
-      const c = inHand(caster, action.iid);
+      const inGrave = caster.graveyard.find((x) => x.iid === action.iid && getDef(x.def).flashback !== undefined) ?? null;
+      const c = inHand(caster, action.iid) ?? inGrave; // flashback: a spell may be cast from the graveyard
+      const fromGrave = !!inGrave && !inHand(caster, action.iid);
       const type = c && getDef(c.def).type;
       if (!c || (type !== 'sorcery' && type !== 'instant')) throw new Error('not a spell in hand');
       if (type === 'sorcery') requirePhase(state, 'main1');
@@ -364,7 +389,8 @@ export function validateAction(state: GameState, action: Action): void {
         throw new Error('can only be cast while blocking');
       const def = getDef(c.def);
       if (!def.effect) throw new Error('spell has no effect');
-      if (def.cost > availableMana(caster)) throw new Error('not enough mana');
+      if (fromGrave && needsTarget(def.effect)) throw new Error('only untargeted spells have flashback');
+      if ((fromGrave ? def.flashback! : def.cost) > availableMana(caster)) throw new Error('not enough mana');
       if (needsTarget(def.effect)) {
         if (!action.target) throw new Error('target required');
         if (def.effect.type === 'damage' || def.effect.type === 'buff') {

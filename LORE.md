@@ -333,7 +333,9 @@ read the terms.
 
 The mechanics are the theology. **Plague Priest** drains a life with every sorcery — the rot
 spreading. **Grave Necromancer** raises a Zombie on *any* spell, instants included, because the
-dead do not care what kind of magic woke them. **Raise Horde** and the Zombie's own line — *"It
+dead do not care what kind of magic woke them — and *calls back* the last of the fallen when
+he arrives (*Grave Call*). **Plague Priest** reads your hand aloud and what he reads is gone
+(*Rot*). **Rotting Hulk** leaves a Zombie where it fell (*Last breath*). **Raise Horde** — which can be cast a second time from the grave, for a price (*Flashback*) — and the Zombie's own line — *"It
 rises again, and again, and again"* — are the creed stated plainly. **Soul Siphon** turns an
 enemy's last breath into your first. And **Grasp from the Grave** is the ground itself collecting:
 cold hands closing on the ankles of something that overcommitted.

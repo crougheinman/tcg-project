@@ -127,7 +127,16 @@ These unlock Grave Tide and remove hardcoded special cases.
 
 Each trigger that adds a visible effect should get a cast-spotlight entry for the creature.
 
-### Phase 3 - Optional, as appetite allows
+### Phase 3 - Optional, as appetite allows - DONE (counters skipped on purpose)
+
+Done: discard (random, deterministic), recall (the most recently fallen creature), flashback with an exile zone,
+and the mulligan (opt-in at the engine, on in every real game mode). Cards: Plague Priest discards, Grave Necromancer
+recalls, Raise Horde has Flashback 5. Skipped: **+1/+1 counters**: the engine already keeps a creature's permanent
+buff (`buffP`/`buffT`, e.g. Wild Growth) separate from an aura's (`blitz`), and a test already proves the permanent
+buff survives the aura ending, so there was nothing to add. Not done: no full 56-match browser pass (skipped on
+request); the discard and recall have no dedicated animation beyond the log and the cast spotlight.
+
+Original scope, kept for reference:
 
 - Graveyard recursion / flashback (the graveyard is tracked and has a viewer).
 - Opponent discard and loot (discard needs a `pending` choice).

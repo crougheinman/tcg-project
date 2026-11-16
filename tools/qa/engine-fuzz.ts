@@ -15,7 +15,7 @@ import {
 import { DECK_LIST } from '../../src/cards/decks';
 import { CARDS, getDef } from '../../src/cards/cards';
 import type { Action, CardInstance, GameState, PlayerId } from '../../src/engine/types';
-import { opponentOf } from '../../src/engine/types';
+import { needsTarget, opponentOf } from '../../src/engine/types';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -48,7 +48,7 @@ function expectedLife(before: GameState, a: Action): Record<PlayerId, number> {
   const life = { A: before.players.A.life, B: before.players.B.life };
   const caster = before.phase === 'combat_block' ? opponentOf(before.active) : before.active;
   if (a.type === 'castSorcery') {
-    const hand = before.players[caster].hand.find((c) => c.iid === a.iid)!;
+    const hand = (before.players[caster].hand.find((c) => c.iid === a.iid) ?? before.players[caster].graveyard.find((c) => c.iid === a.iid))!; // (flashback casts from the graveyard)
     const eff = getDef(hand.def).effect!;
     const isInstant = getDef(hand.def).type === 'instant';
     if (eff.type === 'damage' && a.target?.kind === 'player') life[a.target.player] -= eff.amount;
@@ -141,7 +141,7 @@ function check(
   const ids = new Set<string>();
   for (const pid of ['A', 'B'] as PlayerId[]) {
     const p = after.players[pid];
-    const zones: [string, CardInstance[]][] = [['library', p.library], ['hand', p.hand], ['battlefield', p.battlefield], ['graveyard', p.graveyard]];
+    const zones: [string, CardInstance[]][] = [['library', p.library], ['hand', p.hand], ['battlefield', p.battlefield], ['graveyard', p.graveyard], ['exile', p.exile ?? []]];
     let real = 0;
     for (const [zn, zone] of zones) {
       for (const c of zone) {
@@ -171,6 +171,8 @@ function check(
 
   // 3. phase transitions
   const exp = (() => {
+    if (a.type === 'keepHand') return before.mulligan?.deciding === 'A' ? 'mulligan' : 'main1';
+    if (a.type === 'mulligan') return 'mulligan';
     if (a.type === 'advance') return before.phase === 'main1' ? 'combat_attack' : before.phase === 'combat_attack' ? 'end' : 'main1';
     if (a.type === 'declareAttackers') return a.attackers.length ? 'combat_block' : 'end';
     if (a.type === 'declareBlockers') return 'end';
@@ -181,6 +183,16 @@ function check(
     if (after.active === before.active) R('TURN_PASS', 'active player did not change');
     if (after.turn !== before.turn + 1) R('TURN_COUNTER', `turn ${before.turn} -> ${after.turn}`);
   }
+
+  // 3a. mulligan: the deciding player's hand is one card smaller each time, and keeping hands the decision over
+  if (a.type === 'mulligan' && before.mulligan) {
+    const who = before.mulligan.deciding;
+    const want = 7 - (before.mulligan.taken[who] + 1);
+    if (after.players[who].hand.length !== want) R('MULLIGAN_HAND_SIZE', `${who}: hand ${after.players[who].hand.length}, expected ${want}`);
+    if (after.mulligan?.deciding !== who) R('MULLIGAN_TURN', `deciding changed from ${who} after a mulligan`);
+    if (after.players[opponentOf(who)].hand.map((c) => c.iid).join() !== before.players[opponentOf(who)].hand.map((c) => c.iid).join()) R('MULLIGAN_TOUCHED_OTHER', 'the other player\'s hand changed');
+  }
+  if (a.type === 'keepHand' && before.mulligan?.deciding === 'B' && (after.phase !== 'main1' || after.mulligan)) R('MULLIGAN_NOT_OVER', `B kept but the game is in ${after.phase}`);
 
   // 3b. Phase 2 rules, each re-derived from the rules text rather than from the engine's helpers
   if (a.type === 'advance' && before.phase === 'end') {
@@ -202,6 +214,43 @@ function check(
     const c = before.players[casterId].hand.find((x) => x.iid === a.iid);
     if (c && !hasKeyword(c, 'flash')) R('NON_FLASH_CAST_OFF_MAIN', `${c.def} cast in ${before.phase} without flash`);
     if (before.phase === 'end') R('FLASH_IN_END_STEP', `${c?.def} cast in the end step`);
+  }
+  if (a.type === 'castCreature') {
+    // enter effects that move cards between zones, re-derived from the rules text
+    const casterId = actorOf(before);
+    const opp = opponentOf(casterId);
+    const cast = before.players[casterId].hand.find((x) => x.iid === a.iid);
+    const eff = cast && getDef(cast.def).onEnter;
+    if (eff?.type === 'discard') {
+      const removed = Math.min(eff.amount, before.players[opp].hand.length);
+      const gone = before.players[opp].hand.filter((c) => !after.players[opp].hand.some((x) => x.iid === c.iid));
+      if (gone.length !== removed) R('DISCARD_COUNT', `${cast!.def}: expected ${removed} discarded, ${gone.length} left the hand`);
+      for (const c of gone) if (!after.players[opp].graveyard.some((x) => x.iid === c.iid)) R('DISCARD_NOT_IN_GRAVEYARD', `${c.def} left the hand but is not in the graveyard`);
+    }
+    if (eff?.type === 'recall') {
+      const g = before.players[casterId].graveyard;
+      let want = -1;
+      for (let i = g.length - 1; i >= 0; i--) if (isCreature(g[i])) { want = i; break; }
+      if (want >= 0) {
+        if (!after.players[casterId].hand.some((x) => x.iid === g[want].iid)) R('RECALL_WRONG_CARD', `expected ${g[want].def} (the most recent creature) back in hand`);
+        if (after.players[casterId].graveyard.length !== g.length - 1) R('RECALL_GRAVEYARD', `graveyard ${g.length} -> ${after.players[casterId].graveyard.length}`);
+      } else if (after.players[casterId].graveyard.length !== g.length) R('RECALL_FROM_NOTHING', 'graveyard changed with no creature in it');
+    }
+  }
+  if (a.type === 'castSorcery') {
+    // flashback: cast from the graveyard, paid at the flashback cost, then exiled (not back in the graveyard)
+    const casterId = before.phase === 'combat_block' ? opponentOf(before.active) : before.active;
+    const fromGrave = before.players[casterId].graveyard.find((x) => x.iid === a.iid);
+    if (fromGrave && !before.players[casterId].hand.some((x) => x.iid === a.iid)) {
+      const fb = getDef(fromGrave.def).flashback;
+      if (fb === undefined) R('FLASHBACK_WITHOUT_KEYWORD', `${fromGrave.def} was cast from the graveyard`);
+      else {
+        const tapped = (st: GameState) => st.players[casterId].battlefield.filter((c) => c.tapped && getDef(c.def).type === 'land').length;
+        if (tapped(after) - tapped(before) !== fb) R('FLASHBACK_COST', `${fromGrave.def}: paid ${tapped(after) - tapped(before)}, flashback costs ${fb}`);
+        if (!(after.players[casterId].exile ?? []).some((x) => x.iid === a.iid)) R('FLASHBACK_NOT_EXILED', `${fromGrave.def} is not in exile`);
+        if (after.players[casterId].graveyard.some((x) => x.iid === a.iid)) R('FLASHBACK_BACK_IN_GRAVEYARD', `${fromGrave.def} returned to the graveyard`);
+      }
+    }
   }
   if (a.type === 'declareBlockers') {
     // dies triggers: each token-making death adds exactly its tokens (tokens that died are replaced, not lost)
@@ -274,6 +323,10 @@ function check(
 
 // ---------- policies ----------
 function chaosAction(s: GameState, actor: PlayerId, r: () => number): Action {
+  if (s.phase === 'mulligan') {
+    const t = legalActions(s, actor);
+    return t[Math.floor(r() * t.length)];
+  }
   if (s.pending?.kind === 'enter') {
     const t = legalActions(s, actor);
     return t[Math.floor(r() * t.length)];
@@ -320,16 +373,26 @@ const t0 = Date.now();
 const STRESS_KW = ['reach', 'vigilance', 'firstStrike', 'doubleStrike', 'trample', 'deathtouch', 'lifelink', 'flash', 'prowess'] as const;
 type CardDefDeath = (typeof CARDS)[string]['onDeath'];
 function sprinkleKeywords(r: () => number): () => void {
-  const saved = new Map<string, { kw: string[] | undefined; death: CardDefDeath }>();
+  const saved = new Map<string, { kw: string[] | undefined; death: CardDefDeath; enter: CardDefDeath }>();
+  const flashed: string[] = [];
   for (const def of Object.values(CARDS)) {
     if (def.type !== 'creature') continue;
-    saved.set(def.id, { kw: def.keywords as string[] | undefined, death: def.onDeath });
+    saved.set(def.id, { kw: def.keywords as string[] | undefined, death: def.onDeath, enter: def.onEnter });
     const extra = STRESS_KW.filter(() => r() < 0.25);
     if (extra.length) def.keywords = [...(def.keywords ?? []), ...extra];
     // some creatures raise a token when they die (tokens included, so triggers can chain through them)
     if (!def.onDeath && r() < 0.12) def.onDeath = { type: 'token', token: 'zombie_token', count: 1 };
+    // some creatures make the opponent discard, or bring the last fallen creature back, as they enter
+    if (!def.onEnter && r() < 0.1) def.onEnter = r() < 0.5 ? { type: 'discard', amount: 1 } : { type: 'recall' };
   }
-  return () => { for (const [id, v] of saved) { CARDS[id].keywords = v.kw as never; CARDS[id].onDeath = v.death; } };
+  // some untargeted spells gain flashback (cost + 1)
+  for (const def of Object.values(CARDS)) {
+    if ((def.type === 'sorcery' || def.type === 'instant') && def.effect && def.flashback === undefined && !needsTarget(def.effect) && r() < 0.4) {
+      def.flashback = def.cost + 1;
+      flashed.push(def.id);
+    }
+  }
+  return () => { for (const [id, v] of saved) { CARDS[id].keywords = v.kw as never; CARDS[id].onDeath = v.death; CARDS[id].onEnter = v.enter; } for (const id of flashed) delete CARDS[id].flashback; };
 }
 
 for (const policyName of ['ai', 'chaos', 'ai+kw', 'chaos+kw'] as const) {
@@ -343,7 +406,7 @@ for (const policyName of ['ai', 'chaos', 'ai+kw', 'chaos+kw'] as const) {
       for (let seed = 1; seed <= SEEDS; seed++) {
         const gseed = seed * 7919 + (policy === 'chaos' ? 17 : 3);
         const r = rng(gseed ^ 0x9e3779b9);
-        let g = createInitialState(gseed, A.cards, B.cards);
+        let g = createInitialState(gseed, A.cards, B.cards, { mulligan: seed % 2 === 0 }); // half the games open with the keep-or-mulligan decision
         const sizes = { A: A.cards.length, B: B.cards.length } as Record<PlayerId, number>;
         const ctx = { pair: `${A.id} v ${B.id}`, policy: policyName, seed: gseed, step: 0 };
         const restore = stress ? sprinkleKeywords(rng(gseed ^ 0x51ed270b)) : () => {};

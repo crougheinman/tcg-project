@@ -91,12 +91,12 @@ export const DECK_IRONBLOSSOM: string[] = [
 ]; // 30
 
 export const DECK_GRAVETIDE: string[] = [
-  ...repeat('aether_well', 12),
-  ...repeat('shambling_ghoul', 5),
+  ...repeat('aether_well', 13),
+  ...repeat('shambling_ghoul', 6),
   ...repeat('plague_priest', 2),
   ...repeat('grave_necromancer', 2),
-  ...repeat('rotting_hulk', 2),
-  ...repeat('carrion_colossus', 2),
+  ...repeat('rotting_hulk', 1),
+  ...repeat('carrion_colossus', 1),
   ...repeat('raise_horde', 1),
   ...repeat('withering_touch', 2),
   ...repeat('soul_siphon', 1),

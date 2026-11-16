@@ -42,8 +42,17 @@ function fakeConn(over: Partial<MatchConnection> = {}) {
   return conn;
 }
 
+// Real games open with the keep-or-mulligan decision (the store passes { mulligan: true }).
 function freshGame(): GameState {
-  return createInitialState(SEED, deckById(DECK_A).cards, deckById(DECK_B).cards);
+  return createInitialState(SEED, deckById(DECK_A).cards, deckById(DECK_B).cards, { mulligan: true });
+}
+
+/** Most tests here are about play, not the opening decision: move the current game past it. */
+function toMain() {
+  const g = structuredClone(useGame.getState().game!);
+  g.phase = 'main1';
+  g.mulligan = null;
+  useGame.setState({ game: g });
 }
 
 beforeEach(() => {
@@ -59,6 +68,7 @@ describe('PvP actor guard', () => {
   it('sends a local action when this client is the legal actor', () => {
     const conn = fakeConn({ role: 'A' });
     useGame.getState().startPvp(conn);
+    toMain();
     const g = useGame.getState().game!;
     expect(actorOf(g)).toBe('A'); // our turn
 
@@ -90,6 +100,7 @@ describe('PvP actor guard', () => {
 
   it('does not guard hotseat, where one client legitimately drives both sides', () => {
     useGame.getState().startHotseat(DECK_A, DECK_B);
+    toMain();
     // startHotseat seeds from Math.random, so the opening hand may hold no land.
     // Put one there rather than depend on the shuffle.
     const g = structuredClone(useGame.getState().game!);
@@ -154,6 +165,8 @@ describe('PvP reconnect', () => {
       g = applyAction(g, a);
       log.push(a);
     };
+    play({ type: 'keepHand' }); // A keeps
+    play({ type: 'keepHand' }); // B keeps: the game begins
     play({ type: 'playLand', iid: g.players.A.hand.find((c) => c.def === 'aether_well')!.iid });
     play({ type: 'advance' }); // -> combat_attack
     play({ type: 'declareAttackers', attackers: [] });
@@ -202,6 +215,7 @@ describe('PvP reconnect', () => {
   it('applies an inbound peer action through the same reducer', () => {
     const conn = fakeConn();
     useGame.getState().startPvp(conn);
+    toMain();
     const land = useGame.getState().game!.players.A.hand.find((c) => c.def === 'aether_well')!;
     conn.fireAction!({ type: 'playLand', iid: land.iid });
     expect(useGame.getState().game!.players.A.battlefield).toHaveLength(1);
@@ -227,6 +241,7 @@ describe('match persistence', () => {
   it('a finished game clears the saved match', () => {
     const conn = fakeConn();
     useGame.getState().startPvp(conn);
+    toMain();
     // Drop B to lethal, then let any action run the state-based checks.
     const g = structuredClone(useGame.getState().game!);
     g.players.B.life = 1;
@@ -371,5 +386,49 @@ describe('cast spotlight', () => {
       expect(useGame.getState().spotlights).toHaveLength(1);
       expect(useGame.getState().spotlights[0].ownerId).toBe('A');
     });
+  });
+});
+
+describe('the opening hand decision', () => {
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
+  it('a game vs the AI opens with the human\'s keep-or-mulligan decision, then the AI decides', () => {
+    vi.useFakeTimers();
+    useGame.getState().startAI(DECK_A, DECK_B);
+    let g = useGame.getState().game!;
+    expect(g.phase).toBe('mulligan');
+    expect(useGame.getState().myId).toBe('A');
+    expect(actorOf(g)).toBe('A');
+    useGame.getState().dispatch({ type: 'keepHand' });
+    g = useGame.getState().game!;
+    expect(actorOf(g)).toBe('B'); // now the AI is deciding...
+    useGame.getState().dispatch({ type: 'keepHand' }); // ...and a stray human action is dropped
+    expect(useGame.getState().game!.phase).toBe('mulligan');
+    vi.advanceTimersByTime(5000); // the AI takes its turn at deciding
+    expect(useGame.getState().game!.phase).toBe('main1');
+    expect(useGame.getState().game!.mulligan).toBeNull();
+  });
+
+  it('hotseat: the same screen decides for both players in turn', () => {
+    useGame.getState().startHotseat(DECK_A, DECK_B);
+    expect(useGame.getState().game!.phase).toBe('mulligan');
+    useGame.getState().dispatch({ type: 'keepHand' });
+    useGame.getState().dispatch({ type: 'mulligan' });
+    useGame.getState().dispatch({ type: 'keepHand' });
+    expect(useGame.getState().game!.phase).toBe('main1');
+    expect(useGame.getState().game!.players.B.hand).toHaveLength(6);
+  });
+
+  it('online: the decision goes over the wire like any action, A first', () => {
+    const conn = fakeConn({ role: 'A' });
+    useGame.getState().startPvp(conn);
+    useGame.getState().dispatch({ type: 'keepHand' });
+    expect(conn.sent).toEqual([{ type: 'keepHand' }]);
+    // B's decision arrives from the peer
+    conn.fireAction!({ type: 'keepHand' });
+    expect(useGame.getState().game!.phase).toBe('main1');
   });
 });

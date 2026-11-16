@@ -544,6 +544,28 @@ flash, prowess and token dies-triggers over every deck's creatures (22,400 games
 (Whipflash) and Pyre Adept (prowess) as before-and-after data, Rotting Hulk raises a Zombie when it dies, Bulwark has flash.
 The first draft put the dies trigger on the five Shambling Ghouls, which took Gravetide to 58.9%; moved to the two Hulks.
 
+### (j) The graveyard: discard, recall, flashback
+Two more effect types resolve from a trigger like any other (`onEnter`): `discard` (the opponent discards N cards **at
+random**, drawn from the game's own rng, so it is deterministic) and `recall` (the controller returns the creature that
+died **most recently** from the graveyard to their hand; no choice to make, so no UI is needed, and tokens never are
+in a graveyard). Flashback is data on a spell (`flashback: <cost>`): `castSorcery` may name a card in the caster's
+graveyard, it is paid at the flashback cost, resolves, and is **exiled** (`PlayerState.exile`, an optional zone the fuzz
+oracle counts for card conservation). `legalActions` enumerates it, the AI scores it like any spell, the spotlight
+shows it, and the graveyard viewer offers a Flashback button when it is castable. Only untargeted spells may have it
+(a test fixes that). Cards: Plague Priest (Rot: discard), Grave Necromancer (Grave Call: recall), Raise Horde
+(Flashback 5). They moved Gravetide to 62.7% as drafted; the final list (13 lands, 6 Ghouls, 1 Hulk, 1 Colossus,
+otherwise as before) is 55.7%, with every deck between 46.6% and 55.9% at N=80.
+
+### (k) The mulligan
+A game created with `{ mulligan: true }` (the store does this for vs AI, hotseat and online) opens in a `mulligan`
+phase: player A (on the play) chooses `keepHand` or `mulligan`, then B does, then the game starts on A's turn. A
+mulligan shuffles the hand back into the library with the game's rng and draws one card fewer (limit 3, so no one
+goes below 4). `actorOf` is the deciding player, so the online transport's one-actor-at-a-time rule holds and the
+decisions are ordinary logged actions that replay on reconnect. Without the option games start in the main phase as
+before, so every older fixture and test is untouched. The AI keeps 2 to all-but-2 lands and otherwise mulligans.
+Saved online matches from before this change cannot be replayed (their logs lack the decisions); the restore path
+already reports that and returns to the menu.
+
 ## 8. Run it
 
 ```bash

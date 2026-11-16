@@ -8,10 +8,13 @@ export function ZoneViewer({
   title,
   cards,
   onClose,
+  flashback,
 }: {
   title: string;
   cards: CardInstance[];
   onClose: () => void;
+  /** Your own graveyard: which spells can be cast from here right now, and how. */
+  flashback?: { can: (c: CardInstance) => boolean; cast: (c: CardInstance) => void };
 }) {
   const groups = new Map<string, { inst: CardInstance; count: number }>();
   for (const c of cards) {
@@ -48,6 +51,11 @@ export function ZoneViewer({
             <div key={g.inst.def} className="zone-card">
               <CardView inst={g.inst} />
               <span className="zone-x">×{g.count}</span>
+              {flashback?.can(g.inst) && (
+                <button className="zone-flash" onClick={() => flashback.cast(g.inst)}>
+                  Flashback ◈{getDef(g.inst.def).flashback}
+                </button>
+              )}
             </div>
           ))}
         </div>

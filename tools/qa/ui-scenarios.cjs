@@ -22,7 +22,7 @@ async function setup(page, spec) {
     const mk = (def, owner, over = {}) => ({ iid: 'z' + n++ + '_' + def, def, owner, tapped: false, summoningSick: false, damage: 0, buffP: 0, buffT: 0, blitz: false, ...over });
     const bf = (list, owner) => list.map((e) => (typeof e === 'string' ? mk(e, owner) : mk(e.def, owner, e)));
     g.players.A.battlefield = bf(spec.a, 'A'); g.players.B.battlefield = bf(spec.b, 'B');
-    g.players.A.hand = bf(spec.hand || [], 'A'); g.players.B.hand = []; g.players.A.graveyard = []; g.players.B.graveyard = [];
+    g.players.A.hand = bf(spec.hand || [], 'A'); g.players.B.hand = bf(spec.bhand || [], 'B'); g.players.A.graveyard = bf(spec.grave || [], 'A'); g.players.B.graveyard = [];
     g.active = spec.active; g.phase = spec.phase; g.turn = 5; g.pending = null; g.winner = null; g.combat = null;
     if (spec.attackers) { const atk = g.players[spec.active].battlefield.filter((c) => spec.attackers.includes(c.def)); atk.forEach((c) => (c.tapped = true)); g.combat = { attackers: atk.map((c) => c.iid), blocks: {} }; }
     window.__game.setState({ game: g, error: null, charging: null });
@@ -235,6 +235,50 @@ const ME = '.player-zone.me', OPP = '.player-zone.opp';
     const r = await page.evaluate(() => { const g = window.__game.getState().game; return { hulk: g.players.A.battlefield.some((c) => c.def === 'rotting_hulk'), zombies: g.players.A.battlefield.filter((c) => c.def === 'zombie_token').length, gy: g.players.A.graveyard.map((c) => c.def) }; });
     rec('P4', 'Last breath: Rotting Hulk dies, its card floats up, a Zombie is raised', conf === true && spot !== null && !r.hulk && r.zombies === 1 && r.gy.includes('rotting_hulk') && !r.gy.includes('zombie_token'),
       `confirm ${conf}; spotlight "${spot}"; hulk alive ${r.hulk}, zombies ${r.zombies}, graveyard ${r.gy}`);
+    await ctx.close(); }
+
+  // M1  the opening decision: keep or mulligan through real clicks, then the AI decides, then the game begins
+  { const { ctx, page } = await boot(browser); // (boot leaves the freshly created game untouched)
+    const handN = () => page.evaluate(() => document.querySelectorAll('.player-dock .hand .card').length);
+    const btns = () => page.evaluate(() => [...document.querySelectorAll('.actions button')].map((b) => b.textContent.trim()));
+    const phase0 = await phase(page), n0 = await handN(), b0 = await btns();
+    const k1 = await click(page, '.actions button:has-text("Mulligan")'); await sleep(500);
+    const n1 = await handN(), b1 = await btns();
+    const k2 = await click(page, '.actions button:has-text("Keep hand")');
+    const waiting = await page.evaluate(() => document.querySelector('.waiting')?.textContent || '');
+    let started = false; for (let i = 0; i < 80 && !started; i++) { await sleep(100); started = (await phase(page)) === 'main1'; }
+    const g = await page.evaluate(() => { const st = window.__game.getState().game; return { mulligan: st.mulligan ?? null, mine: st.players.A.hand.length }; });
+    rec('M1', 'Opening hand: Mulligan redraws one card fewer, Keep passes the decision to the AI, then the game begins',
+      phase0 === 'mulligan' && n0 === 7 && b0.some((t) => /Keep hand/.test(t)) && b0.some((t) => /Mulligan \(6\)/.test(t)) && k1 === true && n1 === 6 && b1.some((t) => /Mulligan \(5\)/.test(t)) && k2 === true && /deciding/i.test(waiting) && started && g.mulligan === null && g.mine === 6,
+      `start phase ${phase0}, hand ${n0}, buttons ${b0}; after mulligan hand ${n1}, buttons ${b1}; kept ${k2}; while the AI decides: "${waiting}"; game began ${started}; hand ${g.mine}`);
+    await ctx.close(); }
+
+  // F1  flashback: cast a spell from the graveyard through the zone viewer; it is exiled afterwards
+  { const { ctx, page } = await boot(browser);
+    await setup(page, { phase: 'main1', active: 'A', a: ['aether_well', 'aether_well', 'aether_well', 'aether_well', 'aether_well'], b: [], grave: ['raise_horde'] });
+    const k0 = await click(page, '.zone-btn.left'); await sleep(500);
+    const btn = await page.evaluate(() => document.querySelector('.zone-flash')?.textContent || null);
+    const k1 = await click(page, '.zone-flash'); await sleep(2200);
+    const r = await page.evaluate(() => { const g = window.__game.getState().game; return { zombies: g.players.A.battlefield.filter((c) => c.def === 'zombie_token').length, grave: g.players.A.graveyard.length, exile: (g.players.A.exile || []).map((c) => c.def), tapped: g.players.A.battlefield.filter((c) => c.tapped).length }; });
+    rec('F1', 'Flashback: Raise Horde is cast from the graveyard for 5, raises 2 Zombies, and is exiled', k0 === true && /Flashback/.test(btn || '') && k1 === true && r.zombies === 2 && r.grave === 0 && r.exile.join() === 'raise_horde' && r.tapped === 5,
+      `viewer button "${btn}"; clicks ${k0}/${k1}; zombies ${r.zombies}, graveyard ${r.grave}, exile ${r.exile}, lands tapped ${r.tapped}`);
+    await ctx.close(); }
+
+  // F2  flashback is not offered when you cannot pay for it
+  { const { ctx, page } = await boot(browser);
+    await setup(page, { phase: 'main1', active: 'A', a: ['aether_well', 'aether_well', 'aether_well'], b: [], grave: ['raise_horde'] });
+    await click(page, '.zone-btn.left'); await sleep(500);
+    const offered = await page.evaluate(() => !!document.querySelector('.zone-flash'));
+    rec('F2', 'No Flashback button without the mana (3 lands, needs 5)', offered === false, `button offered: ${offered}`);
+    await ctx.close(); }
+
+  // D1  discard: Plague Priest makes the opponent discard a card at random
+  { const { ctx, page } = await boot(browser);
+    await setup(page, { phase: 'main1', active: 'A', a: ['aether_well', 'aether_well'], b: [], hand: ['plague_priest'], bhand: ['cinderbolt', 'insight', 'scorch'] });
+    const pr = await handIid(page, 'plague_priest');
+    const k = await click(page, `.player-dock .hand ${E(pr)}`); await sleep(2300);
+    const r = await page.evaluate(() => { const g = window.__game.getState().game; return { hand: g.players.B.hand.length, grave: g.players.B.graveyard.length, log: g.log.filter((l) => /^B discards/.test(l)).length }; });
+    rec('D1', 'Plague Priest: the opponent discards one card at random', k === true && r.hand === 2 && r.grave === 1 && r.log === 1, `cast ${k}; opponent hand ${r.hand} (expect 2), graveyard ${r.grave}, discard log lines ${r.log}`);
     await ctx.close(); }
 
   // U1-U3  board UX: phase banner (centred, right owner/colour), turn glow + cyan buttons, damage readout

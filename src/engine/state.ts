@@ -2,7 +2,8 @@ import type { CardInstance, GameState, PlayerId, PlayerState } from './types';
 import { shuffle } from './rng';
 
 const STARTING_LIFE = 20;
-const OPENING_HAND = 7;
+export const OPENING_HAND = 7;
+export const MAX_MULLIGANS = 3; // a player may mulligan down to 4 cards
 export const MAX_DECK_SIZE = 40; // a deck may hold at most this many cards
 
 function makeInstance(defId: string, owner: PlayerId, iid: number): CardInstance {
@@ -27,6 +28,7 @@ export function createInitialState(
   seed: number,
   deckA: string[],
   deckB: string[],
+  opts: { mulligan?: boolean } = {},
 ): GameState {
   if (deckA.length > MAX_DECK_SIZE || deckB.length > MAX_DECK_SIZE) {
     throw new Error(`deck exceeds max size of ${MAX_DECK_SIZE}`);
@@ -61,7 +63,10 @@ export function createInitialState(
     rngState,
     turn: 1,
     active: 'A',
-    phase: 'main1', // A is on the play: untap/draw skipped on turn 1
+    // A is on the play: untap/draw skipped on turn 1. With the mulligan option the game opens with each
+    // player's keep-or-mulligan decision (A first); without it, straight into A's main phase.
+    phase: opts.mulligan ? 'mulligan' : 'main1',
+    mulligan: opts.mulligan ? { deciding: 'A', taken: { A: 0, B: 0 } } : null,
     players,
     combat: null,
     lastCombat: null,

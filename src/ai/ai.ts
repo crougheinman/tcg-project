@@ -1,6 +1,7 @@
 import { getDef } from '../cards/cards';
 import type { Action, CardInstance, GameState, PlayerId } from '../engine/types';
 import { opponentOf } from '../engine/types';
+import { MAX_MULLIGANS } from '../engine/state';
 import {
   actorOf,
   canAttack,
@@ -9,6 +10,7 @@ import {
   findCreature,
   hasKeyword,
   isCreature,
+  isLand,
   legalActions,
   power,
   toughness,
@@ -31,7 +33,17 @@ export function aiShouldAct(state: GameState, ai: PlayerId): boolean {
   return actorOf(state) === ai;
 }
 
+/** Keep a hand with a workable number of lands (2 to all-but-2); otherwise mulligan while allowed. */
+function pickMulligan(state: GameState, ai: PlayerId): Action {
+  const hand = state.players[ai].hand;
+  const lands = hand.filter(isLand).length;
+  const fine = lands >= 2 && lands <= hand.length - 2;
+  const canMulligan = (state.mulligan?.taken[ai] ?? 0) < MAX_MULLIGANS;
+  return fine || !canMulligan ? { type: 'keepHand' } : { type: 'mulligan' };
+}
+
 export function pickAction(state: GameState, ai: PlayerId): Action {
+  if (state.phase === 'mulligan') return pickMulligan(state, ai);
   if (state.pending?.kind === 'enter') return pickTriggerTarget(state, ai);
   if (state.phase === 'combat_block' && state.active !== ai) return pickBlocks(state, ai);
   switch (state.phase) {
@@ -76,7 +88,8 @@ function score(band: number, tiebreak = 0): number {
 const COMBAT_TRICK_MIN = score(BAND.destroy);
 
 function handCard(state: GameState, player: PlayerId, iid: string): CardInstance | null {
-  return state.players[player].hand.find((c) => c.iid === iid) ?? null;
+  const p = state.players[player];
+  return p.hand.find((c) => c.iid === iid) ?? p.graveyard.find((c) => c.iid === iid) ?? null; // (a flashback spell is cast from the graveyard)
 }
 
 function scoreAction(state: GameState, ai: PlayerId, a: Action): number {

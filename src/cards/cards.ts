@@ -233,7 +233,9 @@ export const CARDS: Record<string, CardDef> = {
     power: 1,
     toughness: 2,
     spellTrigger: { type: 'damage', amount: 1, targets: 'player' },
-    text: 'Whenever you cast a sorcery, your opponent loses 1 life.',
+    skill: 'Rot',
+    onEnter: { type: 'discard', amount: 1 },
+    text: 'Rot — when it enters, your opponent discards a card at random. Whenever you cast a sorcery, they lose 1 life.',
     flavor: 'Every incantation spreads the rot a little further.',
   },
   grave_necromancer: {
@@ -245,7 +247,9 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 3,
     spellTrigger: { type: 'token', token: 'zombie_token', count: 1 },
     spellTriggerInstant: true,
-    text: 'Whenever you cast a spell, raise a 1/1 Zombie.',
+    skill: 'Grave Call',
+    onEnter: { type: 'recall' },
+    text: 'Grave Call — when it enters, return your most recently fallen creature to your hand. Whenever you cast a spell, raise a 1/1 Zombie.',
     flavor: 'The dead make patient students.',
   },
   rotting_hulk: {
@@ -333,7 +337,8 @@ export const CARDS: Record<string, CardDef> = {
     type: 'sorcery',
     cost: 3,
     effect: { type: 'token', token: 'zombie_token', count: 2 },
-    text: 'Raise two 1/1 Zombies.',
+    flashback: 5,
+    text: 'Raise two 1/1 Zombies. Flashback ◈5 — cast it from your graveyard, then exile it.',
     flavor: 'The soil remembers every soldier it has swallowed.',
   },
   overgrowth: {

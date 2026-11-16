@@ -17,6 +17,7 @@ import { CastSpotlight } from './CastSpotlight';
 import { PhaseBanner } from './PhaseBanner';
 import { CombatTallyChip } from './CombatTallyChip';
 import { attackTally, blockTally } from './combatTally';
+import { MAX_MULLIGANS, OPENING_HAND } from '../engine/state';
 import { PlayerBar } from './PlayerBar';
 import { ResultScreen } from './ResultScreen';
 import { CoachBubble, type Tip } from './GuideCoach';
@@ -366,6 +367,15 @@ export function Board() {
     return false;
   }
 
+  // Can this graveyard card be cast from here right now (flashback: right timing, enough mana, untargeted)?
+  function canFlashback(c: CardInstance): boolean {
+    const def = getDef(c.def);
+    if (!myTurnToAct || game.pending || def.flashback === undefined || !def.effect) return false;
+    if (def.type !== 'sorcery' && def.type !== 'instant') return false;
+    if (def.type === 'sorcery' && game.phase !== 'main1') return false;
+    return def.flashback <= availableMana(me) && !needsTarget(def.effect);
+  }
+
   // Put the hover preview on the side opposite the hovered card so it never covers it.
   function previewSide(iid: string): 'left' | 'right' {
     const el = document.querySelector(`[data-iid="${iid}"]`);
@@ -552,7 +562,8 @@ export function Board() {
       );
     }
     if (!myTurnToAct) {
-      const who = mode === 'ai' ? 'AI is thinking…' : 'Waiting for opponent…';
+      const who =
+        game.phase === 'mulligan' ? 'Opponent is deciding on their hand…' : mode === 'ai' ? 'AI is thinking…' : 'Waiting for opponent…';
       return <div className="waiting">{game.winner ? '' : who}</div>;
     }
     if (sorceryIid) {
@@ -564,6 +575,23 @@ export function Board() {
       );
     }
     switch (game.phase) {
+      case 'mulligan': {
+        // The opening hand is on the table below; this is the keep-or-mulligan decision about it.
+        const taken = game.mulligan?.taken[localId] ?? 0;
+        return (
+          <div className="actions">
+            <span className="prompt">Keep this hand?</span>
+            <button className="primary" onClick={() => dispatch({ type: 'keepHand' })}>
+              Keep hand
+            </button>
+            {taken < MAX_MULLIGANS && (
+              <button onClick={() => dispatch({ type: 'mulligan' })}>
+                Mulligan ({OPENING_HAND - taken - 1})
+              </button>
+            )}
+          </div>
+        );
+      }
       case 'main1': {
         // End the turn in one click: advance straight past combat + end.
         const endTurn = () => {
@@ -799,6 +827,17 @@ export function Board() {
               }
               cards={zone === 'deck' ? me.library : zone === 'graveyard' ? me.graveyard : opp.graveyard}
               onClose={() => setZone(null)}
+              flashback={
+                zone === 'graveyard'
+                  ? {
+                      can: canFlashback,
+                      cast: (c) => {
+                        setZone(null);
+                        dispatch({ type: 'castSorcery', iid: c.iid });
+                      },
+                    }
+                  : undefined
+              }
             />
           )}
         </AnimatePresence>

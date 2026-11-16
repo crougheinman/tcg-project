@@ -249,8 +249,14 @@ async function playMatch(browser, A, B, idx) {
         case 'playLand': case 'castCreature':
           bump(action.type); await page.evaluate((a) => window.__H.setExpect([a]), action);
           ok = await clickEl(cardLoc(action.iid, scopeHand), action.type); break;
-        case 'whipflash':
-          bump('whipflash'); await page.evaluate((a) => window.__H.setExpect([a]), action);
+        case 'keepHand':
+          bump('keepHand'); await page.evaluate((a) => window.__H.setExpect([a]), action);
+          ok = await clickEl(btn(/Keep hand/), 'Keep hand'); break;
+        case 'mulligan':
+          bump('mulligan'); await page.evaluate((a) => window.__H.setExpect([a]), action);
+          ok = await clickEl(btn(/^Mulligan/), 'Mulligan'); break;
+        case 'resolveTrigger':
+          bump('enterTrigger'); await page.evaluate((a) => window.__H.setExpect([a]), action);
           ok = await clickTarget({ kind: 'creature', iid: action.target }); break;
         case 'castSorcery': {
           const card = await page.evaluate((iid) => { const g = window.__game.getState().game; return g.players.A.hand.find((c) => c.iid === iid)?.def; }, action.iid);

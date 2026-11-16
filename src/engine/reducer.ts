@@ -1,6 +1,8 @@
 import { getDef, isToken } from '../cards/cards';
 import type { Action, CardInstance, Effect, GameState, PlayerId, PlayerState, Target } from './types';
 import { needsCreatureChoice, opponentOf } from './types';
+import { nextRandom, shuffle } from './rng';
+import { OPENING_HAND } from './state';
 import {
   actorOf,
   availableMana,
@@ -66,6 +68,32 @@ export function applyAction(state: GameState, action: Action): GameState {
       }
       break;
     }
+    case 'keepHand': {
+      const m = s.mulligan!;
+      const took = m.taken[m.deciding];
+      s.log.push(`${m.deciding} keeps ${took ? `${OPENING_HAND - took} cards` : 'their hand'}`);
+      if (m.deciding === 'A') {
+        m.deciding = 'B';
+      } else {
+        s.phase = 'main1'; // both have decided: the game begins on A's turn
+        s.mulligan = null;
+        s.log.push('The game begins. A is on the play.');
+      }
+      break;
+    }
+    case 'mulligan': {
+      const m = s.mulligan!;
+      const pid = m.deciding;
+      const p = s.players[pid];
+      m.taken[pid] += 1;
+      const [mixed, next] = shuffle([...p.hand, ...p.library], s.rngState); // hand back into the deck, reshuffled
+      s.rngState = next;
+      const size = OPENING_HAND - m.taken[pid];
+      p.hand = mixed.slice(0, size);
+      p.library = mixed.slice(size);
+      s.log.push(`${pid} takes a mulligan: ${size} cards`);
+      break;
+    }
     case 'resolveTrigger': {
       const pend = s.pending!;
       const def = getDef(pend.def);
@@ -85,11 +113,14 @@ export function applyAction(state: GameState, action: Action): GameState {
       // model as blocking) rather than always being the active player.
       const casterId = s.phase === 'combat_block' ? opponentOf(s.active) : s.active;
       const caster = s.players[casterId];
-      const c = takeFromHand(caster, action.iid);
+      // Flashback: a spell not in hand is cast from the graveyard for its flashback cost, then exiled.
+      const fromGrave = !caster.hand.some((x) => x.iid === action.iid);
+      const c = fromGrave ? takeFromGraveyard(caster, action.iid) : takeFromHand(caster, action.iid);
       const def = getDef(c.def);
-      payMana(caster, def.cost);
-      caster.graveyard.push(c);
-      s.log.push(`${casterId} casts ${def.name}`);
+      payMana(caster, fromGrave ? def.flashback! : def.cost);
+      if (fromGrave) (caster.exile ??= []).push(c);
+      else caster.graveyard.push(c);
+      s.log.push(`${casterId} casts ${def.name}${fromGrave ? ' (flashback)' : ''}`);
       applyEffect(s, casterId, def.effect!, action.target);
       // Creatures that trigger when their controller casts a spell. By default they
       // fire only on sorceries (e.g. Pyre Adept, Plague Priest); a creature flagged
@@ -196,6 +227,12 @@ function takeFromHand(p: PlayerState, iid: string) {
   return p.hand.splice(idx, 1)[0];
 }
 
+function takeFromGraveyard(p: PlayerState, iid: string) {
+  const idx = p.graveyard.findIndex((c) => c.iid === iid);
+  if (idx < 0) throw new Error('card not in graveyard');
+  return p.graveyard.splice(idx, 1)[0];
+}
+
 function payMana(p: PlayerState, cost: number): void {
   const lands = untappedLands(p);
   if (lands.length < cost) throw new Error('not enough mana');
@@ -271,6 +308,37 @@ function applyEffect(s: GameState, controller: PlayerId, effect: Effect, target?
         }
       }
       s.log.push(`${controller} topples ${n} creature${n === 1 ? '' : 's'}`);
+      break;
+    }
+    case 'discard': {
+      // The opponent discards at random. The pick comes from the game's own rng, so it is deterministic.
+      const victimId = opponentOf(controller);
+      const victim = s.players[victimId];
+      for (let i = 0; i < effect.amount && victim.hand.length > 0; i++) {
+        const [r, next] = nextRandom(s.rngState);
+        s.rngState = next;
+        const gone = victim.hand.splice(Math.floor(r * victim.hand.length), 1)[0];
+        victim.graveyard.push(gone);
+        s.log.push(`${victimId} discards ${getDef(gone.def).name}`);
+      }
+      break;
+    }
+    case 'recall': {
+      const p = s.players[controller];
+      let idx = -1;
+      for (let i = p.graveyard.length - 1; i >= 0; i--) {
+        if (isCreature(p.graveyard[i])) {
+          idx = i;
+          break;
+        }
+      }
+      if (idx < 0) {
+        s.log.push(`${controller} finds no creature to return`);
+      } else {
+        const back = p.graveyard.splice(idx, 1)[0];
+        p.hand.push(back);
+        s.log.push(`${controller} returns ${getDef(back.def).name} to hand`);
+      }
       break;
     }
     case 'destroy': {

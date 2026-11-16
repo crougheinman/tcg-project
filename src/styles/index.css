@@ -2129,3 +2129,12 @@ button.count-chip:hover:not(:disabled) { color: var(--vs-ink); background: var(-
   .tally-cell b { font-size: 17px; }
   .tally-sub, .tally-flag { font-size: 12px; }
 }
+
+/* Flashback button under a graveyard card in the zone viewer */
+.zone-flash {
+  margin-top: 6px; padding: 5px 12px; border-radius: 0; transform: skewX(-12deg);
+  font: 700 14px / 1 'Barlow Condensed', system-ui, sans-serif; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--vs-ink, #0a0c13); background: var(--me); border: 2px solid var(--vs-ink, #0a0c13); cursor: pointer;
+  box-shadow: 0 0 14px rgba(var(--me-rgb), 0.5);
+}
+.zone-flash:hover { background: #8cf1ff; }

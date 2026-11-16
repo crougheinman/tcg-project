@@ -14,6 +14,14 @@ const SECTIONS: { title: string; items: string[] }[] = [
     ],
   },
   {
+    title: 'Opening Hand',
+    items: [
+      'Each player starts with 7 cards and may keep them or take a mulligan.',
+      'A mulligan shuffles your hand back and draws one card fewer. You may do it up to 3 times.',
+      'You decide first, then your opponent. A hand with 2 to 5 lands is usually a keeper.',
+    ],
+  },
+  {
     title: 'Your Turn',
     items: [
       'Untap and draw a card (automatic).',
@@ -57,6 +65,8 @@ const SECTIONS: { title: string; items: string[] }[] = [
     items: [
       'Hover a card — or press and hold on mobile — to read its full details.',
       'Watch the activity log (bottom-right) to follow every action.',
+      'Flashback: a spell with Flashback can be cast again from your graveyard (tap the graveyard counter), for its flashback cost. It is then exiled.',
+      'Last breath triggers when a creature dies (tokens too). Rot makes the opponent discard at random. Grave Call returns your most recently fallen creature.',
     ],
   },
 ];

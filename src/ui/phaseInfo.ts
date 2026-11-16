@@ -15,6 +15,18 @@ export interface PhaseBannerInfo {
 }
 
 export function phaseBannerInfo(game: GameState, localId: PlayerId): PhaseBannerInfo {
+  if (game.phase === 'mulligan') {
+    // The opening-hand decision: it belongs to whoever is deciding, not to a turn owner.
+    const deciding = game.mulligan?.deciding ?? game.active;
+    const mine = deciding === localId;
+    return {
+      key: `mulligan:${deciding}:${game.mulligan?.taken[deciding] ?? 0}`,
+      mine,
+      turnLabel: mine ? 'Your decision' : "Enemy's decision",
+      title: 'Opening hand',
+      hint: mine ? 'Keep this hand, or mulligan' : 'Enemy is deciding',
+    };
+  }
   const mine = game.active === localId;
   const youAct = actorOf(game) === localId; // in the block step the DEFENDER acts, not the turn owner
   let title: string;
