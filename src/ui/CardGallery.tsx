@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CARDS } from '../cards/cards';
+import { KEYWORD_INFO, keywordLabel } from '../cards/keywords';
 import type { CardDef, CardType } from '../engine/types';
 import { CardFace } from './CardFace';
 
@@ -45,7 +46,7 @@ export function CardGallery({ onBack }: { onBack: () => void }) {
           d.type.includes(needle) ||
           (d.text?.toLowerCase().includes(needle) ?? false) ||
           (d.flavor?.toLowerCase().includes(needle) ?? false) ||
-          (d.keywords?.some((k) => k.includes(needle)) ?? false)
+          (d.keywords?.some((k) => keywordLabel(k).toLowerCase().includes(needle)) ?? false)
         );
       })
       .sort(
@@ -168,8 +169,8 @@ export function CardGallery({ onBack }: { onBack: () => void }) {
                     </span>
                   )}
                   {selected.keywords?.map((k) => (
-                    <span key={k} className="meta-pill key">
-                      {k}
+                    <span key={k} className="meta-pill key" title={KEYWORD_INFO[k].rule}>
+                      {keywordLabel(k)}
                     </span>
                   ))}
                   {selected.blockOnly && <span className="meta-pill key">block-only</span>}

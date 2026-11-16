@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { KEYWORD_INFO } from '../cards/keywords';
 
 // Reusable rulebook. Renders its own book button + an animated parchment scroll
 // that unrolls open. Drop <Rulebook /> anywhere (home menu, battle topbar).
@@ -41,18 +42,15 @@ const SECTIONS: { title: string; items: string[] }[] = [
   {
     title: 'Combat',
     items: [
-      'Attacking creatures tap.',
+      'Attacking creatures tap (unless they have Vigilance).',
       'Each blocker blocks one attacker; each attacker is blocked by at most one.',
-      'Unblocked attackers hit the player; blocked creatures trade damage.',
+      'Unblocked attackers hit the player; blocked creatures trade damage. With first strike or double strike in the fight, damage is dealt in two steps and creatures destroyed in the first step do not strike back.',
       'A creature with damage equal to or above its toughness is destroyed.',
     ],
   },
   {
     title: 'Keywords',
-    items: [
-      'Haste — can attack the turn it enters play.',
-      'Flying — can only be blocked by creatures with Flying.',
-    ],
+    items: Object.values(KEYWORD_INFO).map((k) => `${k.label} — ${k.rule}`),
   },
   {
     title: 'Tips',

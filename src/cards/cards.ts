@@ -34,8 +34,8 @@ export const CARDS: Record<string, CardDef> = {
     cost: 2,
     power: 2,
     toughness: 1,
-    keywords: ['haste'],
-    text: 'Haste.',
+    keywords: ['haste', 'vigilance'],
+    text: 'Haste. Vigilance.',
     flavor: 'First to the charge, and gone before the dust settles.',
   },
   stoneback_cub: {
@@ -54,8 +54,8 @@ export const CARDS: Record<string, CardDef> = {
     cost: 3,
     power: 2,
     toughness: 1,
-    keywords: ['flying'],
-    text: 'Flying.',
+    keywords: ['flying', 'vigilance'],
+    text: 'Flying. Vigilance.',
     flavor: 'It hunts the wind itself.',
   },
   thornwood_brute: {
@@ -75,6 +75,8 @@ export const CARDS: Record<string, CardDef> = {
     cost: 4,
     power: 3,
     toughness: 5,
+    keywords: ['reach'],
+    text: 'Reach.',
     flavor: 'Patient as the mountain, immovable as its roots.',
   },
   storm_drake: {
@@ -84,8 +86,8 @@ export const CARDS: Record<string, CardDef> = {
     cost: 5,
     power: 4,
     toughness: 4,
-    keywords: ['flying'],
-    text: 'Flying.',
+    keywords: ['flying', 'vigilance'],
+    text: 'Flying. Vigilance.',
     flavor: 'Thunder is merely the sound of its wings.',
   },
   dread_maw: {
@@ -95,6 +97,8 @@ export const CARDS: Record<string, CardDef> = {
     cost: 5,
     power: 5,
     toughness: 4,
+    keywords: ['trample'],
+    text: 'Trample.',
     flavor: 'It does not hunt. It simply arrives, and the hunting is done.',
   },
 
@@ -127,6 +131,8 @@ export const CARDS: Record<string, CardDef> = {
     cost: 6,
     power: 7,
     toughness: 7,
+    keywords: ['trample'],
+    text: 'Trample.',
     flavor: 'Older than the kingdoms that fear it.',
   },
   bulwark: {
@@ -136,8 +142,8 @@ export const CARDS: Record<string, CardDef> = {
     cost: 3,
     power: 1,
     toughness: 6,
-    keywords: ['defender'],
-    text: 'Defender (cannot attack).',
+    keywords: ['defender', 'reach'],
+    text: 'Defender (cannot attack). Reach.',
     flavor: 'The line holds here.',
   },
   wolf_token: {
@@ -179,8 +185,8 @@ export const CARDS: Record<string, CardDef> = {
     cost: 3,
     power: 3,
     toughness: 2,
-    keywords: ['haste'],
-    text: 'Haste.',
+    keywords: ['haste', 'firstStrike'],
+    text: 'Haste. First strike.',
     flavor: 'One breath, one cut. There is no second.',
   },
   iron_shogun: {
@@ -190,8 +196,8 @@ export const CARDS: Record<string, CardDef> = {
     cost: 5,
     power: 5,
     toughness: 4,
-    keywords: ['haste'],
-    text: 'Haste. The charge is led from the front.',
+    keywords: ['firstStrike'],
+    text: 'First strike. The charge is led from the front.',
     flavor: 'Where his banner rides, the line follows.',
   },
 
@@ -254,6 +260,8 @@ export const CARDS: Record<string, CardDef> = {
     cost: 6,
     power: 7,
     toughness: 6,
+    keywords: ['lifelink'],
+    text: 'Lifelink.',
     flavor: 'The tide of the dead, made flesh at last.',
   },
 

@@ -295,8 +295,8 @@ deckbuilding. It is the whole of Tadeo's politics in one card.
 
 **The Iron Shogun, Tadeo Kurosa** — *"Where his banner rides, the line follows."*
 The only Shogun in nine generations to ride at the front, which is doctrine, not bravado: a
-commander who sends others to pay a debt he incurred has not settled it. (*Haste. The charge is
-led from the front.*) Tadeo has 'published the map' — he is the one who ordered every Clan Well
+commander who sends others to pay a debt he incurred has not settled it. (*First strike. The charge
+is led from the front.*) Tadeo has 'published the map' — he is the one who ordered every Clan Well
 surveyed and the depths made public, over the objection of every other tradition, because a debt
 you cannot see is a debt you will not pay.
 
@@ -304,7 +304,7 @@ you cannot see is a debt you will not pay.
 The finest blade of her generation, and the strictest reading of the creed: she will not strike
 twice at the same opponent. If the first cut does not settle it, she considers the account closed
 and walks away. She has walked away four times. All four are still alive, and all four regard it
-as the worst thing that has ever happened to them.
+as the worst thing that has ever happened to them. (*Haste. First strike.*)
 
 **Juro, the Masterless** — *Ronin Blade · "A masterless sword, restless even in the fray."*
 Rode under Tadeo's banner at the Kettle and broke from it there — not from cowardice but from

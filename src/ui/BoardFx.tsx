@@ -231,6 +231,17 @@ export function BoardFx({ game }: { game: GameState }) {
         }
       }
     }
+    // Lifelink: life gained in combat floats up in green at the avatar (spell heals have their own ritual).
+    if (combatHit) {
+      for (const pid of ['A', 'B'] as PlayerId[]) {
+        const gain = game.players[pid].life - before.players[pid].life;
+        const el = gain > 0 ? document.querySelector(`[data-player="${pid}"]`) : null;
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        const f = { id: dmgId.current++, x: r.left + r.width / 2, y: r.top, text: `+${gain}`, up: true };
+        later(() => setStatFloats((sf) => [...sf, f]), IMPACT_MS + STRIKE_STAGGER_MS);
+      }
+    }
     const beforeDmg = new Map<string, number>();
     for (const pid of ['A', 'B'] as PlayerId[])
       for (const c of before.players[pid].battlefield)
