@@ -215,6 +215,23 @@ describe('Beast Blitz aura (Kunoichi)', () => {
     expect([power(l), toughness(l)]).toEqual([3, 2]); // base 2/1 +1/+1
   });
 
+  it('Wolves get the buff too, including ones created after Kunoichi, and the enemy\'s do not', () => {
+    const s = fresh();
+    const w1 = inst('wolf_token');
+    s.players.A.battlefield = [inst('aether_well'), inst('aether_well'), inst('aether_well'), inst('kunoichi'), w1];
+    s.players.B.battlefield = [inst('wolf_token', { owner: 'B' })];
+    s.players.A.hand = [inst('call_wolves')];
+    const g = applyAction(s, { type: 'castSorcery', iid: s.players.A.hand[0].iid });
+    const wolves = g.players.A.battlefield.filter((c) => c.def === 'wolf_token');
+    expect(wolves).toHaveLength(3); // one already there + two made by Call Wolves
+    for (const w of wolves) {
+      expect([power(w), toughness(w)]).toEqual([2, 2]); // base 1/1 +1/+1
+      expect(w.blitz).toBe(true);
+    }
+    const enemy = g.players.B.battlefield.find((c) => c.def === 'wolf_token')!;
+    expect([power(enemy), toughness(enemy)]).toEqual([1, 1]);
+  });
+
   it('removing Kunoichi deactivates the buff', () => {
     const s = fresh();
     const cub = inst('stoneback_cub');
