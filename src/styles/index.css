@@ -1502,7 +1502,10 @@ input {
   .hand { flex-wrap: nowrap; justify-content: center; gap: 0; max-width: 100%; }
   .player-dock .hand .card { flex: 0 0 auto; }
   .player-dock .hand .card:not(:first-child) { margin-left: -34px; } /* ~342px for 7 cards */
-  .player-dock .hand .card:hover { z-index: 10; } /* raise the card being inspected */
+  /* Raise the card being inspected — only where hover is real. On a touch screen :hover sticks to
+     the last-tapped card, and a raised card covers the left strip of the NEXT card in the fan, so
+     the next tap lands on the wrong card (or on nothing). */
+  @media (hover: hover) { .player-dock .hand .card:hover { z-index: 10; } }
 
   /* Reclaim vertical space so the board fits without scrolling. */
   .center { min-height: 44px; }
