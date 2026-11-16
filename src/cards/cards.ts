@@ -290,6 +290,7 @@ export const CARDS: Record<string, CardDef> = {
     type: 'sorcery',
     cost: 2,
     effect: { type: 'draw', amount: 2 },
+    art: '/cards/insight.webp', // 480x360 WebP (~30 KB); other cards auto-wire to <id>.png
     text: 'Draw two cards.',
     flavor: 'The one thing four traditions agree is worth paying for.',
   },
