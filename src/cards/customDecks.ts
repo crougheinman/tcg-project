@@ -1,4 +1,4 @@
-import { CARDS, getDef } from './cards';
+import { CARDS, TOKEN_IDS, getDef } from './cards';
 import { DECK_LIST, type DeckMeta } from './decks';
 
 // Player-built decks. Cards are already fully data-driven, so a deck is just a
@@ -11,17 +11,8 @@ import { DECK_LIST, type DeckMeta } from './decks';
 // the card list over the wire would fix it, but that is a protocol change that
 // also widens the peer-trust surface, so it is left as a separate piece of work.
 
-/**
- * Cards that exist only because an effect makes them (Wolf, Zombie). They have
- * no cost and no way into a hand, so they must never be deckable. Derived from
- * the `token` effects themselves rather than a hand-kept list, so a new token
- * card is excluded the moment it is referenced.
- */
-export const TOKEN_IDS: ReadonlySet<string> = new Set(
-  Object.values(CARDS)
-    .map((d) => (d.effect?.type === 'token' ? d.effect.token : null))
-    .filter((id): id is string => !!id),
-);
+// Token detection lives in cards.ts so the engine and UI share it.
+export { TOKEN_IDS };
 
 /** Every card a player may actually put in a deck. */
 export function deckableCards() {

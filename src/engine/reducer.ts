@@ -1,4 +1,4 @@
-import { getDef } from '../cards/cards';
+import { getDef, isToken } from '../cards/cards';
 import type { Action, CardInstance, Effect, GameState, PlayerId, PlayerState, Target } from './types';
 import { opponentOf } from './types';
 import {
@@ -331,24 +331,37 @@ function beginTurn(s: GameState, next: PlayerId): void {
 
 /** State-based actions: lethal-damage deaths and life<=0 loss. */
 function checkDeaths(s: GameState): void {
+  const gone = new Set<string>();
   for (const pid of ['A', 'B'] as PlayerId[]) {
     const p = s.players[pid];
     const dead = p.battlefield.filter((c) => isCreature(c) && c.damage >= toughness(c));
     if (dead.length) {
       p.battlefield = p.battlefield.filter((c) => !dead.includes(c));
       for (const c of dead) {
+        gone.add(c.iid);
         c.tapped = false;
         c.damage = 0;
         c.buffP = 0;
         c.buffT = 0;
         c.blitz = false;
         c.summoningSick = true;
-        s.players[c.owner].graveyard.push(c);
+        // A token that dies simply ceases to exist. It is not a card, so it must not
+        // pad the graveyard (the count, the viewer and the result screen all read it).
+        if (!isToken(c.def)) s.players[c.owner].graveyard.push(c);
         s.log.push(`${getDef(c.def).name} dies`);
         if (c.def === 'kunoichi' && !p.battlefield.some((x) => x.def === 'kunoichi')) {
           s.log.push(`Beast Blitz fades.`);
         }
       }
+    }
+  }
+  // Combat bookkeeping may only name creatures that are still in play. An instant cast
+  // during the block step can kill an attacker; leaving it listed made the defender's
+  // planned block against it unconfirmable ("attacker no longer in play").
+  if (gone.size && s.combat) {
+    s.combat.attackers = s.combat.attackers.filter((iid) => !gone.has(iid));
+    for (const [blocker, attacker] of Object.entries(s.combat.blocks)) {
+      if (gone.has(blocker) || gone.has(attacker)) delete s.combat.blocks[blocker];
     }
   }
   const aDead = s.players.A.life <= 0;
