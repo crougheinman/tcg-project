@@ -57,16 +57,19 @@ export function PlayerBar({
       <AnimatePresence>
         {bubble && <ChatBubble key={bubble.id} text={bubble.text} self={self} />}
       </AnimatePresence>
-      <span
-        className={'shield-avatar ' + (targetable ? 'targetable' : '')}
-        data-player={side}
-        onClick={onFace}
-        title={who + (targetable ? ' — target' : acting ? ' — to act' : '')}
-      >
-        <svg className="user-ico" viewBox="0 0 24 24" aria-hidden>
-          <circle cx="12" cy="8" r="3.6" />
-          <path d="M5 20c0-4 3.5-6 7-6s7 2 7 6" />
-        </svg>
+      {/* The click lives on a padded wrapper, not on the clip-pathed shield: a spell aimed
+          at a player's face is aimed with a thumb, and the shield alone is 28px on a phone. */}
+      <span className={'shield-hit' + (targetable ? ' targetable' : '')} onClick={onFace}>
+        <span
+          className={'shield-avatar ' + (targetable ? 'targetable' : '')}
+          data-player={side}
+          title={who + (targetable ? ' — target' : acting ? ' — to act' : '')}
+        >
+          <svg className="user-ico" viewBox="0 0 24 24" aria-hidden>
+            <circle cx="12" cy="8" r="3.6" />
+            <path d="M5 20c0-4 3.5-6 7-6s7 2 7 6" />
+          </svg>
+        </span>
       </span>
       <div className="pstats">
         <span

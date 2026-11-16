@@ -37,6 +37,9 @@ html, body, #root {
 
 /* The board screen owns the viewport and never scrolls the page; menus,
    deck-select and the rulebook keep their normal scrolling (class set by Board). */
+/* #root clips too: a screen-shake translates .board by up to 10px, and on its own that widened the
+   page's scrollable area (a phone's layout viewport then jittered wider than the screen). */
+body.in-game #root { overflow: hidden; }
 body.in-game {
   overflow: hidden; overscroll-behavior: none;
   background: linear-gradient(115deg, rgba(224, 87, 62, 0.1) 0 38%, transparent 38% 62%, rgba(31, 181, 171, 0.09) 62% 100%), #0a0c13;
@@ -1929,4 +1932,67 @@ button.count-chip:hover:not(:disabled) { color: var(--vs-ink); background: var(-
   .player-zone.opp .playerbar { grid-template-areas: "counts avatar life"; }
   .player-zone.opp .pmeta { justify-self: end; }
   .player-zone.opp .life { justify-self: start; }
+}
+
+/* ---- Hit areas ---- */
+
+/* The player's shield and the playerbar's box rise 24px above the platform, which puts
+   them over the middle of the hand. They used to capture clicks, so the centre of the
+   middle card could not be clicked (it was 100% clickable before the versus theme).
+   Let them be click-through; the platform itself still blocks clicks to cards tucked
+   behind it. The shield only has to take clicks while it is a spell target. */
+.player-platform .playerbar { pointer-events: none; }
+.player-platform .playerbar .pstats,
+.player-platform .shield-hit.targetable { pointer-events: auto; }
+
+/* Aiming a spell at a face is done with a thumb and the shield alone is 28px on a phone,
+   so the click lives on a padded wrapper. The negative margin cancels the padding: no
+   layout moves. */
+.shield-hit { display: grid; place-items: center; padding: 8px 10px; margin: -8px -10px; }
+.shield-hit.targetable { cursor: crosshair; }
+.player-zone.opp .shield-hit { grid-area: avatar; }
+
+/* The Activity panel sat at the bottom-right, over the right-hand end of the hand: with a
+   9-card hand on a 1280px window the last card could not be clicked. Top-right is free
+   space on desktop (the opponent's creatures are centred), and it is where the phone
+   layout already puts it. */
+@media (min-width: 641px) {
+  .action-log { top: 76px; bottom: auto; }
+}
+
+/* Touch targets. Growing the buttons would spend vertical space the short screens do not
+   have, so the tap area grows instead, with an invisible margin, to ~44px. An absolutely
+   positioned child's inset is measured INSIDE the border, so the 2px border is added back
+   (-9px gives 7px of real reach on a 2px-bordered control). */
+@media (pointer: coarse), (max-width: 640px), (orientation: landscape) and (max-height: 500px) {
+  .actions button, .menu-btn, button.count-chip { position: relative; } /* .zone-btn is already positioned */
+  .actions button::after, .menu-btn::after, .zone-btn::after {
+    content: ''; position: absolute; inset: -9px -6px;
+  }
+  /* The opponent's chips sit between their shield (above) and their creatures (below). The
+     shield is the spell target and gets that band; the graveyard viewer is information, so
+     its extra reach goes mostly DOWNWARD into the free gap above the creatures (about 20px on
+     a phone), stopping before the creatures' top edge, which it must never steal. */
+  button.count-chip::after { content: ''; position: absolute; inset: -10px -8px -18px; }
+  .player-zone.opp .shield-hit { padding: 11px 12px; margin: -11px -12px; position: relative; z-index: 1; }
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  .actions button::after, .menu-btn::after { inset: -12px -6px; } /* 24px tall here */
+}
+
+/* The action row must never be squeezed below its own content. With flex-shrink at 1 it
+   shrank to its min-height on a tight screen while its wrapped contents (the prompt on one
+   line, the buttons on the next) kept their height and spilled out over the player's own
+   creatures: on a 320x568 phone the bottom 15px of Confirm Blocks sat under the blocker
+   cards. The flexible zones above and below give up the space instead. */
+.center { flex: 0 0 auto; }
+
+/* Short phones (SE-class). The block prompt ("Click your blocker, then its target") wrapped to
+   two lines at 14px, and with the hint line under it the action row needed ~95px: more than
+   the layout has, so the player's own creatures overflowed upward over Confirm Blocks. One
+   line of prompt, one of hint, then the buttons: ~72px, and nothing overlaps. */
+@media (max-width: 640px) and (max-height: 620px) {
+  .prompt-stack { flex: 1 0 100%; align-items: center; text-align: center; }
+  .prompt { font-size: 12px; line-height: 1.15; }
+  .prompt-hint { font-size: 11px; line-height: 1.15; }
 }
