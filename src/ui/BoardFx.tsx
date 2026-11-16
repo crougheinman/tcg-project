@@ -29,6 +29,7 @@ import {
   SMOKE_SPELLS,
   STRIKE_STAGGER_MS,
   TRIGGER_CHARGE_MS,
+  TRIGGER_SPOT_MS,
   travelMsFor,
 } from './fxTiming';
 import { useTimers } from './useTimers';
@@ -86,6 +87,7 @@ export function BoardFx({ game }: { game: GameState }) {
   const charging = useGame((s) => s.charging);
   useEffect(() => {
     if (!charging) return;
+    if (charging.kind === 'cast') return; // spotlight only — CastSpotlight draws it
     if (charging.kind === 'smoke') {
       // smoke rises from the TARGET card (violet = Grasp, green = Withering)
       const t = charging.target;
@@ -363,10 +365,22 @@ export function BoardFx({ game }: { game: GameState }) {
       const oppId = opponentOf(sp.owner);
       const oppAv = document.querySelector(`[data-player="${oppId}"]`);
       const or = oppAv?.getBoundingClientRect();
+      let spotted = 0;
       for (const cr of game.players[sp.owner].battlefield) {
         const crDef = getDef(cr.def);
-        if (!crDef.spellTrigger || crDef.spellTrigger.type !== 'damage') continue;
+        if (!crDef.spellTrigger) continue;
         if (spDef.type === 'instant' && !crDef.spellTriggerInstant) continue;
+        // the creature's card floats up and glows while its skill fires (at most two, so a
+        // wide board of triggers can't wall off the table)
+        if (spotted++ < 2) {
+          useGame.getState().pushSpotlight({
+            card: cr,
+            ownerId: sp.owner,
+            label: `✦ ${crDef.name} triggers`,
+            ms: TRIGGER_SPOT_MS,
+          });
+        }
+        if (crDef.spellTrigger.type !== 'damage') continue;
         const el = document.querySelector(`[data-iid="${cr.iid}"]`);
         if (!el) continue;
         const cardR = el.getBoundingClientRect();

@@ -13,6 +13,7 @@ import { PhaseBar } from './PhaseBar';
 import { Rulebook } from './Rulebook';
 import { ZoneViewer } from './ZoneViewer';
 import { BoardFx } from './BoardFx';
+import { CastSpotlight } from './CastSpotlight';
 import { PlayerBar } from './PlayerBar';
 import { ResultScreen } from './ResultScreen';
 import { CoachBubble, type Tip } from './GuideCoach';
@@ -766,6 +767,7 @@ export function Board() {
         of `.board`, not children, keeps them truly viewport-fixed regardless of
         what `.board` is doing. */}
         <BoardFx game={game} />
+        <CastSpotlight />
 
         <AnimatePresence>
           {hovered && !sorceryIid && !game.pending && (

@@ -51,7 +51,7 @@ beforeEach(() => {
   localStorage.clear();
   useGame.setState({
     mode: 'menu', game: null, net: null, aiId: null, error: null,
-    forfeit: null, charging: null, peerStale: false,
+    forfeit: null, charging: null, spotlights: [], peerStale: false,
   });
 });
 
@@ -256,5 +256,120 @@ describe('guided mode', () => {
     expect(localStorage.getItem('guided')).toBe('0');
     useGame.getState().setGuided(true);
     expect(localStorage.getItem('guided')).toBe('1');
+  });
+});
+
+describe('cast spotlight', () => {
+  let n = 0;
+  const card = (def: string, owner: 'A' | 'B') => ({
+    iid: `t${n++}_${def}`, def, owner, tapped: false, summoningSick: false, damage: 0, buffP: 0, buffT: 0, blitz: false,
+  });
+  /** The current game parked in main1 for A, with A holding exactly `hand` and six untapped lands. */
+  function park(hand: string[]) {
+    const g = structuredClone(useGame.getState().game!);
+    g.active = 'A';
+    g.phase = 'main1';
+    g.pending = null;
+    g.players.A.hand = hand.map((d) => card(d, 'A'));
+    g.players.A.battlefield = Array.from({ length: 6 }, () => card('aether_well', 'A'));
+    g.players.B.battlefield = [];
+    useGame.setState({ game: g, error: null, charging: null, spotlights: [] });
+    return g.players.A.hand[0].iid;
+  }
+  const inHand = (def: string) => useGame.getState().game!.players.A.hand.some((c) => c.def === def);
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
+  describe('vs AI / hotseat (the effect waits for the card)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      useGame.getState().startAI(DECK_A, DECK_B);
+    });
+
+    it('gives an ordinary sorcery a spotlight window before it resolves', () => {
+      const iid = park(['insight']);
+      useGame.getState().dispatch({ type: 'castSorcery', iid });
+      const s = useGame.getState();
+      expect(s.charging?.kind).toBe('cast');
+      expect(s.spotlights.map((x) => x.card.def)).toEqual(['insight']);
+      expect(inHand('insight')).toBe(true); // not resolved yet: the card is the show
+      vi.advanceTimersByTime(1299);
+      expect(inHand('insight')).toBe(true);
+      vi.advanceTimersByTime(1);
+      expect(inHand('insight')).toBe(false);
+      expect(useGame.getState().charging).toBeNull();
+      expect(useGame.getState().spotlights).toEqual([]); // and the card floats away
+    });
+
+    it('spotlights the card for the whole of an existing charge-up too', () => {
+      const iid = park(['cinderbolt']);
+      useGame.getState().dispatch({ type: 'castSorcery', iid, target: { kind: 'player', player: 'B' } });
+      expect(useGame.getState().charging?.kind).toBe('charge');
+      expect(useGame.getState().spotlights[0]?.ms).toBe(useGame.getState().charging!.ms);
+    });
+
+    it('gives a creature skill (Kunoichi, Beast Blitz) a window; a plain creature gets none', () => {
+      const k = park(['kunoichi', 'ember_sprite']);
+      useGame.getState().dispatch({ type: 'castCreature', iid: k });
+      expect(useGame.getState().charging?.kind).toBe('cast');
+      expect(useGame.getState().spotlights[0].label).toBe('✦ Beast Blitz');
+      vi.advanceTimersByTime(1300);
+      expect(inHand('kunoichi')).toBe(false);
+
+      const plain = park(['ember_sprite']);
+      useGame.getState().dispatch({ type: 'castCreature', iid: plain });
+      expect(useGame.getState().charging).toBeNull(); // no skill -> no delay, no spotlight
+      expect(useGame.getState().spotlights).toEqual([]);
+      expect(inHand('ember_sprite')).toBe(false); // resolved at once
+    });
+
+    it('still ignores input while the card is on show', () => {
+      const iid = park(['insight']);
+      useGame.getState().dispatch({ type: 'castSorcery', iid });
+      useGame.getState().dispatch({ type: 'advance' });
+      expect(useGame.getState().game!.phase).toBe('main1');
+    });
+
+    it('an older spotlight timer cannot clear a newer one', () => {
+      const iid = park(['insight']);
+      useGame.getState().dispatch({ type: 'castSorcery', iid });
+      vi.advanceTimersByTime(1000);
+      useGame.getState().pushSpotlight({ card: useGame.getState().spotlights[0].card, ownerId: 'A', label: 'x', ms: 5000 });
+      vi.advanceTimersByTime(400); // the first one's timer fires now
+      expect(useGame.getState().spotlights.map((s) => s.label)).toEqual(['x']);
+    });
+  });
+
+  describe('PvP (lockstep: no delay, the card floats alongside)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    it('applies my cast at once and still shows the card', () => {
+      const conn = fakeConn();
+      useGame.getState().startPvp(conn);
+      const iid = park(['insight']);
+      useGame.getState().dispatch({ type: 'castSorcery', iid });
+      expect(useGame.getState().charging).toBeNull();
+      expect(inHand('insight')).toBe(false); // applied immediately
+      expect(conn.sent).toHaveLength(1); // and sent to the peer straight away
+      expect(useGame.getState().spotlights.map((s) => s.card.def)).toEqual(['insight']);
+    });
+
+    it("shows the opponent's cast when it arrives", () => {
+      const conn = fakeConn({ role: 'B' });
+      useGame.getState().startPvp(conn);
+      const g = structuredClone(useGame.getState().game!);
+      g.active = 'A';
+      g.phase = 'main1';
+      g.players.A.hand = [card('insight', 'A')];
+      g.players.A.battlefield = Array.from({ length: 6 }, () => card('aether_well', 'A'));
+      useGame.setState({ game: g, spotlights: [] });
+      conn.fireAction!({ type: 'castSorcery', iid: g.players.A.hand[0].iid });
+      expect(useGame.getState().spotlights).toHaveLength(1);
+      expect(useGame.getState().spotlights[0].ownerId).toBe('A');
+    });
   });
 });

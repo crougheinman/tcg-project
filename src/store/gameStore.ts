@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { createInitialState } from '../engine/state';
 import { applyAction } from '../engine/reducer';
-import type { Action, GameState, PlayerId, Target } from '../engine/types';
+import type { Action, CardInstance, GameState, PlayerId, Target } from '../engine/types';
 import { actorOf } from '../engine/rules';
 import { cuesFor } from '../audio/cues';
 import { isMuted, playCues, setMuted as persistMuted } from '../audio/sfx';
@@ -10,7 +10,17 @@ import { resolveDeck } from '../cards/customDecks';
 import { readDepth, saveDepth } from '../ui/depth';
 import { getDef } from '../cards/cards';
 import { aiShouldAct, pickAction } from '../ai/ai';
-import { CHARGE_MS, CHARGE_SPELLS, HEAL_MS, HEAL_SPELLS, SMOKE_MS, SMOKE_SPELLS } from '../ui/fxTiming';
+import {
+  CAST_MS,
+  CHARGE_MS,
+  CHARGE_SPELLS,
+  HEAL_MS,
+  HEAL_SPELLS,
+  SKILL_CREATURES,
+  SKILL_MS,
+  SMOKE_MS,
+  SMOKE_SPELLS,
+} from '../ui/fxTiming';
 import type { MatchConnection } from '../net/match';
 import { rejoinMatch } from '../net/match';
 import { clearMatch, loadMatch } from '../net/resume';
@@ -59,10 +69,14 @@ interface Store {
   charging: {
     casterId: PlayerId;
     def: string;
-    kind: 'charge' | 'smoke' | 'heal';
+    kind: 'charge' | 'smoke' | 'heal' | 'cast';
     ms: number;
     target?: Target;
   } | null;
+  // Cards currently floating in the cast spotlight (a spell or creature skill being cast).
+  // Purely visual; in PvP they play WITHOUT delaying the effect (lockstep timing).
+  spotlights: Spotlight[];
+  pushSpotlight: (s: Omit<Spotlight, 'id'>) => void;
 
   startAI: (deckId: string, oppDeckId?: string) => void; // oppDeckId: pre-picked (face-off shows it)
   startHotseat: (deckA: string, deckB: string) => void;
@@ -82,23 +96,57 @@ const AI_DELAY_GUIDED_MS = 1600; // guided mode: slower, so learners can read ea
 const BUBBLE_MS = 5000; // how long a chat bubble stays before fading
 const noChat = (): Record<PlayerId, ChatBubble | null> => ({ A: null, B: null });
 
+export interface Spotlight {
+  id: number;
+  card: CardInstance;
+  ownerId: PlayerId;
+  label: string;
+  ms: number;
+}
+
 export const useGame = create<Store>((set, get) => {
   // Should this cast telegraph (delay its resolution so BoardFx can play a lead-in)?
   // Returns the telegraph descriptor, else null. PvP is excluded (desyncs timing).
-  type Telegraph = { casterId: PlayerId; def: string; kind: 'charge' | 'smoke' | 'heal'; ms: number; target?: Target };
+  type Telegraph = { casterId: PlayerId; def: string; kind: 'charge' | 'smoke' | 'heal' | 'cast'; ms: number; target?: Target };
   function telegraphFor(g: GameState, action: Action): Telegraph | null {
-    if (action.type !== 'castSorcery') return null;
+    if (action.type !== 'castSorcery' && action.type !== 'castCreature') return null;
     // instants can be cast off-turn while blocking -> caster is whoever may act now
     const casterId = actorOf(g);
     const card = g.players[casterId].hand.find((c) => c.iid === action.iid);
     if (!card) return null;
+    if (action.type === 'castCreature') {
+      // only creatures whose skill fires the moment they are cast get a window
+      return SKILL_CREATURES[card.def] ? { casterId, def: card.def, kind: 'cast', ms: SKILL_MS } : null;
+    }
     if (CHARGE_SPELLS.has(card.def) && getDef(card.def).effect?.type === 'damage')
       return { casterId, def: card.def, kind: 'charge', ms: CHARGE_MS };
     if (SMOKE_SPELLS.has(card.def))
       return { casterId, def: card.def, kind: 'smoke', ms: SMOKE_MS, target: action.target };
     if (HEAL_SPELLS.has(card.def))
       return { casterId, def: card.def, kind: 'heal', ms: HEAL_MS[card.def] ?? 2000 };
-    return null;
+    // every other sorcery/instant: a plain spotlight window, no extra effect
+    return { casterId, def: card.def, kind: 'cast', ms: CAST_MS };
+  }
+
+  // The card to float in the spotlight for this action, read BEFORE the action is applied
+  // (the card leaves the hand). Null for actions that have no cast moment.
+  function spotlightFor(g: GameState, action: Action, ms: number): Omit<Spotlight, 'id'> | null {
+    if (action.type !== 'castSorcery' && action.type !== 'castCreature') return null;
+    const casterId = actorOf(g);
+    const card = g.players[casterId].hand.find((c) => c.iid === action.iid);
+    if (!card) return null;
+    if (action.type === 'castCreature') {
+      const skill = SKILL_CREATURES[card.def];
+      return skill ? { card, ownerId: casterId, label: `✦ ${skill}`, ms } : null;
+    }
+    return { card, ownerId: casterId, label: getDef(card.def).type === 'instant' ? 'Instant' : 'Casting', ms };
+  }
+
+  let spotSeq = 0;
+  function pushSpotlight(sp: Omit<Spotlight, 'id'>) {
+    const id = ++spotSeq;
+    set((st) => ({ spotlights: [...st.spotlights, { ...sp, id }] }));
+    setTimeout(() => set((st) => ({ spotlights: st.spotlights.filter((x) => x.id !== id) })), sp.ms);
   }
 
   // Step the AI one action at a time so the human sees each move.
@@ -127,7 +175,9 @@ export const useGame = create<Store>((set, get) => {
           scheduleAi();
         };
         if (tel) {
+          const spot = spotlightFor(s.game, action, tel.ms);
           set({ charging: tel }); // telegraph, then resolve
+          if (spot) pushSpotlight(spot);
           setTimeout(applyAi, tel.ms);
         } else {
           applyAi();
@@ -166,6 +216,8 @@ export const useGame = create<Store>((set, get) => {
     chat: noChat(),
     forfeit: null,
     charging: null,
+    spotlights: [],
+    pushSpotlight,
     peerStale: false,
     depth: readDepth(),
     setDepth: (v) => {
@@ -196,6 +248,7 @@ export const useGame = create<Store>((set, get) => {
         error: null,
         forfeit: null,
         charging: null,
+        spotlights: [],
         lastAiDecks: { deck: deckId, oppDeck: aiDeck.id },
         game: createInitialState(seed, resolveDeck(deckId).cards, aiDeck.cards),
       });
@@ -212,6 +265,7 @@ export const useGame = create<Store>((set, get) => {
         error: null,
         forfeit: null,
         charging: null,
+        spotlights: [],
         game: createInitialState(seed, resolveDeck(deckA).cards, resolveDeck(deckB).cards),
       });
     },
@@ -236,10 +290,12 @@ export const useGame = create<Store>((set, get) => {
         const s = get();
         if (!s.game) return;
         try {
+          const spot = spotlightFor(s.game, action, CAST_MS); // the opponent's cast, floated alongside
           const next = applyAction(s.game, action);
           sfx(action, s.game, next);
           if (next.winner) clearMatch(); // finished — nothing left to reconnect to
           set({ game: next });
+          if (spot) pushSpotlight(spot);
         } catch (e) {
           set({ error: `desync: ${(e as Error).message}` });
         }
@@ -264,6 +320,7 @@ export const useGame = create<Store>((set, get) => {
         chat: noChat(),
         forfeit: null,
         charging: null,
+        spotlights: [],
         peerStale: false,
         game,
       });
@@ -312,10 +369,15 @@ export const useGame = create<Store>((set, get) => {
       if (tel) {
         // Telegraph first (charge orb at caster, or smoke at the target — the target
         // card stays on the board), THEN resolve so the payoff lands with the visual.
+        const spot = spotlightFor(s.game, action, tel.ms);
         set({ charging: tel });
+        if (spot) pushSpotlight(spot);
         setTimeout(apply, tel.ms);
       } else {
+        // PvP can't delay (both clients apply on arrival), so the spotlight plays alongside.
+        const spot = s.mode === 'pvp' ? spotlightFor(s.game, action, CAST_MS) : null;
         apply();
+        if (spot) pushSpotlight(spot);
       }
     },
 
@@ -338,7 +400,7 @@ export const useGame = create<Store>((set, get) => {
         s.net?.leave();
       }
       clearMatch(); // deliberately leaving — don't offer to reconnect
-      set({ mode: 'menu', game: null, net: null, aiId: null, error: null, chat: noChat(), forfeit: null, charging: null, peerStale: false });
+      set({ mode: 'menu', game: null, net: null, aiId: null, error: null, chat: noChat(), forfeit: null, charging: null, spotlights: [], peerStale: false });
     },
 
     playAgain: () => {
@@ -350,7 +412,7 @@ export const useGame = create<Store>((set, get) => {
     toMenu: () => {
       get().net?.leave();
       clearMatch(); // deliberately leaving — don't offer to reconnect
-      set({ mode: 'menu', game: null, net: null, aiId: null, error: null, chat: noChat(), forfeit: null, charging: null, peerStale: false });
+      set({ mode: 'menu', game: null, net: null, aiId: null, error: null, chat: noChat(), forfeit: null, charging: null, spotlights: [], peerStale: false });
     },
 
     clearError: () => set({ error: null }),
