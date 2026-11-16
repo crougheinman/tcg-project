@@ -1,24 +1,9 @@
 import { motion } from 'framer-motion';
-import type { GameState, PlayerId, PlayerState } from '../engine/types';
+import type { GameState, PlayerId } from '../engine/types';
 import { opponentOf } from '../engine/types';
-import { isCreature, isLand } from '../engine/rules';
-import { getDef } from '../cards/cards';
+import { tally } from './resultStats';
 
-// Post-game summary. All metrics derive from the final GameState (no engine
-// changes / tracking needed): the graveyard holds every dead creature + cast
-// sorcery, the battlefield holds what's still standing.
-function tally(p: PlayerState) {
-  const graveCreatures = p.graveyard.filter((c) => getDef(c.def).type === 'creature').length;
-  const standing = p.battlefield.filter(isCreature).length;
-  return {
-    life: p.life,
-    creaturesCast: standing + graveCreatures,
-    creaturesLost: graveCreatures,
-    spells: p.graveyard.filter((c) => getDef(c.def).type === 'sorcery').length,
-    lands: p.battlefield.filter(isLand).length,
-    deck: p.library.length,
-  };
-}
+// Post-game summary. All metrics derive from the final GameState; see resultStats.ts.
 
 const listVariants = {
   hidden: {},

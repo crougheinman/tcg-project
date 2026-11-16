@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGame } from '../gameStore';
 import { createInitialState } from '../../engine/state';
 import { applyAction } from '../../engine/reducer';
@@ -102,6 +102,46 @@ describe('PvP actor guard', () => {
     useGame.setState({ game: g });
     useGame.getState().dispatch({ type: 'playLand', iid: land.iid });
     expect(useGame.getState().game!.players.A.battlefield).toHaveLength(1);
+  });
+});
+
+describe('vs AI actor guard', () => {
+  /** An AI game parked in a given phase, with no AI timer left running. */
+  function aiGame(active: 'A' | 'B', phase: 'main1' | 'combat_attack') {
+    vi.useFakeTimers();
+    useGame.getState().startAI(DECK_A, DECK_B);
+    const g = structuredClone(useGame.getState().game!);
+    g.active = active;
+    g.phase = phase;
+    useGame.setState({ game: g, error: null });
+  }
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
+  it('drops a human action while it is the AI\'s turn to act', () => {
+    // This is how a stray double-tap could have skipped the AI's whole main phase.
+    aiGame('B', 'main1');
+    useGame.getState().dispatch({ type: 'advance' });
+    expect(useGame.getState().game!.phase).toBe('main1'); // untouched
+    expect(useGame.getState().error).toBeNull(); // dropped quietly, not an error toast
+  });
+
+  it('still applies the human\'s own actions', () => {
+    aiGame('A', 'main1');
+    useGame.getState().dispatch({ type: 'advance' });
+    expect(useGame.getState().game!.phase).toBe('combat_attack');
+  });
+
+  it('hands the defender priority during combat_block (the actor is the human, not the active player)', () => {
+    aiGame('B', 'main1');
+    const g = structuredClone(useGame.getState().game!);
+    g.phase = 'combat_block';
+    g.combat = { attackers: [], blocks: {} };
+    useGame.setState({ game: g });
+    useGame.getState().dispatch({ type: 'declareBlockers', blocks: {} });
+    expect(useGame.getState().game!.phase).toBe('end');
   });
 });
 
