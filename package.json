@@ -9,7 +9,11 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint . --max-warnings 0"
+    "lint": "eslint . --max-warnings 0",
+    "qa:fuzz": "vite-node tools/qa/engine-fuzz.ts",
+    "qa:winrate": "vite-node tools/qa/winrate.ts",
+    "qa:scenarios": "node tools/qa/ui-scenarios.cjs http://localhost:5173/",
+    "qa:smoke": "node tools/qa/smoke.cjs"
   },
   "dependencies": {
     "@react-three/fiber": "^8.18.0",

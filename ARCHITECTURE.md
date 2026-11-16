@@ -489,6 +489,12 @@ npm test          # all tests (vitest: `engine` project on node, `ui` project on
 npm run lint      # eslint, zero warnings tolerated
 npx tsc --noEmit  # type-check (the build does NOT do this)
 npm run build     # production build into dist/
+
+# QA harness beyond `npm test` (see tools/qa/README.md for when to run which)
+npm run qa:fuzz       # every deck pairing vs an independent oracle (SEEDS=100 for the full pass)
+N=80 npm run qa:winrate   # AI-vs-AI deck win rates, for balance changes
+npm run qa:scenarios  # 20 real-browser scenarios (needs `npm run dev` + Playwright)
+npm run qa:smoke      # 8 real matches, every deck twice: the check for small changes
 ```
 
 Online PvP needs a free Supabase project — copy `.env.local.example` to `.env.local` and fill in

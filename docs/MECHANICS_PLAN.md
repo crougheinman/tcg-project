@@ -31,7 +31,12 @@ grounded in the code as of `main` after the Beast Blitz / cast-spotlight work.
 
 Estimates are rough, for one person with the harness in place.
 
-### Phase 0 - Make the QA harness part of the repo (about half a day)
+### Phase 0 - Make the QA harness part of the repo (about half a day) - DONE
+
+Done: the harness lives in `tools/qa/` with `npm run qa:fuzz | qa:winrate | qa:scenarios | qa:smoke` and a
+README saying when to run which (smoke for small changes, full 56-match pass at phase ends). Playwright
+stays a local-only requirement (open question 5 resolved that way, easy to revisit). The text below is the
+original scope, kept for reference.
 
 The checks used for the last changes (engine fuzz with an independent oracle, 20 browser scenarios,
 the real-browser match runner, the AI-vs-AI win-rate sim) were written in a **session scratchpad,
