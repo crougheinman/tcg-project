@@ -4,8 +4,9 @@ import { opponentOf } from '../engine/types';
 import {
   actorOf,
   canAttack,
+  canBlock,
+  duel,
   findCreature,
-  hasKeyword,
   isCreature,
   legalActions,
   power,
@@ -215,8 +216,9 @@ function pickWhipflash(state: GameState, ai: PlayerId): Action {
 }
 
 /** A block we actually want: the blocker kills the attacker and lives through it. */
-function favorableBlock(blk: { p: number; t: number }, atk: CardInstance): boolean {
-  return blk.p >= toughness(atk) && blk.t > power(atk);
+function favorableBlock(blk: CardInstance, atk: CardInstance): boolean {
+  const r = duel(atk, blk); // the real combat rules (first strike, deathtouch...), not a stat comparison
+  return r.atkDies && !r.blkDies;
 }
 
 /**
@@ -246,12 +248,12 @@ function pickCombatBuff(state: GameState, ai: PlayerId): Action | null {
     const blk = found.card;
     if (blk.tapped || !isCreature(blk)) continue; // a tapped creature cannot block
 
-    const before = { p: power(blk), t: toughness(blk) };
-    const after = { p: before.p + def.effect.power, t: before.t + def.effect.toughness };
+    // the blocker as it would be after the pump (a throwaway copy)
+    const after = { ...blk, buffP: blk.buffP + def.effect.power, buffT: blk.buffT + def.effect.toughness };
 
     for (const atk of attackers) {
-      if (hasKeyword(atk, 'flying') && !hasKeyword(blk, 'flying')) continue; // illegal block
-      if (favorableBlock(before, atk)) continue; // already winning without it
+      if (!canBlock(blk, atk)) continue; // illegal block
+      if (favorableBlock(blk, atk)) continue; // already winning without it
       if (!favorableBlock(after, atk)) continue; // the pump doesn't get us there
       const gain = power(atk) * 10 - def.cost; // biggest threat first, cheapest trick
       if (!best || gain > best.gain) best = { action: a, gain };
@@ -285,24 +287,28 @@ function pickBlocks(state: GameState, ai: PlayerId): Action {
   let unblocked = attackers.reduce((sum, a) => sum + power(a), 0);
 
   for (const atk of attackers) {
-    const flying = hasKeyword(atk, 'flying');
-    const legal = pool.filter((b) => !used.has(b.iid) && (!flying || hasKeyword(b, 'flying')));
+    const legal = pool.filter((b) => !used.has(b.iid) && canBlock(b, atk));
     if (!legal.length) continue;
 
-    const killSurvive = legal
-      .filter((b) => power(b) >= toughness(atk) && toughness(b) > power(atk))
-      .sort((x, y) => toughness(x) - toughness(y));
-    const kill = legal.filter((b) => power(b) >= toughness(atk)).sort((x, y) => power(x) - power(y));
+    // Judge every candidate with the real combat rules (`duel`): who dies, what tramples over.
+    const fights = legal.map((b) => ({ b, r: duel(atk, b) }));
+    const killSurvive = fights
+      .filter((f) => f.r.atkDies && !f.r.blkDies)
+      .sort((x, y) => toughness(x.b) - toughness(y.b));
+    const kill = fights.filter((f) => f.r.atkDies).sort((x, y) => power(x.b) - power(y.b));
 
-    let chosen: CardInstance | undefined;
+    let chosen: (typeof fights)[number] | undefined;
     if (killSurvive.length) chosen = killSurvive[0];
     else if (kill.length) chosen = kill[0];
-    else if (unblocked >= me.life) chosen = legal.sort((x, y) => power(x) - power(y))[0]; // chump
+    else if (unblocked >= me.life) {
+      // chump: the cheapest blocker, preferring the one that lets the least trample through
+      chosen = fights.sort((x, y) => x.r.toFace - y.r.toFace || power(x.b) - power(y.b))[0];
+    }
 
     if (chosen) {
-      blocks[chosen.iid] = atk.iid;
-      used.add(chosen.iid);
-      unblocked -= power(atk);
+      blocks[chosen.b.iid] = atk.iid;
+      used.add(chosen.b.iid);
+      unblocked -= power(atk) - chosen.r.toFace; // trample overflow still gets through
     }
   }
   return { type: 'declareBlockers', blocks };

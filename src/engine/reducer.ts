@@ -7,6 +7,9 @@ import {
   hasKeyword,
   isCreature,
   isLand,
+  markDamage,
+  splitDamage,
+  strikesIn,
   toughness,
   untappedLands,
   validateAction,
@@ -87,7 +90,7 @@ export function applyAction(state: GameState, action: Action): GameState {
     case 'declareAttackers': {
       for (const iid of action.attackers) {
         const c = active.battlefield.find((x) => x.iid === iid)!;
-        c.tapped = true; // no vigilance in MVP
+        if (!hasKeyword(c, 'vigilance')) c.tapped = true; // vigilance: attacking does not tap
       }
       s.combat = { attackers: [...action.attackers], blocks: {} };
       if (action.attackers.length === 0) toEnd(s);
@@ -279,30 +282,35 @@ function resolveCombat(s: GameState): void {
   // Snapshot what actually happened so the UI can animate/announce it — `combat`
   // itself is cleared by toEnd() below, and blocks never persist in `combat_block`.
   s.lastCombat = { attackers: [...combat.attackers], blocks: { ...combat.blocks } };
-  const defender = s.players[opponentOf(s.active)];
-  const blockersByAttacker: Record<string, string[]> = {};
-  for (const [blk, atk] of Object.entries(combat.blocks)) {
-    (blockersByAttacker[atk] ||= []).push(blk);
-  }
+  const defenderId = opponentOf(s.active);
+  const defender = s.players[defenderId];
+  // 1:1 blocking (validated). Taken BEFORE damage: deaths between the two steps prune
+  // `s.combat`, but an attacker whose blocker died is still a *blocked* attacker.
+  const attackers = [...combat.attackers];
+  const blockerOf: Record<string, string> = {};
+  for (const [blk, atk] of Object.entries(combat.blocks)) blockerOf[atk] = blk;
 
-  for (const atkIid of combat.attackers) {
-    const atk = findCreature(s, atkIid)?.card;
-    if (!atk) continue; // died before damage (e.g. removed)
-    const blockers = (blockersByAttacker[atkIid] ?? [])
-      .map((iid) => findCreature(s, iid)?.card)
-      .filter((c): c is NonNullable<typeof c> => !!c);
+  for (const step of [1, 2] as const) {
+    for (const atkIid of attackers) {
+      const atk = findCreature(s, atkIid)?.card;
+      if (!atk) continue; // died in an earlier step (or was removed before damage)
+      const blkIid = blockerOf[atkIid];
+      const blk = blkIid ? (findCreature(s, blkIid)?.card ?? null) : null;
 
-    if (blockers.length === 0) {
-      defender.life -= power(atk); // unblocked -> face
-    } else {
-      // 1:1 blocking (validated). Trade damage both ways.
-      for (const b of blockers) {
-        b.damage += power(atk);
-        atk.damage += power(b);
+      if (strikesIn(atk, step)) {
+        const { toBlocker, toFace } = splitDamage(atk, blk, !!blkIid);
+        if (blk) markDamage(atk, blk, toBlocker);
+        defender.life -= toFace;
+        if (hasKeyword(atk, 'lifelink')) s.players[s.active].life += toBlocker + toFace;
+      }
+      if (blk && strikesIn(blk, step)) {
+        markDamage(blk, atk, power(blk));
+        if (hasKeyword(blk, 'lifelink')) defender.life += power(blk);
       }
     }
+    checkDeaths(s); // lethal damage resolves between the steps (first strike), and before cleanup
+    if (s.winner) break;
   }
-  checkDeaths(s); // resolve lethal damage before cleanup wipes it
   toEnd(s);
 }
 

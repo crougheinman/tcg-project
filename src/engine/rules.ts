@@ -4,6 +4,7 @@ import type {
   CardInstance,
   GameState,
   PlayerId,
+  Keyword,
   PlayerState,
   Target,
 } from './types';
@@ -17,8 +18,8 @@ export function power(c: CardInstance): number {
 export function toughness(c: CardInstance): number {
   return (getDef(c.def).toughness ?? 0) + c.buffT;
 }
-export function hasKeyword(c: CardInstance, kw: string): boolean {
-  return (getDef(c.def).keywords ?? []).includes(kw as never);
+export function hasKeyword(c: CardInstance, kw: Keyword): boolean {
+  return (getDef(c.def).keywords ?? []).includes(kw);
 }
 export function isCreature(c: CardInstance): boolean {
   return getDef(c.def).type === 'creature';
@@ -42,14 +43,102 @@ export function availableMana(p: PlayerState): number {
 export function blockError(blocker: CardInstance, attacker: CardInstance): string | null {
   if (!isCreature(blocker)) return 'invalid blocker';
   if (blocker.tapped) return 'tapped creature cannot block';
-  if (hasKeyword(attacker, 'flying') && !hasKeyword(blocker, 'flying')) {
-    return 'only flyers can block a flyer';
+  if (hasKeyword(attacker, 'flying') && !hasKeyword(blocker, 'flying') && !hasKeyword(blocker, 'reach')) {
+    return 'only flyers or reach creatures can block a flyer';
   }
   return null;
 }
 
 export function canBlock(blocker: CardInstance, attacker: CardInstance): boolean {
   return blockError(blocker, attacker) === null;
+}
+
+// ---- Combat damage ----
+//
+// Combat has two damage steps. Creatures with first strike (or double strike) deal damage in
+// step 1; the rest deal it in step 2, together with double strikers' second hit. Deaths are
+// resolved between the steps, so a first striker can kill its opponent before it strikes back.
+// Both the reducer (`resolveCombat`) and the AI's predictor (`duel`) use these helpers, and a
+// property test holds `duel` equal to the real resolution, so the AI cannot misjudge a fight.
+
+export type DamageStep = 1 | 2;
+
+/** Does `c` deal combat damage in `step`? */
+export function strikesIn(c: CardInstance, step: DamageStep): boolean {
+  const fs = hasKeyword(c, 'firstStrike');
+  const ds = hasKeyword(c, 'doubleStrike');
+  return step === 1 ? fs || ds : ds || !fs;
+}
+
+/** Damage still needed for `source` to destroy `target`: 1 if the source has deathtouch. */
+export function lethalFor(source: CardInstance, target: CardInstance): number {
+  const left = Math.max(0, toughness(target) - target.damage);
+  return hasKeyword(source, 'deathtouch') ? Math.min(1, left) : left;
+}
+
+/** Mark `amount` combat damage from `source` on `target` (deathtouch makes any damage lethal). */
+export function markDamage(source: CardInstance, target: CardInstance, amount: number): void {
+  if (amount <= 0) return;
+  target.damage += amount;
+  if (hasKeyword(source, 'deathtouch')) target.damage = Math.max(target.damage, toughness(target));
+}
+
+/** How one attacker's combat damage splits, given whether its blocker is still there. */
+export function splitDamage(
+  atk: CardInstance,
+  blk: CardInstance | null,
+  blocked: boolean,
+): { toBlocker: number; toFace: number } {
+  const dmg = power(atk);
+  if (!blocked) return { toBlocker: 0, toFace: dmg };
+  const tramples = hasKeyword(atk, 'trample');
+  if (!blk) return { toBlocker: 0, toFace: tramples ? dmg : 0 }; // its blocker is already gone
+  if (!tramples) return { toBlocker: dmg, toFace: 0 };
+  const toBlocker = Math.min(dmg, lethalFor(atk, blk));
+  return { toBlocker, toFace: dmg - toBlocker };
+}
+
+export interface DuelResult {
+  atkDies: boolean;
+  blkDies: boolean;
+  /** Damage that reaches the defending player (trample overflow). */
+  toFace: number;
+  /** Life gained by the attacker's / the blocker's controller (lifelink). */
+  atkGain: number;
+  blkGain: number;
+}
+
+/**
+ * Predict a single block, attacker vs its one blocker, without touching the state. Works on
+ * throwaway copies, so callers may pass a hypothetical blocker (e.g. with a pump applied).
+ */
+export function duel(attacker: CardInstance, blocker: CardInstance): DuelResult {
+  const a = { ...attacker };
+  const b = { ...blocker };
+  const out: DuelResult = { atkDies: false, blkDies: false, toFace: 0, atkGain: 0, blkGain: 0 };
+  let aAlive = true;
+  let bAlive = true;
+  for (const step of [1, 2] as DamageStep[]) {
+    let toA = 0;
+    let toB = 0;
+    if (aAlive && strikesIn(a, step)) {
+      const { toBlocker, toFace } = splitDamage(a, bAlive ? b : null, true);
+      toB = toBlocker;
+      out.toFace += toFace;
+      if (hasKeyword(a, 'lifelink')) out.atkGain += toBlocker + toFace;
+    }
+    if (bAlive && aAlive && strikesIn(b, step)) {
+      toA = power(b);
+      if (hasKeyword(b, 'lifelink')) out.blkGain += toA;
+    }
+    markDamage(b, a, toA);
+    markDamage(a, b, toB);
+    aAlive = a.damage < toughness(a);
+    bAlive = b.damage < toughness(b);
+  }
+  out.atkDies = !aAlive;
+  out.blkDies = !bAlive;
+  return out;
 }
 
 export function canAttack(c: CardInstance): boolean {

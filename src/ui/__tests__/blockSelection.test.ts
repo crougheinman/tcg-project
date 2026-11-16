@@ -38,7 +38,7 @@ describe('one attacker', () => {
     const { g, def } = blockStep(['sky_talon'], ['stoneback_cub']);
     const r = tapBlocker(empty, g, def[0].iid);
     expect(r.sel).toEqual(empty); // not assigned and not left half-selected
-    expect(r.hint).toMatch(/Stoneback Cub can't block Sky Talon — only flyers can block a flyer/);
+    expect(r.hint).toMatch(/Stoneback Cub can't block Sky Talon — only flyers or reach creatures can block a flyer/);
   });
 
   it('lets a flyer block a flyer', () => {
@@ -85,7 +85,7 @@ describe('several attackers', () => {
     const p = tapBlocker(empty, g, def[0].iid).sel;
     const bad = tapAttacker(p, g, atk[0].iid);
     expect(bad.sel).toEqual(p);
-    expect(bad.hint).toMatch(/only flyers can block a flyer/);
+    expect(bad.hint).toMatch(/only flyers or reach creatures can block a flyer/);
     expect(tapAttacker(bad.sel, g, atk[1].iid).sel.blocks).toEqual({ [def[0].iid]: atk[1].iid });
   });
 
@@ -170,9 +170,11 @@ describe('the guarantee: taps can never produce a block the engine rejects', () 
       for (let step = 0; step < 14; step++) {
         const mine = g.players.B.battlefield.filter((c) => c.def !== 'aether_well');
         const atks = liveAttackers(g);
-        if (r() < 0.12 && g.players.B.hand.length && atks.length) {
+        // Take Counter destroys a TAPPED creature, and a vigilant attacker stays untapped.
+        const tappedAtks = atks.filter((a) => a.tapped);
+        if (r() < 0.12 && g.players.B.hand.length && tappedAtks.length) {
           const tc = g.players.B.hand[0];
-          const victim = atks[Math.floor(r() * atks.length)];
+          const victim = tappedAtks[Math.floor(r() * tappedAtks.length)];
           g = applyAction(g, { type: 'castSorcery', iid: tc.iid, target: { kind: 'creature', iid: victim.iid } });
           sel = prune(sel, g).sel; // exactly what Board's effect does
           continue;

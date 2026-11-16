@@ -6,7 +6,17 @@ export type PlayerId = 'A' | 'B';
 
 export type CardType = 'land' | 'creature' | 'sorcery' | 'instant';
 
-export type Keyword = 'haste' | 'flying' | 'defender';
+export type Keyword =
+  | 'haste'
+  | 'flying'
+  | 'defender'
+  | 'reach'
+  | 'vigilance'
+  | 'firstStrike'
+  | 'doubleStrike'
+  | 'trample'
+  | 'deathtouch'
+  | 'lifelink';
 
 /** What a creature can be targeted as / what an effect targets. */
 export type TargetSpec = 'any' | 'creature' | 'player';

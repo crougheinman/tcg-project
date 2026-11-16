@@ -54,8 +54,8 @@ const name = (c: CardInstance) => getDef(c.def).name;
 
 /** Player-facing wording for a refused pairing. */
 function reason(why: string, blocker: CardInstance, attacker: CardInstance): string {
-  if (why === 'only flyers can block a flyer') {
-    return `${name(blocker)} can't block ${name(attacker)} — only flyers can block a flyer`;
+  if (why === 'only flyers or reach creatures can block a flyer') {
+    return `${name(blocker)} can't block ${name(attacker)} — only flyers or reach creatures can block a flyer`;
   }
   if (why === 'tapped creature cannot block') return `${name(blocker)} is tapped and can't block`;
   return `${name(blocker)} can't block ${name(attacker)}`;

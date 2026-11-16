@@ -608,7 +608,7 @@ describe('blocking rules (shared by the validator and the UI)', () => {
     const flyer = inst('sky_talon');
     const ground = blocker('stoneback_cub');
     expect(canBlock(ground, flyer)).toBe(false);
-    expect(blockError(ground, flyer)).toBe('only flyers can block a flyer');
+    expect(blockError(ground, flyer)).toBe('only flyers or reach creatures can block a flyer');
   });
   it('a flyer can block a flyer, and anything can block a ground creature', () => {
     expect(canBlock(blocker('sky_talon'), inst('storm_drake'))).toBe(true);
@@ -627,7 +627,7 @@ describe('blocking rules (shared by the validator and the UI)', () => {
     let g = applyAction(s, { type: 'advance' });
     g = applyAction(g, { type: 'declareAttackers', attackers: [talon.iid] });
     const cub = g.players.B.battlefield[0];
-    expect(() => applyAction(g, { type: 'declareBlockers', blocks: { [cub.iid]: talon.iid } })).toThrow('only flyers can block a flyer');
+    expect(() => applyAction(g, { type: 'declareBlockers', blocks: { [cub.iid]: talon.iid } })).toThrow('only flyers or reach creatures can block a flyer');
   });
 });
 
