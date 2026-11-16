@@ -128,7 +128,7 @@ function allCreatures(s: GameState) {
 }
 
 // Beast Blitz: while a player controls Kunoichi, their listed creatures get +1/+1.
-const BLITZ_TARGETS = ['swift_lancer', 'sky_talon', 'stoneback_cub'];
+const BLITZ_TARGETS = ['swift_lancer', 'sky_talon', 'stoneback_cub', 'wolf_token'];
 
 function recomputeAura(s: GameState): void {
   for (const pid of ['A', 'B'] as PlayerId[]) {

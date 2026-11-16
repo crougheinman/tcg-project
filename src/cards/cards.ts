@@ -105,7 +105,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 2,
     power: 2,
     toughness: 1,
-    text: 'Beast Blitz — your Swift Lancer, Sky Talon, and Stoneback Cub get +1/+1.',
+    text: 'Beast Blitz — your Swift Lancer, Sky Talon, Stoneback Cub, and Wolves get +1/+1.',
     flavor: 'One whistle, and the wild answers.',
   },
 
