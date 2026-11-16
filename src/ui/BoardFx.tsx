@@ -543,6 +543,15 @@ export function BoardFx({ game }: { game: GameState }) {
       if (spellDamage) return boltMs; // explode when the bolt lands
       return 0;
     };
+    // A creature with a dies trigger floats up one last time as it falls (at most two at once).
+    let lastBreaths = 0;
+    for (const pid of ['A', 'B'] as PlayerId[]) {
+      for (const c of before.players[pid].battlefield) {
+        if (isCreature(c) && !aliveNow.has(c.iid) && getDef(c.def).onDeath && lastBreaths++ < 2) {
+          useGame.getState().pushSpotlight({ card: c, ownerId: pid, label: '✦ Last breath', ms: TRIGGER_SPOT_MS });
+        }
+      }
+    }
     for (const pid of ['A', 'B'] as PlayerId[]) {
       for (const c of before.players[pid].battlefield) {
         if (isCreature(c) && !aliveNow.has(c.iid)) {

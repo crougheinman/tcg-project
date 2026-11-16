@@ -184,6 +184,59 @@ const ME = '.player-zone.me', OPP = '.player-zone.opp';
       `clicks ${k1}/${k2}; life A ${lives.a} (expect 17), B ${lives.b} (expect 13); float "${floatText}"`);
     await ctx.close(); }
 
+  // P1  a targeted enter effect (Whipflash) waits for a target, named after the creature's skill, then resolves
+  { const { ctx, page } = await boot(browser);
+    await setup(page, { phase: 'main1', active: 'A', a: ['aether_well', 'aether_well', 'aether_well'], b: ['stoneback_cub'], hand: ['thornwood_brute'] });
+    const brute = await handIid(page, 'thornwood_brute'), cub = await iid(page, 'B', 'stoneback_cub');
+    const k = await click(page, `.player-dock .hand ${E(brute)}`); await sleep(2000);
+    const prompt = await page.evaluate(() => document.querySelector('.prompt')?.textContent || '');
+    const pend = await page.evaluate(() => window.__game.getState().game.pending?.kind || null);
+    const k2 = await click(page, `${OPP} ${E(cub)}`); await sleep(500);
+    const after = await page.evaluate((id) => { const g = window.__game.getState().game; return { pending: g.pending, dmg: g.players.B.battlefield.find((c) => c.iid === id)?.damage, brute: g.players.A.battlefield.some((c) => c.def === 'thornwood_brute') }; }, cub);
+    rec('P1', 'Thornwood Brute: cast, pick a target for Whipflash, damage lands', k === true && pend === 'enter' && /Whipflash/.test(prompt) && k2 === true && after.pending === null && after.dmg === 1 && after.brute,
+      `cast ${k}; pending=${pend}, prompt "${prompt}"; target click ${k2}; after: pending=${after.pending}, damage on cub ${after.dmg}, brute on board ${after.brute}`);
+    await ctx.close(); }
+
+  // P2  flash: the defender casts a creature from hand in the block step and blocks with it at once
+  { const { ctx, page } = await boot(browser);
+    await setup(page, { phase: 'combat_block', active: 'B', a: ['aether_well', 'aether_well', 'aether_well'], b: ['dread_maw'], hand: ['bulwark'], attackers: ['dread_maw'] });
+    const bul = await handIid(page, 'bulwark'), maw = await iid(page, 'B', 'dread_maw');
+    const glow = await page.evaluate((id) => document.querySelector(`.player-dock .hand [data-iid="${id}"]`)?.classList.contains('green-glow'), bul);
+    const hint = await page.evaluate(() => document.querySelector('.prompt-hint')?.textContent || '');
+    const k = await click(page, `.player-dock .hand ${E(bul)}`); await sleep(700);
+    const onBoard = await iid(page, 'A', 'bulwark');
+    const k2 = onBoard ? await click(page, `${ME} ${E(onBoard)}`) : 'no bulwark on board'; await sleep(300);
+    const l = await lbl(page);
+    const conf = await click(page, '.actions button:has-text("Confirm Blocks")'); await sleep(1500);
+    const r = await page.evaluate(() => { const g = window.__game.getState().game; return { life: g.players.A.life, bulwark: g.players.A.battlefield.some((c) => c.def === 'bulwark'), phase: g.phase }; });
+    rec('P2', 'Flash: Bulwark is cast in the block step, blocks, and takes the hit', glow === true && /glowing card/.test(hint) && k === true && !!onBoard && k2 === true && l.blocking === 1 && conf === true && r.life === 20 && r.bulwark && r.phase !== 'combat_block',
+      `hand glow=${glow}, hint "${hint}"; cast ${k}, on board ${!!onBoard}; tap ${k2}, blocking=${l.blocking}; confirm ${conf}; life ${r.life} (expect 20), bulwark alive ${r.bulwark}, phase ${r.phase}`);
+    await ctx.close(); }
+
+  // P3  prowess: casting a spell pumps the creature until end of turn (shown on the card)
+  { const { ctx, page } = await boot(browser);
+    await setup(page, { phase: 'main1', active: 'A', a: ['aether_well', 'aether_well', 'pyre_adept'], b: [], hand: ['insight'] });
+    const adept = await iid(page, 'A', 'pyre_adept'), ins = await handIid(page, 'insight');
+    const before = await page.evaluate((id) => { const c = window.__game.getState().game.players.A.battlefield.find((x) => x.iid === id); return [c.tempP ?? 0, c.tempT ?? 0]; }, adept);
+    const k = await click(page, `.player-dock .hand ${E(ins)}`); await sleep(2200);
+    const r = await page.evaluate((id) => { const c = window.__game.getState().game.players.A.battlefield.find((x) => x.iid === id); const el = document.querySelector(`.player-zone.me [data-iid="${id}"]`); return { temp: [c.tempP ?? 0, c.tempT ?? 0], crown: !!el?.closest('.stack')?.querySelector('.buff-crown') || !!el?.querySelector('.buff-crown') }; }, adept);
+    rec('P3', 'Prowess: a cast spell gives Pyre Adept +1/+1 until end of turn, shown on the card', k === true && before.join() === '0,0' && r.temp.join() === '1,1' && r.crown,
+      `before ${before}; cast ${k}; after temp ${r.temp}, buff mark on card ${r.crown}`);
+    await ctx.close(); }
+
+  // P4  last breath: a creature with a dies trigger floats up as it falls and its token appears
+  { const { ctx, page } = await boot(browser);
+    await setup(page, { phase: 'combat_block', active: 'B', a: ['aether_well', 'rotting_hulk'], b: ['dread_maw'], attackers: ['dread_maw'] });
+    const hulk = await iid(page, 'A', 'rotting_hulk');
+    await click(page, `${ME} ${E(hulk)}`); await sleep(300);
+    const conf = await click(page, '.actions button:has-text("Confirm Blocks")');
+    let spot = null; for (let i = 0; i < 30 && !spot; i++) { await sleep(100); spot = await page.evaluate(() => [...document.querySelectorAll('.cast-spot .cast-label')].map((e) => e.textContent).find((t) => /Last breath/.test(t)) || null); }
+    await sleep(900);
+    const r = await page.evaluate(() => { const g = window.__game.getState().game; return { hulk: g.players.A.battlefield.some((c) => c.def === 'rotting_hulk'), zombies: g.players.A.battlefield.filter((c) => c.def === 'zombie_token').length, gy: g.players.A.graveyard.map((c) => c.def) }; });
+    rec('P4', 'Last breath: Rotting Hulk dies, its card floats up, a Zombie is raised', conf === true && spot !== null && !r.hulk && r.zombies === 1 && r.gy.includes('rotting_hulk') && !r.gy.includes('zombie_token'),
+      `confirm ${conf}; spotlight "${spot}"; hulk alive ${r.hulk}, zombies ${r.zombies}, graveyard ${r.gy}`);
+    await ctx.close(); }
+
   // U1-U3  board UX: phase banner (centred, right owner/colour), turn glow + cyan buttons, damage readout
   for (const view of ['desktop', 'phone', 'landscape']) {
     const { ctx, page } = await boot(browser, view);

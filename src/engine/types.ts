@@ -16,7 +16,9 @@ export type Keyword =
   | 'doubleStrike'
   | 'trample'
   | 'deathtouch'
-  | 'lifelink';
+  | 'lifelink'
+  | 'flash' // a creature castable at instant speed (the block step, the attack step, your main phase)
+  | 'prowess'; // +1/+1 until end of turn whenever its controller casts a spell
 
 /** What a creature can be targeted as / what an effect targets. */
 export type TargetSpec = 'any' | 'creature' | 'player';
@@ -41,6 +43,16 @@ export function needsTarget(effect: Effect): boolean {
   return effect.type === 'damage' || effect.type === 'buff' || effect.type === 'destroy';
 }
 
+/**
+ * Does resolving this effect from a TRIGGER need the controller to pick a creature? Damage aimed at the
+ * player (a burn trigger) goes to the opponent without asking; damage aimed at a creature, a buff and a
+ * destroy need a choice.
+ */
+export function needsCreatureChoice(effect: Effect): boolean {
+  if (effect.type === 'damage') return effect.targets === 'creature';
+  return needsTarget(effect);
+}
+
 /** Static card definition (the "printed" card). */
 export interface CardDef {
   id: string;
@@ -51,6 +63,9 @@ export interface CardDef {
   toughness?: number; // creatures
   keywords?: Keyword[];
   effect?: Effect; // sorceries
+  skill?: string; // creature: name of the skill that fires when it enters play (shown in the log and the cast spotlight)
+  onEnter?: Effect; // creature: resolves when it enters play (a targeted one waits on a `pending` choice)
+  onDeath?: Effect; // creature: resolves when it dies (token creation, draw, heal, or damage to the opponent)
   spellTrigger?: Effect; // creature: fires whenever its controller casts a sorcery
   spellTriggerInstant?: boolean; // creature: its spellTrigger also fires on instant casts
   blockOnly?: boolean; // instant that can be cast only during the block step (combat_block)
@@ -70,6 +85,9 @@ export interface CardInstance {
   buffP: number; // +power from buffs (Wild Growth counters AND active auras)
   buffT: number; // +toughness from buffs
   blitz: boolean; // currently receiving the Beast Blitz aura (+1/+1)
+  // Until-end-of-turn buff (prowess). Optional so older fixtures need no change; cleared when the next turn begins.
+  tempP?: number;
+  tempT?: number;
 }
 
 export interface PlayerState {
@@ -95,8 +113,10 @@ export interface CombatState {
 
 /** A triggered ability waiting on the controller to choose a target. */
 export interface PendingTrigger {
-  kind: 'whipflash';
+  kind: 'enter'; // an enter-the-battlefield effect that needs a target
   source: string; // iid of the creature whose trigger this is
+  def: string; // its card, so the effect is still known if the source has left play
+  controller: PlayerId; // who chooses the target (the defender, when a flash creature enters in the block step)
 }
 
 export interface GameState {
@@ -120,7 +140,7 @@ export type Action =
   | { type: 'castSorcery'; iid: string; target?: Target }
   | { type: 'declareAttackers'; attackers: string[] }
   | { type: 'declareBlockers'; blocks: Record<string, string> }
-  | { type: 'whipflash'; target: string } // resolve Thornwood Brute's ETB
+  | { type: 'resolveTrigger'; target: string } // choose the target of a pending enter-the-battlefield effect (e.g. Whipflash)
   | { type: 'advance' }; // main1 -> combat, or end -> next turn
 
 export const opponentOf = (p: PlayerId): PlayerId => (p === 'A' ? 'B' : 'A');

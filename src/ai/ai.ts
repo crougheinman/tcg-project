@@ -7,6 +7,7 @@ import {
   canBlock,
   duel,
   findCreature,
+  hasKeyword,
   isCreature,
   legalActions,
   power,
@@ -31,7 +32,7 @@ export function aiShouldAct(state: GameState, ai: PlayerId): boolean {
 }
 
 export function pickAction(state: GameState, ai: PlayerId): Action {
-  if (state.pending?.kind === 'whipflash') return pickWhipflash(state, ai);
+  if (state.pending?.kind === 'enter') return pickTriggerTarget(state, ai);
   if (state.phase === 'combat_block' && state.active !== ai) return pickBlocks(state, ai);
   switch (state.phase) {
     case 'main1':
@@ -85,6 +86,11 @@ function scoreAction(state: GameState, ai: PlayerId, a: Action): number {
     case 'castCreature': {
       const card = handCard(state, ai, a.iid);
       if (!card) return score(BAND.never);
+      // A flash creature is worth more as a surprise blocker: hold it while the enemy has creatures that
+      // can attack next turn (cast it normally when there is nothing to ambush, or it would never be used).
+      if (hasKeyword(card, 'flash') && state.phase === 'main1' && opponentCanAttack(state, ai)) {
+        return score(BAND.never);
+      }
       return score(BAND.creature, getDef(card.def).cost * 10); // biggest first
     }
     case 'castSorcery':
@@ -193,10 +199,10 @@ function pickAttacks(state: GameState, ai: PlayerId): Action {
   return { type: 'declareAttackers', attackers };
 }
 
-function pickWhipflash(state: GameState, ai: PlayerId): Action {
+function pickTriggerTarget(state: GameState, ai: PlayerId): Action {
   const oppId = opponentOf(ai);
   const shots = legalActions(state, ai).filter(
-    (a): a is Extract<Action, { type: 'whipflash' }> => a.type === 'whipflash',
+    (a): a is Extract<Action, { type: 'resolveTrigger' }> => a.type === 'resolveTrigger',
   );
   if (!shots.length) return { type: 'advance' }; // no legal target (shouldn't happen)
 
@@ -262,6 +268,43 @@ function pickCombatBuff(state: GameState, ai: PlayerId): Action | null {
   return best?.action ?? null;
 }
 
+/** Could the other player attack with something next turn? (Used to decide whether to hold a flash creature.) */
+function opponentCanAttack(state: GameState, ai: PlayerId): boolean {
+  return state.players[opponentOf(ai)].battlefield.some(
+    (c) => isCreature(c) && !hasKeyword(c, 'defender'),
+  );
+}
+
+/**
+ * Flash in a blocker: worth it when the new creature wins a fight against one of the attackers (kills it
+ * and survives), or when the attack would otherwise be lethal and it can at least block something.
+ * Each cast spends mana and a card, so repeated calls terminate.
+ */
+function pickFlashBlocker(state: GameState, ai: PlayerId): Action | null {
+  const me = state.players[ai];
+  const attackers = (state.combat?.attackers ?? [])
+    .map((iid) => findCreature(state, iid)?.card)
+    .filter((c): c is CardInstance => !!c);
+  if (!attackers.length) return null;
+  const incoming = attackers.reduce((n, a) => n + power(a), 0);
+  let best: { action: Action; gain: number } | null = null;
+  for (const a of legalActions(state, ai)) {
+    if (a.type !== 'castCreature') continue;
+    const card = handCard(state, ai, a.iid);
+    if (!card || !hasKeyword(card, 'flash')) continue;
+    const blocker: CardInstance = { ...card, tapped: false }; // as it would be once it has entered
+    for (const atk of attackers) {
+      if (!canBlock(blocker, atk)) continue;
+      const wins = favorableBlock(blocker, atk);
+      const saves = incoming >= me.life;
+      if (!wins && !saves) continue;
+      const gain = (wins ? power(atk) * 10 : 0) + (saves ? 500 : 0) - getDef(card.def).cost;
+      if (!best || gain > best.gain) best = { action: a, gain };
+    }
+  }
+  return best?.action ?? null;
+}
+
 function pickBlocks(state: GameState, ai: PlayerId): Action {
   // The defender holds priority here, so block-only instants (Take Counter,
   // Grasp from the Grave) are finally live. Killing a tapped attacker outright
@@ -272,6 +315,8 @@ function pickBlocks(state: GameState, ai: PlayerId): Action {
   // Removing an attacker always beats pumping through it, so tricks come first.
   const pump = pickCombatBuff(state, ai);
   if (pump) return pump;
+  const ambush = pickFlashBlocker(state, ai);
+  if (ambush) return ambush;
 
   const me = state.players[ai];
   const combat = state.combat!;

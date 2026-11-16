@@ -98,7 +98,17 @@ UI/UX for Phase 1:
 AI: attack/block heuristics must understand each keyword, or the AI will make obviously bad blocks
 (blocking a first striker with a smaller creature, blocking a deathtouch creature with its best card).
 
-### Phase 2 - Triggers and timing (about 2-3 days)
+### Phase 2 - Triggers and timing (about 2-3 days) - DONE
+
+Done: data-driven `onEnter` (Whipflash migrated; `resolveTrigger` replaces `whipflash`; `SKILL_CREATURES` derived),
+`onDeath` (active player first; tokens trigger, as decided), prowess (`tempP`/`tempT`, expires as the next turn begins)
+and flash creatures (attack step and block step; AI holds and ambushes). Cards, tuned with the win-rate sim (all decks
+46.8%-55.5% at N=80): Rotting Hulk raises a Zombie when it dies (the plan's Shambling Ghoul took Gravetide to 58.9%),
+Pyre Adept has prowess, Bulwark has flash. Not done: Kunoichi's Beast Blitz aura is still the hardcoded `BLITZ_TARGETS`
+(a static effect, not an enter trigger); no keyword badges on board cards; no full 56-match browser pass (skipped on
+request: fuzz 22,400 games, 36 scenarios and the 8-match smoke batch are clean).
+
+Original scope, kept for reference:
 
 These unlock Grave Tide and remove hardcoded special cases.
 

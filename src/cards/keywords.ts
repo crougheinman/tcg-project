@@ -14,6 +14,8 @@ export const KEYWORD_INFO: Record<Keyword, { label: string; rule: string }> = {
   trample: { label: 'Trample', rule: 'damage beyond what is needed to destroy its blocker is dealt to the player.' },
   deathtouch: { label: 'Deathtouch', rule: 'any damage it deals to a creature destroys that creature.' },
   lifelink: { label: 'Lifelink', rule: 'damage it deals also gains its controller that much life.' },
+  flash: { label: 'Flash', rule: 'can be cast at instant speed: in your main phase, in the attack step, or as a surprise blocker while you are defending.' },
+  prowess: { label: 'Prowess', rule: 'gets +1/+1 until end of turn each time its controller casts a spell.' },
 };
 
 export const keywordLabel = (k: Keyword): string => KEYWORD_INFO[k].label;

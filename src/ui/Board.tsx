@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { getDef } from '../cards/cards';
-import { actorOf, availableMana, canAttack, canBlock, isCreature, isLand } from '../engine/rules';
+import { actorOf, availableMana, canAttack, canBlock, hasKeyword, isCreature, isLand } from '../engine/rules';
 import type { CardInstance, PlayerId } from '../engine/types';
 import { needsTarget, opponentOf } from '../engine/types';
 import { CardView } from './CardView';
@@ -185,7 +185,7 @@ export function Board() {
     if (dp.battlefield.some((c) => isCreature(c) && !c.tapped)) return; // can block
     // Don't rush the pass if they hold an affordable instant they might want to cast.
     const dpMana = availableMana(dp);
-    if (dp.hand.some((c) => getDef(c.def).type === 'instant' && getDef(c.def).cost <= dpMana)) return;
+    if (dp.hand.some((c) => (getDef(c.def).type === 'instant' || hasKeyword(c, 'flash')) && getDef(c.def).cost <= dpMana)) return;
     const key = `${game.turn}-${defender}`;
     if (autoBlockRef.current === key) return;
     autoBlockRef.current = key;
@@ -241,11 +241,11 @@ export function Board() {
   // Teaches core MTG-style flow: lands -> mana -> creatures -> attack -> block.
   function coachTip(): Tip | null {
     if (!guided || game.winner || forfeit) return null;
-    if (game.pending?.kind === 'whipflash' && myTurnToAct)
+    if (game.pending?.kind === 'enter' && myTurnToAct)
       return {
-        key: 'whipflash',
+        key: 'trigger',
         sel: '.player-zone.opp .row.creatures',
-        text: '✦ Whipflash triggered! Tap an enemy creature to deal 1 damage to it.',
+        text: `✦ ${triggerName} triggered! Tap an enemy creature to deal 1 damage to it.`,
         place: 'below',
       };
     if (sorceryIid)
@@ -324,7 +324,7 @@ export function Board() {
   // "…or cast an instant" hint and the green card glow). canPlay is hoisted below.
   const instantInHand =
     game.phase === 'combat_block' &&
-    me.hand.some((c) => getDef(c.def).type === 'instant' && canPlay(c));
+    me.hand.some((c) => (getDef(c.def).type === 'instant' || hasKeyword(c, 'flash')) && canPlay(c));
 
   // ---- click handlers ----
 
@@ -347,7 +347,8 @@ export function Board() {
     // and to the defender during combat_block).
     const sorcerySpeed = game.phase === 'main1';
     if (def.type === 'land') return sorcerySpeed && !me.landPlayedThisTurn;
-    if (def.type === 'creature') return sorcerySpeed && def.cost <= mana;
+    // a flash creature may also be cast in the attack step and as a surprise blocker
+    if (def.type === 'creature') return (sorcerySpeed || (hasKeyword(c, 'flash') && game.phase !== 'end')) && def.cost <= mana;
     if (def.type === 'sorcery' || def.type === 'instant') {
       if (def.type === 'sorcery' && !sorcerySpeed) return false;
       if (def.blockOnly && game.phase !== 'combat_block') return false; // block-only instants
@@ -386,8 +387,8 @@ export function Board() {
 
   function creatureClick(c: CardInstance, side: PlayerId) {
     // Resolving a pending Whipflash takes priority.
-    if (game.pending?.kind === 'whipflash' && myTurnToAct) {
-      if (c.iid !== game.pending.source) dispatch({ type: 'whipflash', target: c.iid });
+    if (game.pending?.kind === 'enter' && myTurnToAct) {
+      if (c.iid !== game.pending.source) dispatch({ type: 'resolveTrigger', target: c.iid });
       return;
     }
     // Targeting a spell next.
@@ -458,7 +459,7 @@ export function Board() {
                   selected={attackers.has(c.iid) || pendingBlocker === c.iid || !!blocks[c.iid]}
                   targetable={
                     sorceryTargetable(c) ||
-                    (game.pending?.kind === 'whipflash' && c.iid !== game.pending.source)
+                    (game.pending?.kind === 'enter' && c.iid !== game.pending.source)
                   }
                   // With a blocker waiting for its target, dim the attackers it cannot legally
                   // block (e.g. a flyer vs a ground creature) so that is clear BEFORE the tap.
@@ -533,18 +534,21 @@ export function Board() {
     );
   }
 
+  // The name of the enter-the-battlefield skill waiting on a target ("Whipflash"), for the prompts.
+  const triggerName = game.pending ? (getDef(game.pending.def).skill ?? getDef(game.pending.def).name) : '';
+
   // The damage readout (attack: what the chosen attackers could deal; block: what is coming and what is left).
   const attackTotals = game.phase === 'combat_attack' && myTurnToAct ? attackTally(game, attackers) : null;
   const blockTotals = game.phase === 'combat_block' && myTurnToAct ? blockTally(game, blocks) : null;
 
   function actionButtons() {
-    if (game.pending?.kind === 'whipflash') {
+    if (game.pending?.kind === 'enter') {
       return myTurnToAct ? (
         <div className="actions">
-          <span className="prompt">✦ Whipflash — click a creature to deal 1 damage</span>
+          <span className="prompt">✦ {triggerName} — click a creature to deal 1 damage</span>
         </div>
       ) : (
-        <div className="waiting">Opponent resolving Whipflash…</div>
+        <div className="waiting">Opponent resolving {triggerName}…</div>
       );
     }
     if (!myTurnToAct) {
@@ -611,7 +615,7 @@ export function Board() {
         );
       case 'combat_block': {
         const instantHint = instantInHand && (
-          <span className="prompt-hint">✨ …or cast a glowing instant</span>
+          <span className="prompt-hint">✨ …or cast a glowing card</span>
         );
         // No creature can block. Still let them cast an instant (or pass) if they have one;
         // otherwise the auto-resolve effect lets damage through.
@@ -725,7 +729,7 @@ export function Board() {
                       inst={c}
                       onClick={() => handHclick(c)}
                       dim={!canPlay(c)}
-                      greenGlow={game.phase === 'combat_block' && getDef(c.def).type === 'instant' && canPlay(c)}
+                      greenGlow={game.phase === 'combat_block' && (getDef(c.def).type === 'instant' || hasKeyword(c, 'flash')) && canPlay(c)}
                       draggable={canPlay(c) && getDef(c.def).type !== 'sorcery' && getDef(c.def).type !== 'instant'}
                       onDragChange={setDragActive}
                       onDrop={(point) => dropPlay(c, point)}

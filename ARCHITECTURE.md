@@ -169,8 +169,8 @@ Emberwood.
 
 **Cards — `src/cards`.** A fully data-driven catalog of 41 `CardDef`s (`cards.ts`) plus 8 starter
 decks of 30 (`decks.ts`). Effects are a discriminated union of 8 kinds (`types.ts`), **every one
-implemented** in the `applyEffect` switch (`reducer.ts:189`). All 10 keywords (haste, flying, defender,
-reach, vigilance, first strike, double strike, trample, deathtouch, lifelink) are consumed; their
+implemented** in the `applyEffect` switch (`reducer.ts:189`). All 12 keywords (haste, flying, defender,
+reach, vigilance, first strike, double strike, trample, deathtouch, lifelink, flash, prowess) are consumed; their
 player-facing text lives in one table, `cards/keywords.ts`, which the Rulebook and gallery read; `destroy` is a `damage += 9999` sentinel (`reducer.ts:254`) routed through the normal
 death path. New cards are almost entirely authoring, not code. The one non-data mechanic is Beast
 Blitz, a hardcoded `BLITZ_TARGETS` list in the reducer (`reducer.ts:131`).
@@ -515,6 +515,34 @@ while defending, incoming / blocked / you take / life after, with a lethal warni
 keyword rules (double strike hits twice, trample goes over), and a test holds "you take" equal to the life
 really lost over 1,500 random fights. On short phones the readout collapses to one slim line of icons so the
 Confirm and No Blocks buttons stay clear of the creature rows (320x568 scenario).
+
+### (i) Triggers: enter, dies, prowess, flash
+Creature triggers are card data now, not reducer special cases. `CardDef.onEnter` resolves as the creature enters
+(`castCreature`); an effect that needs a creature target (Thornwood Brute's Whipflash: damage to a creature) waits
+on `state.pending` (`kind: 'enter'`, with the creature's card, and its **controller**, who is the one that picks) and is
+resolved by the `resolveTrigger` action (formerly `whipflash`). Everything else resolves at once (damage aimed at the
+player goes to the opponent without asking). `needsCreatureChoice` (types.ts) is the one definition of "needs a
+pick", and a test fixes what card data may use it. `CardDef.skill` names a skill that fires on entering and drives the
+cast spotlight, so `SKILL_CREATURES` is derived from the data instead of a hand-kept list. (Beast Blitz itself is
+still the hardcoded `BLITZ_TARGETS` aura: it is a static effect, not an enter trigger.)
+
+`CardDef.onDeath` runs from `checkDeaths`: deaths resolve in rounds (a trigger may change the board), simultaneous
+deaths go **active player first, then the other player, each in battlefield order**, and **tokens trigger too** (they
+die like any creature and just leave no card in the graveyard). Dies triggers may only be targetless (a token, a draw,
+a heal, damage to the opponent), so they can never need a human choice mid-resolution; a round cap is the safety net.
+
+Prowess is a `+1/+1 until end of turn` for each spell the controller casts, kept in `tempP`/`tempT` (optional fields, so
+old fixtures need nothing), counted by `power()`/`toughness()` and cleared as the next turn begins and when a creature
+dies. Flash creatures can be cast in the attack step and, as a surprise blocker, by the **defender** in the block step
+(`actorOf` is the caster there, and the pending trigger's controller picks a flash creature's target). The AI holds a
+flash creature while the enemy has creatures that could attack, flashes one in when it wins the fight or prevents a
+lethal attack (`pickFlashBlocker`), and plays it normally when there is nothing to ambush.
+
+Checks: `triggers.test.ts` (21 tests, mutation-tested: six injected bugs, six caught); the fuzz oracle re-derives prowess,
+temp expiry, flash timing and dies-trigger token counts independently, and its keyword-stress mode now also sprinkles
+flash, prowess and token dies-triggers over every deck's creatures (22,400 games clean). Cards: Thornwood Brute
+(Whipflash) and Pyre Adept (prowess) as before-and-after data, Rotting Hulk raises a Zombie when it dies, Bulwark has flash.
+The first draft put the dies trigger on the five Shambling Ghouls, which took Gravetide to 58.9%; moved to the two Hulks.
 
 ## 8. Run it
 

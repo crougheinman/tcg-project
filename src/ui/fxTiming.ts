@@ -1,3 +1,5 @@
+import { CARDS } from '../cards/cards';
+
 // Every animation timing the board's choreography depends on, in one place.
 //
 // These used to be split across BoardFx, Projectile and a spell-only module, with
@@ -26,10 +28,12 @@ export const HEAL_MS: Record<string, number> = { soothe: 2000, soul_siphon: 3000
 // skill fires the moment they are cast: the card floats up, glows, and the effect waits for it.
 export const CAST_MS = 1300;
 export const SKILL_MS = 1300;
-export const SKILL_CREATURES: Record<string, string> = {
-  kunoichi: 'Beast Blitz',
-  thornwood_brute: 'Whipflash',
-};
+// Derived from the card data (`skill` on a creature = a skill that fires as it enters), not hand-kept.
+export const SKILL_CREATURES: Record<string, string> = Object.fromEntries(
+  Object.values(CARDS)
+    .filter((d) => d.type === 'creature' && d.skill)
+    .map((d) => [d.id, d.skill as string]),
+);
 // A creature's spell-trigger (Pyre Adept): its card is spotlighted for the charge-up plus a beat.
 export const TRIGGER_SPOT_MS = 1000;
 

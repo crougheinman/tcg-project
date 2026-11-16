@@ -276,8 +276,8 @@ describe('Whipflash (Thornwood Brute ETB)', () => {
     const enemy = inst('ember_sprite', { owner: 'B' }); // 1/1
     s.players.B.battlefield = [enemy];
     const g = applyAction(s, { type: 'castCreature', iid: s.players.A.hand[0].iid });
-    expect(g.pending?.kind).toBe('whipflash');
-    const g2 = applyAction(g, { type: 'whipflash', target: enemy.iid });
+    expect(g.pending?.kind).toBe('enter');
+    const g2 = applyAction(g, { type: 'resolveTrigger', target: enemy.iid });
     expect(g2.pending).toBeNull();
     expect(g2.players.B.battlefield.find((c) => c.iid === enemy.iid)).toBeUndefined(); // 1/1 died
   });
@@ -293,9 +293,9 @@ describe('Whipflash (Thornwood Brute ETB)', () => {
     const s = withLands();
     s.players.B.battlefield = [inst('stoneback_cub', { owner: 'B' })];
     const g = applyAction(s, { type: 'castCreature', iid: s.players.A.hand[0].iid });
-    expect(g.pending?.kind).toBe('whipflash');
+    expect(g.pending?.kind).toBe('enter');
     expect(() => applyAction(g, { type: 'advance' })).toThrow();
-    expect(() => applyAction(g, { type: 'whipflash', target: g.pending!.source })).toThrow(); // not self
+    expect(() => applyAction(g, { type: 'resolveTrigger', target: g.pending!.source })).toThrow(); // not self
   });
 });
 
@@ -505,10 +505,12 @@ describe('actorOf (the single legal actor)', () => {
     expect(actorOf({ ...base, phase: 'combat_block', active: 'B' })).toBe('A');
   });
 
-  it('is the caster while a trigger is pending', () => {
+  it('is the trigger\'s controller while a trigger is pending', () => {
     const base = fresh();
-    const pending = { kind: 'whipflash' as const, source: 'x' };
+    const pending = { kind: 'enter' as const, source: 'x', def: 'thornwood_brute', controller: 'B' as const };
     expect(actorOf({ ...base, phase: 'main1', active: 'B', pending })).toBe('B');
+    // a flash creature entering in the block step: the DEFENDER (not the turn owner) picks its target
+    expect(actorOf({ ...base, phase: 'combat_block', active: 'A', pending })).toBe('B');
   });
 
   it('tracks a real game across the attack/block handoff', () => {

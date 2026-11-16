@@ -1,7 +1,8 @@
 import { getDef, isToken } from '../cards/cards';
 import type { Action, CardInstance, Effect, GameState, PlayerId, PlayerState, Target } from './types';
-import { opponentOf } from './types';
+import { needsCreatureChoice, opponentOf } from './types';
 import {
+  actorOf,
   availableMana,
   findCreature,
   hasKeyword,
@@ -35,30 +36,45 @@ export function applyAction(state: GameState, action: Action): GameState {
       break;
     }
     case 'castCreature': {
-      const c = takeFromHand(active, action.iid);
-      payMana(active, getDef(c.def).cost);
+      // Whoever may act now casts it: the active player, or the defender when a flash creature
+      // is cast in the block step.
+      const casterId = actorOf(state);
+      const caster = s.players[casterId];
+      const c = takeFromHand(caster, action.iid);
+      const def = getDef(c.def);
+      payMana(caster, def.cost);
       c.tapped = false;
       c.damage = 0;
       c.summoningSick = !hasKeyword(c, 'haste');
-      active.battlefield.push(c);
-      s.log.push(`${s.active} casts ${getDef(c.def).name}`);
-      if (c.def === 'kunoichi') s.log.push(`✦ Beast Blitz activated!`);
-      if (c.def === 'thornwood_brute') {
-        const targets = allCreatures(s).filter((x) => x.iid !== c.iid);
-        if (targets.length) {
-          s.pending = { kind: 'whipflash', source: c.iid };
-          s.log.push(`✦ Whipflash! Choose a creature.`);
+      caster.battlefield.push(c);
+      s.log.push(`${casterId} casts ${def.name}`);
+      const skill = def.skill ?? def.name;
+      if (def.onEnter) {
+        if (needsCreatureChoice(def.onEnter)) {
+          if (allCreatures(s).some((x) => x.iid !== c.iid)) {
+            s.pending = { kind: 'enter', source: c.iid, def: c.def, controller: casterId };
+            s.log.push(`✦ ${skill}! Choose a creature.`);
+          } else {
+            s.log.push(`${skill} fizzles — no target.`);
+          }
         } else {
-          s.log.push(`Whipflash fizzles — no target.`);
+          s.log.push(`✦ ${skill}`);
+          applyEffect(s, casterId, def.onEnter, { kind: 'player', player: opponentOf(casterId) });
         }
+      } else if (def.skill) {
+        s.log.push(`✦ ${def.skill} activated!`); // a static skill (Beast Blitz): it simply switches on
       }
       break;
     }
-    case 'whipflash': {
+    case 'resolveTrigger': {
+      const pend = s.pending!;
+      const def = getDef(pend.def);
       const found = findCreature(s, action.target);
-      if (found) {
-        found.card.damage += 1;
-        s.log.push(`Whipflash hits ${getDef(found.card.def).name} for 1`);
+      if (found && def.onEnter) {
+        applyEffect(s, pend.controller, def.onEnter, { kind: 'creature', iid: action.target });
+        if (def.onEnter.type === 'damage') {
+          s.log.push(`${def.skill ?? def.name} hits ${getDef(found.card.def).name} for ${def.onEnter.amount}`);
+        }
       }
       s.pending = null;
       break;
@@ -84,6 +100,13 @@ export function applyAction(state: GameState, action: Action): GameState {
         if (def.type === 'instant' && !crDef.spellTriggerInstant) continue;
         s.log.push(`✦ ${crDef.name} triggers`);
         applyEffect(s, casterId, crDef.spellTrigger, { kind: 'player', player: opponentOf(casterId) });
+      }
+      // Prowess: +1/+1 until end of turn for each such creature, on any spell (sorcery or instant).
+      for (const cr of caster.battlefield) {
+        if (!isCreature(cr) || !hasKeyword(cr, 'prowess')) continue;
+        cr.tempP = (cr.tempP ?? 0) + 1;
+        cr.tempT = (cr.tempT ?? 0) + 1;
+        s.log.push(`✦ ${getDef(cr.def).name} — prowess`);
       }
       break;
     }
@@ -331,6 +354,15 @@ function beginTurn(s: GameState, next: PlayerId): void {
     c.tapped = false;
     c.summoningSick = false;
   }
+  // "Until end of turn" buffs (prowess) end as the next turn begins, for both players' creatures.
+  for (const pid of ['A', 'B'] as PlayerId[]) {
+    for (const c of s.players[pid].battlefield) {
+      if (c.tempP || c.tempT) {
+        c.tempP = 0;
+        c.tempT = 0;
+      }
+    }
+  }
   p.landPlayedThisTurn = false;
   s.phase = 'main1';
   drawCard(s, next);
@@ -340,17 +372,26 @@ function beginTurn(s: GameState, next: PlayerId): void {
 /** State-based actions: lethal-damage deaths and life<=0 loss. */
 function checkDeaths(s: GameState): void {
   const gone = new Set<string>();
-  for (const pid of ['A', 'B'] as PlayerId[]) {
-    const p = s.players[pid];
-    const dead = p.battlefield.filter((c) => isCreature(c) && c.damage >= toughness(c));
-    if (dead.length) {
+  // Dies triggers can change the board (a token appears), so deaths are processed in rounds until the
+  // board is stable. The cap is a safety net: today's triggers cannot kill anything, so it never binds.
+  for (let round = 0; round < 8; round++) {
+    const fallen: CardInstance[] = [];
+    // Simultaneous deaths resolve in a fixed order: the active player's creatures first, then the
+    // other player's, each in battlefield order (the order the engine, the log and replays all agree on).
+    for (const pid of [s.active, opponentOf(s.active)] as PlayerId[]) {
+      const p = s.players[pid];
+      const dead = p.battlefield.filter((c) => isCreature(c) && c.damage >= toughness(c));
+      if (!dead.length) continue;
       p.battlefield = p.battlefield.filter((c) => !dead.includes(c));
       for (const c of dead) {
         gone.add(c.iid);
+        fallen.push(c);
         c.tapped = false;
         c.damage = 0;
         c.buffP = 0;
         c.buffT = 0;
+        c.tempP = 0;
+        c.tempT = 0;
         c.blitz = false;
         c.summoningSick = true;
         // A token that dies simply ceases to exist. It is not a card, so it must not
@@ -361,6 +402,14 @@ function checkDeaths(s: GameState): void {
           s.log.push(`Beast Blitz fades.`);
         }
       }
+    }
+    if (!fallen.length) break;
+    // Dies triggers (tokens trigger too: they die like any creature, they just leave no card behind).
+    for (const c of fallen) {
+      const trig = getDef(c.def).onDeath;
+      if (!trig) continue;
+      s.log.push(`✦ ${getDef(c.def).name} — last breath`);
+      applyEffect(s, c.owner, trig, { kind: 'player', player: opponentOf(c.owner) });
     }
   }
   // Combat bookkeeping may only name creatures that are still in play. An instant cast

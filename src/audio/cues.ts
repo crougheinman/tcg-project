@@ -42,7 +42,7 @@ export function cuesFor(action: Action, before: GameState, after: GameState, me:
     case 'castCreature':
       cues.push('creature');
       break;
-    case 'whipflash':
+    case 'resolveTrigger':
       cues.push('burn');
       break;
     case 'castSorcery': {

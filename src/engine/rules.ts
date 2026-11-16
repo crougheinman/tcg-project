@@ -13,10 +13,10 @@ import { needsTarget, opponentOf } from './types';
 // ---- Stat helpers (effective power/toughness include permanent buffs) ----
 
 export function power(c: CardInstance): number {
-  return (getDef(c.def).power ?? 0) + c.buffP;
+  return (getDef(c.def).power ?? 0) + c.buffP + (c.tempP ?? 0);
 }
 export function toughness(c: CardInstance): number {
-  return (getDef(c.def).toughness ?? 0) + c.buffT;
+  return (getDef(c.def).toughness ?? 0) + c.buffT + (c.tempT ?? 0);
 }
 export function hasKeyword(c: CardInstance, kw: Keyword): boolean {
   return (getDef(c.def).keywords ?? []).includes(kw);
@@ -162,15 +162,15 @@ export function findCreature(
  *
  * At every point in the game exactly one player is the actor. During
  * `combat_block` that is the DEFENDER (they declare blocks and cast block-only
- * instants); while a trigger is pending it is the caster (the active player);
- * otherwise it is the active player.
+ * instants and flash creatures); while a trigger is pending it is the trigger's
+ * controller; otherwise it is the active player.
  *
  * The lockstep PvP transport depends on this invariant — a single global `seq`
  * counter is only coherent while one side acts at a time. Reuse this helper
  * everywhere the "who acts now" question is asked; do NOT re-inline the ternary.
  */
 export function actorOf(state: GameState): PlayerId {
-  if (state.pending) return state.active; // the caster resolves their own trigger
+  if (state.pending) return state.pending.controller; // the trigger's controller chooses its target
   return state.phase === 'combat_block' ? opponentOf(state.active) : state.active;
 }
 
@@ -199,12 +199,12 @@ export function legalActions(state: GameState, player: PlayerId): Action[] {
 
   // A pending trigger must be resolved before anything else is legal.
   if (state.pending) {
-    if (state.pending.kind !== 'whipflash') return [];
+    if (state.pending.kind !== 'enter') return [];
     const src = state.pending.source;
     const out: Action[] = [];
     for (const pid of ['A', 'B'] as PlayerId[]) {
       for (const c of state.players[pid].battlefield) {
-        if (isCreature(c) && c.iid !== src) out.push({ type: 'whipflash', target: c.iid });
+        if (isCreature(c) && c.iid !== src) out.push({ type: 'resolveTrigger', target: c.iid });
       }
     }
     return out;
@@ -228,15 +228,26 @@ export function legalActions(state: GameState, player: PlayerId): Action[] {
   } else if (state.phase === 'combat_attack') {
     // Instants only — sorceries are main-phase. declareAttackers is built by the AI.
     actions.push(...spellActions(state, player));
+    actions.push(...flashActions(state, player));
     actions.push({ type: 'advance' });
   } else if (state.phase === 'combat_block') {
     // The defender acts here: block-only instants become available, and
     // declareBlockers itself is built by the AI.
     actions.push(...spellActions(state, player));
+    actions.push(...flashActions(state, player));
   } else if (state.phase === 'end') {
     actions.push({ type: 'advance' });
   }
   return actions;
+}
+
+/** Flash creatures the caster can afford: castable outside the main phase, like an instant. */
+function flashActions(state: GameState, caster: PlayerId): Action[] {
+  const p = state.players[caster];
+  const mana = availableMana(p);
+  return p.hand
+    .filter((c) => getDef(c.def).type === 'creature' && hasKeyword(c, 'flash') && getDef(c.def).cost <= mana)
+    .map((c) => ({ type: 'castCreature' as const, iid: c.iid }));
 }
 
 /**
@@ -303,17 +314,17 @@ export function legalTargets(
 export function validateAction(state: GameState, action: Action): void {
   if (state.winner) throw new Error('game is over');
   // A pending trigger must be resolved before anything else.
-  if (state.pending && action.type !== 'whipflash') {
+  if (state.pending && action.type !== 'resolveTrigger') {
     throw new Error('resolve the pending trigger first');
   }
-  if (!state.pending && action.type === 'whipflash') {
+  if (!state.pending && action.type === 'resolveTrigger') {
     throw new Error('no trigger to resolve');
   }
   const active = state.players[state.active];
 
   switch (action.type) {
-    case 'whipflash': {
-      if (state.pending?.kind !== 'whipflash') throw new Error('no whipflash pending');
+    case 'resolveTrigger': {
+      if (state.pending?.kind !== 'enter') throw new Error('no trigger pending');
       if (action.target === state.pending.source) throw new Error('cannot target the source');
       const found = findCreature(state, action.target);
       if (!found) throw new Error('target creature not found');
@@ -327,10 +338,17 @@ export function validateAction(state: GameState, action: Action): void {
       return;
     }
     case 'castCreature': {
-      requirePhase(state, 'main1');
-      const c = inHand(active, action.iid);
+      // The caster is whoever may act now: the active player, or the defender in the block step (flash).
+      const casterId = actorOf(state);
+      const caster = state.players[casterId];
+      const c = inHand(caster, action.iid);
       if (!c || getDef(c.def).type !== 'creature') throw new Error('not a creature in hand');
-      if (getDef(c.def).cost > availableMana(active)) throw new Error('not enough mana');
+      if (hasKeyword(c, 'flash')) {
+        if (state.phase === 'end') throw new Error('too late to cast');
+      } else {
+        requirePhase(state, 'main1');
+      }
+      if (getDef(c.def).cost > availableMana(caster)) throw new Error('not enough mana');
       return;
     }
     case 'castSorcery': {

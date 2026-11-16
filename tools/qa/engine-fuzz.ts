@@ -156,7 +156,7 @@ function check(
     }
     if (real !== sizes[pid]) R('CARD_CONSERVATION', `${pid} has ${real} real cards, started with ${sizes[pid]}`);
     for (const c of p.graveyard) {
-      if (isCreature(c) && (c.damage || c.buffP || c.buffT || c.blitz || c.tapped)) R('DEAD_CARD_KEEPS_STATE', `${c.def} in graveyard with damage=${c.damage} buff=${c.buffP}/${c.buffT} blitz=${c.blitz} tapped=${c.tapped}`);
+      if (isCreature(c) && (c.damage || c.buffP || c.buffT || c.tempP || c.tempT || c.blitz || c.tapped)) R('DEAD_CARD_KEEPS_STATE', `${c.def} in graveyard with damage=${c.damage} buff=${c.buffP}/${c.buffT} temp=${c.tempP ?? 0}/${c.tempT ?? 0} blitz=${c.blitz} tapped=${c.tapped}`);
     }
   }
 
@@ -174,12 +174,50 @@ function check(
     if (a.type === 'advance') return before.phase === 'main1' ? 'combat_attack' : before.phase === 'combat_attack' ? 'end' : 'main1';
     if (a.type === 'declareAttackers') return a.attackers.length ? 'combat_block' : 'end';
     if (a.type === 'declareBlockers') return 'end';
-    return before.phase; // spells, land, creature, whipflash
+    return before.phase; // spells, land, creature, resolveTrigger
   })();
   if (after.phase !== exp && !after.winner) R('PHASE_TRANSITION', `${before.phase} + ${a.type} -> ${after.phase}, expected ${exp}`);
   if (a.type === 'advance' && before.phase === 'end') {
     if (after.active === before.active) R('TURN_PASS', 'active player did not change');
     if (after.turn !== before.turn + 1) R('TURN_COUNTER', `turn ${before.turn} -> ${after.turn}`);
+  }
+
+  // 3b. Phase 2 rules, each re-derived from the rules text rather than from the engine's helpers
+  if (a.type === 'advance' && before.phase === 'end') {
+    // "until end of turn" buffs are gone once the next turn begins
+    for (const c of creatures(after)) if (c.tempP || c.tempT) R('TEMP_NOT_EXPIRED', `${c.def} still has +${c.tempP}/+${c.tempT} in the next turn`);
+  }
+  if (a.type === 'castSorcery') {
+    // prowess: every surviving prowess creature of the caster gets exactly one more +1/+1
+    const casterId = before.phase === 'combat_block' ? opponentOf(before.active) : before.active;
+    for (const c of before.players[casterId].battlefield) {
+      if (!isCreature(c) || !hasKeyword(c, 'prowess')) continue;
+      const now = after.players[casterId].battlefield.find((x) => x.iid === c.iid);
+      if (!now) continue; // died to the spell itself
+      if ((now.tempP ?? 0) !== (c.tempP ?? 0) + 1 || (now.tempT ?? 0) !== (c.tempT ?? 0) + 1) R('PROWESS_WRONG', `${c.def} temp ${c.tempP ?? 0}/${c.tempT ?? 0} -> ${now.tempP ?? 0}/${now.tempT ?? 0} after a spell`);
+    }
+  }
+  if (a.type === 'castCreature' && before.phase !== 'main1') {
+    const casterId = actorOf(before);
+    const c = before.players[casterId].hand.find((x) => x.iid === a.iid);
+    if (c && !hasKeyword(c, 'flash')) R('NON_FLASH_CAST_OFF_MAIN', `${c.def} cast in ${before.phase} without flash`);
+    if (before.phase === 'end') R('FLASH_IN_END_STEP', `${c?.def} cast in the end step`);
+  }
+  if (a.type === 'declareBlockers') {
+    // dies triggers: each token-making death adds exactly its tokens (tokens that died are replaced, not lost)
+    const afterIds = new Set(all(after).map((c) => c.iid));
+    const died = creatures(before).filter((c) => !afterIds.has(c.iid));
+    const defs = new Set<string>();
+    for (const c of died) { const t = getDef(c.def).onDeath; if (t?.type === 'token') defs.add(t.token); }
+    for (const pid of ['A', 'B'] as PlayerId[]) {
+      for (const tok of defs) {
+        const beforeN = before.players[pid].battlefield.filter((c) => c.def === tok).length;
+        const lostN = died.filter((c) => c.owner === pid && c.def === tok).length;
+        const madeN = died.filter((c) => c.owner === pid).reduce((n, c) => { const t = getDef(c.def).onDeath; return n + (t?.type === 'token' && t.token === tok ? t.count : 0); }, 0);
+        const nowN = after.players[pid].battlefield.filter((c) => c.def === tok).length;
+        if (nowN !== beforeN - lostN + madeN) R('DIES_TRIGGER_TOKENS', `${pid}: ${tok} count ${beforeN} -${lostN} +${madeN} expected ${beforeN - lostN + madeN}, got ${nowN}`);
+      }
+    }
   }
 
   // 4. combat-specific
@@ -236,7 +274,7 @@ function check(
 
 // ---------- policies ----------
 function chaosAction(s: GameState, actor: PlayerId, r: () => number): Action {
-  if (s.pending?.kind === 'whipflash') {
+  if (s.pending?.kind === 'enter') {
     const t = legalActions(s, actor);
     return t[Math.floor(r() * t.length)];
   }
@@ -279,16 +317,19 @@ const t0 = Date.now();
 // Keyword stress: besides the real decks, replay every policy with the new keywords sprinkled at random
 // over the decks' creatures, so every keyword combination meets every situation (not just the few
 // the shipped cards happen to carry). Keywords are restored after each game.
-const STRESS_KW = ['reach', 'vigilance', 'firstStrike', 'doubleStrike', 'trample', 'deathtouch', 'lifelink'] as const;
+const STRESS_KW = ['reach', 'vigilance', 'firstStrike', 'doubleStrike', 'trample', 'deathtouch', 'lifelink', 'flash', 'prowess'] as const;
+type CardDefDeath = (typeof CARDS)[string]['onDeath'];
 function sprinkleKeywords(r: () => number): () => void {
-  const saved = new Map<string, string[] | undefined>();
+  const saved = new Map<string, { kw: string[] | undefined; death: CardDefDeath }>();
   for (const def of Object.values(CARDS)) {
     if (def.type !== 'creature') continue;
-    saved.set(def.id, def.keywords as string[] | undefined);
+    saved.set(def.id, { kw: def.keywords as string[] | undefined, death: def.onDeath });
     const extra = STRESS_KW.filter(() => r() < 0.25);
     if (extra.length) def.keywords = [...(def.keywords ?? []), ...extra];
+    // some creatures raise a token when they die (tokens included, so triggers can chain through them)
+    if (!def.onDeath && r() < 0.12) def.onDeath = { type: 'token', token: 'zombie_token', count: 1 };
   }
-  return () => { for (const [id, k] of saved) CARDS[id].keywords = k as never; };
+  return () => { for (const [id, v] of saved) { CARDS[id].keywords = v.kw as never; CARDS[id].onDeath = v.death; } };
 }
 
 for (const policyName of ['ai', 'chaos', 'ai+kw', 'chaos+kw'] as const) {

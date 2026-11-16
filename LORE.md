@@ -225,6 +225,7 @@ win without its creatures ever attacking.
 The school's most promising student and its most dangerous argument. Sorae can feel the record
 thinning when she casts. She has never been able to demonstrate this to anyone, and has stopped
 trying; she now simply casts more, faster, and the Pyre has quietly stopped asking her to explain.
+(*Prowess — every spell she casts makes her bolder for the rest of the turn.*)
 
 **Her brother, Sael — see *Grave Tide*.**
 They trained together. They reached opposite conclusions about the same evidence. This is the
@@ -253,7 +254,8 @@ than an admission that eventually even refusal has to end something.
 **Castellan Marrek** — *Bulwark · "The line holds here."*
 Has held the middle pass for thirty-one years and has never once advanced. Marrek's standing order
 is a single sentence, given to every recruit: *we are not here to win, we are here to still be
-here.* He has buried four hundred soldiers under it, and he has not lost the pass.
+here.* He has buried four hundred soldiers under it, and he has not lost the pass. (*Flash. Defender.
+Reach — the line closes behind an attack that thought it had found a gap.*)
 
 **Sister Anwe of the Quiet House** — *Soothe · "Rest now. The walls will hold."*
 Stonewall's healers do not use the Wells. Anwe's order holds that healing drawn from borrowed
