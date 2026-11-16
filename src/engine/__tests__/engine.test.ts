@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialState, MAX_DECK_SIZE } from '../state';
 import { applyAction } from '../reducer';
-import { isLand, canAttack, availableMana, power, toughness, actorOf, findCreature } from '../rules';
+import { isLand, isCreature, canAttack, canBlock, blockError, availableMana, power, toughness, actorOf, findCreature } from '../rules';
 import type { Action, CardInstance, GameState } from '../types';
 import { DECK_EMBERWOOD, DECK_SKYWARD, DECK_LIST, DECK_IRONBLOSSOM, DECK_GRAVETIDE } from '../../cards/decks';
 import { getDef } from '../../cards/cards';
@@ -507,62 +507,159 @@ describe('actorOf (the single legal actor)', () => {
   });
 });
 
-describe('declareBlockers validation guards', () => {
-  it('throws a clean Error (not a TypeError) when the attacker died mid-combat_block', () => {
-    // The defender's instant can kill a tapped attacker while blocks are still
-    // being declared. The attacker stays listed in combat.attackers but is gone
-    // from the battlefield, so validation must not dereference it blindly.
-    const s = fresh();
-    const attacker = inst('dread_maw', { summoningSick: false });
-    s.players.A.battlefield = [attacker];
-    s.players.B.battlefield = [
-      inst('aether_well', { owner: 'B' }),
-      inst('aether_well', { owner: 'B' }),
-      inst('ashigaru', { owner: 'B' }),
-    ];
-    s.players.B.hand = [inst('take_counter', { owner: 'B' })];
-    let g = applyAction(s, { type: 'advance' });
-    g = applyAction(g, { type: 'declareAttackers', attackers: [attacker.iid] });
+/** Two attackers vs a defender holding Take Counter, mid combat_block. */
+function blockStepWithTakeCounter() {
+  const s = fresh();
+  const maw = inst('dread_maw', { summoningSick: false });
+  const sprite = inst('ember_sprite', { summoningSick: false });
+  s.players.A.battlefield = [maw, sprite];
+  s.players.B.battlefield = [
+    inst('aether_well', { owner: 'B' }),
+    inst('aether_well', { owner: 'B' }),
+    inst('ashigaru', { owner: 'B' }),
+  ];
+  s.players.B.hand = [inst('take_counter', { owner: 'B' })];
+  let g = applyAction(s, { type: 'advance' });
+  g = applyAction(g, { type: 'declareAttackers', attackers: [maw.iid, sprite.iid] });
+  const tc = g.players.B.hand.find((c) => c.def === 'take_counter')!;
+  const killMaw: Action = { type: 'castSorcery', iid: tc.iid, target: { kind: 'creature', iid: maw.iid } };
+  return { g, maw, sprite, killMaw, blocker: g.players.B.battlefield.find((c) => c.def === 'ashigaru')! };
+}
 
-    const tc = g.players.B.hand.find((c) => c.def === 'take_counter')!;
-    g = applyAction(g, {
-      type: 'castSorcery',
-      iid: tc.iid,
-      target: { kind: 'creature', iid: attacker.iid },
-    });
+describe('combat bookkeeping stays truthful', () => {
+  it('an attacker killed mid-block leaves combat.attackers', () => {
+    // It used to stay listed, so a block the defender had already planned against it
+    // could not be confirmed ("attacker no longer in play").
+    const { g: before, maw, sprite, killMaw } = blockStepWithTakeCounter();
+    expect(before.combat!.attackers).toEqual([maw.iid, sprite.iid]);
+    const g = applyAction(before, killMaw);
+    expect(findCreature(g, maw.iid)).toBeNull();
+    expect(g.combat!.attackers).toEqual([sprite.iid]); // the survivor is untouched, order kept
+  });
 
-    // Precondition: listed as an attacker, but no longer on any battlefield.
-    expect(g.combat!.attackers).toContain(attacker.iid);
-    expect(findCreature(g, attacker.iid)).toBeNull();
-
-    const blocker = g.players.B.battlefield.find((c) => c.def === 'ashigaru')!;
-    const act: Action = { type: 'declareBlockers', blocks: { [blocker.iid]: attacker.iid } };
-    expect(() => applyAction(g, act)).toThrow('attacker no longer in play');
+  it('a block aimed at the dead attacker is a clean Error, never a TypeError', () => {
+    const { g: before, maw, killMaw, blocker } = blockStepWithTakeCounter();
+    const g = applyAction(before, killMaw);
+    const act: Action = { type: 'declareBlockers', blocks: { [blocker.iid]: maw.iid } };
+    expect(() => applyAction(g, act)).toThrow('not attacking');
     try {
       applyAction(g, act);
       expect.unreachable('should have thrown');
     } catch (e) {
       expect(e).toBeInstanceOf(Error);
-      expect(e).not.toBeInstanceOf(TypeError); // the old `!.card` bug
+      expect(e).not.toBeInstanceOf(TypeError); // the old `!.card` crash
     }
   });
 
-  it('still resolves combat when the dead attacker is simply not blocked', () => {
-    const s = fresh();
-    const attacker = inst('dread_maw', { summoningSick: false });
-    s.players.A.battlefield = [attacker];
-    s.players.B.battlefield = [inst('aether_well', { owner: 'B' }), inst('aether_well', { owner: 'B' })];
-    s.players.B.hand = [inst('take_counter', { owner: 'B' })];
-    let g = applyAction(s, { type: 'advance' });
-    g = applyAction(g, { type: 'declareAttackers', attackers: [attacker.iid] });
-    const tc = g.players.B.hand.find((c) => c.def === 'take_counter')!;
-    g = applyAction(g, {
-      type: 'castSorcery',
-      iid: tc.iid,
-      target: { kind: 'creature', iid: attacker.iid },
-    });
+  it('the validator also survives a state that still lists a ghost attacker', () => {
+    // Defence in depth: even if some future code path leaves a stale id behind.
+    const { g: before, maw, killMaw, blocker } = blockStepWithTakeCounter();
+    const g = applyAction(before, killMaw);
+    g.combat!.attackers.push(maw.iid); // corrupt on purpose
+    const act: Action = { type: 'declareBlockers', blocks: { [blocker.iid]: maw.iid } };
+    expect(() => applyAction(g, act)).toThrow('attacker no longer in play');
+  });
+
+  it('combat still resolves once the dead attacker is gone, and deals it no damage', () => {
+    const { g: before, killMaw, blocker, sprite } = blockStepWithTakeCounter();
+    let g = applyAction(before, killMaw);
+    g = applyAction(g, { type: 'declareBlockers', blocks: { [blocker.iid]: sprite.iid } });
+    expect(g.phase).toBe('end');
+    expect(g.players.B.life).toBe(20); // the Maw died before damage; the Sprite was blocked
+    expect(g.lastCombat!.attackers).toEqual([sprite.iid]); // the replay records what really fought
+  });
+
+  it('pruning removes a block whose blocker or attacker died', () => {
+    const { g: before, maw, blocker, killMaw } = blockStepWithTakeCounter();
+    const g0 = structuredClone(before);
+    g0.combat!.blocks = { [blocker.iid]: maw.iid }; // as if blocks were already recorded
+    const g = applyAction(g0, killMaw);
+    expect(g.combat!.blocks).toEqual({});
+  });
+
+  it('the old stale-attacker crash path stays closed when nothing is blocked', () => {
+    const { g: before, killMaw } = blockStepWithTakeCounter();
+    let g = applyAction(before, killMaw);
     g = applyAction(g, { type: 'declareBlockers', blocks: {} });
-    expect(g.players.B.life).toBe(20); // dead attacker deals no damage
+    expect(g.phase).toBe('end');
+  });
+});
+
+describe('blocking rules (shared by the validator and the UI)', () => {
+  const blocker = (def: string, over: Partial<CardInstance> = {}) => inst(def, over);
+  it('a ground creature cannot block a flyer, with the reason spelled out', () => {
+    const flyer = inst('sky_talon');
+    const ground = blocker('stoneback_cub');
+    expect(canBlock(ground, flyer)).toBe(false);
+    expect(blockError(ground, flyer)).toBe('only flyers can block a flyer');
+  });
+  it('a flyer can block a flyer, and anything can block a ground creature', () => {
+    expect(canBlock(blocker('sky_talon'), inst('storm_drake'))).toBe(true);
+    expect(canBlock(blocker('stoneback_cub'), inst('dread_maw'))).toBe(true);
+    expect(canBlock(blocker('sky_talon'), inst('dread_maw'))).toBe(true);
+  });
+  it('a tapped creature cannot block, and a land is not a blocker', () => {
+    expect(blockError(blocker('stoneback_cub', { tapped: true }), inst('dread_maw'))).toBe('tapped creature cannot block');
+    expect(blockError(inst('aether_well'), inst('dread_maw'))).toBe('invalid blocker');
+  });
+  it('the validator uses the same rule, so UI and engine cannot disagree', () => {
+    const s = fresh();
+    const talon = inst('sky_talon', { summoningSick: false });
+    s.players.A.battlefield = [talon];
+    s.players.B.battlefield = [inst('stoneback_cub', { owner: 'B' })];
+    let g = applyAction(s, { type: 'advance' });
+    g = applyAction(g, { type: 'declareAttackers', attackers: [talon.iid] });
+    const cub = g.players.B.battlefield[0];
+    expect(() => applyAction(g, { type: 'declareBlockers', blocks: { [cub.iid]: talon.iid } })).toThrow('only flyers can block a flyer');
+  });
+});
+
+describe('tokens', () => {
+  /** B has a Wolf token that blocks and trades with A's creature. */
+  function wolfTrade() {
+    const s = fresh();
+    const bear = inst('stoneback_cub', { summoningSick: false }); // 2/2
+    s.players.A.battlefield = [bear];
+    const wolf = inst('wolf_token', { owner: 'B' }); // 1/1
+    s.players.B.battlefield = [wolf];
+    let g = applyAction(s, { type: 'advance' });
+    g = applyAction(g, { type: 'declareAttackers', attackers: [bear.iid] });
+    g = applyAction(g, { type: 'declareBlockers', blocks: { [wolf.iid]: bear.iid } });
+    return { g, wolf, bear };
+  }
+  it('a token that dies ceases to exist instead of filling the graveyard', () => {
+    const { g, wolf } = wolfTrade();
+    expect(findCreature(g, wolf.iid)).toBeNull();
+    expect(g.players.B.graveyard.some((c) => c.def === 'wolf_token')).toBe(false);
+    expect(g.players.B.graveyard).toHaveLength(0);
+    expect(g.log.some((l) => l.includes('Wolf dies'))).toBe(true); // it still reads as a death
+  });
+  it('a real creature that dies in the same combat still goes to the graveyard', () => {
+    const s = fresh();
+    const bear = inst('stoneback_cub', { summoningSick: false }); // 2/2
+    const maw = inst('dread_maw', { owner: 'B' }); // 5/4 kills it
+    s.players.A.battlefield = [bear];
+    s.players.B.battlefield = [maw];
+    let g = applyAction(s, { type: 'advance' });
+    g = applyAction(g, { type: 'declareAttackers', attackers: [bear.iid] });
+    g = applyAction(g, { type: 'declareBlockers', blocks: { [maw.iid]: bear.iid } });
+    expect(g.players.A.graveyard.map((c) => c.def)).toEqual(['stoneback_cub']);
+  });
+  it('a token killed by a spell also leaves no graveyard card, and the spell does', () => {
+    const s = fresh();
+    s.players.A.battlefield = [inst('aether_well'), inst('aether_well')];
+    s.players.A.hand = [inst('cinderbolt')];
+    const wolf = inst('wolf_token', { owner: 'B' });
+    s.players.B.battlefield = [wolf];
+    const bolt = s.players.A.hand[0];
+    const g = applyAction(s, { type: 'castSorcery', iid: bolt.iid, target: { kind: 'creature', iid: wolf.iid } });
+    expect(g.players.B.graveyard).toHaveLength(0);
+    expect(g.players.A.graveyard.map((c) => c.def)).toEqual(['cinderbolt']);
+  });
+  it('an unspent token is still a creature on the battlefield (only death changes)', () => {
+    const s = fresh();
+    s.players.B.battlefield = [inst('zombie_token', { owner: 'B' })];
+    expect(isCreature(s.players.B.battlefield[0])).toBe(true);
   });
 });
 

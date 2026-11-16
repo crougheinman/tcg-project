@@ -34,6 +34,24 @@ export function availableMana(p: PlayerState): number {
   return untappedLands(p).length;
 }
 
+/**
+ * Why `blocker` may NOT block `attacker`, or null if it may. The single definition of
+ * the blocking rules for creatures: the validator enforces it and the UI uses it to
+ * refuse (and explain) an illegal pairing before the player commits to it.
+ */
+export function blockError(blocker: CardInstance, attacker: CardInstance): string | null {
+  if (!isCreature(blocker)) return 'invalid blocker';
+  if (blocker.tapped) return 'tapped creature cannot block';
+  if (hasKeyword(attacker, 'flying') && !hasKeyword(blocker, 'flying')) {
+    return 'only flyers can block a flyer';
+  }
+  return null;
+}
+
+export function canBlock(blocker: CardInstance, attacker: CardInstance): boolean {
+  return blockError(blocker, attacker) === null;
+}
+
 export function canAttack(c: CardInstance): boolean {
   return isCreature(c) && !c.tapped && !c.summoningSick && !hasKeyword(c, 'defender');
 }
@@ -277,16 +295,13 @@ export function validateAction(state: GameState, action: Action): void {
         blockedAttackers.add(atkIid);
         const blk = defender.battlefield.find((c) => c.iid === blkIid);
         if (!blk || !isCreature(blk)) throw new Error('invalid blocker');
-        if (blk.tapped) throw new Error('tapped creature cannot block');
         if (!attackers.includes(atkIid)) throw new Error('not attacking');
-        // The attacker may have left the battlefield mid-combat_block (e.g. the
-        // defender's instant killed it) while still listed in combat.attackers.
-        // Guard, or the non-null assertion throws an uncaught TypeError.
+        // checkDeaths drops dead attackers from combat.attackers, so this is a
+        // belt-and-braces guard: a stale id must be a clean Error, never a TypeError.
         const atkFound = findCreature(state, atkIid);
         if (!atkFound) throw new Error('attacker no longer in play');
-        const atk = atkFound.card;
-        if (hasKeyword(atk, 'flying') && !hasKeyword(blk, 'flying'))
-          throw new Error('only flyers can block a flyer');
+        const why = blockError(blk, atkFound.card);
+        if (why) throw new Error(why);
       }
       return;
     }

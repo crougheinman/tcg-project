@@ -3,10 +3,13 @@ import { motion, useDragControls } from 'framer-motion';
 import type { PlayerId } from '../engine/types';
 import { humanize } from './boardLog';
 
-// Collapsed by default on phones so the log doesn't cover the player dock; the
-// header chip stays tappable to expand. Open by default on larger screens.
+// Collapsed by default on phones so the log doesn't cover the board; the header chip
+// stays tappable to expand. A phone held sideways is still a phone: it is short (about
+// 340px) and the expanded panel used to take over a third of that height and sit over
+// the action buttons. Open by default on larger screens.
 const startCollapsed = () =>
-  typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches;
+  typeof window !== 'undefined' &&
+  window.matchMedia('(max-width: 640px), (orientation: landscape) and (max-height: 500px)').matches;
 
 export function ActionLog({
   log,

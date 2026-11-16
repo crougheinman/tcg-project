@@ -431,3 +431,20 @@ export function getDef(id: string): CardDef {
   if (!def) throw new Error(`Unknown card def: ${id}`);
   return def;
 }
+
+/**
+ * Cards that exist only because an effect creates them (Wolf, Zombie). Derived from
+ * the `token` effects themselves rather than a hand-kept list, so a new token is
+ * recognised the moment something references it. Shared by the deck builder (which
+ * must not offer them), the engine (a dead token is gone, not a graveyard card) and
+ * the result screen (tokens are not "cast").
+ */
+export const TOKEN_IDS: ReadonlySet<string> = new Set(
+  Object.values(CARDS)
+    .map((d) => (d.effect?.type === 'token' ? d.effect.token : null))
+    .filter((id): id is string => !!id),
+);
+
+export function isToken(defId: string): boolean {
+  return TOKEN_IDS.has(defId);
+}

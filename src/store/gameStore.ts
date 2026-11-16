@@ -283,12 +283,15 @@ export const useGame = create<Store>((set, get) => {
     dispatch: (action) => {
       const s = get();
       if (!s.game || s.charging) return; // ignore input while a spell is telegraphing
-      // PvP lockstep: only the legal actor may ORIGINATE an action. The transport
-      // stamps each action with a single shared seq counter, so if the non-actor
-      // client also originates one both sides stamp the same seq and each drops
-      // the other's copy as "already applied" -> permanent, silent divergence.
-      // Enforce the invariant here, at the only place local input enters.
-      if (s.mode === 'pvp' && s.myId !== actorOf(s.game)) return;
+      // Only the legal actor may ORIGINATE an action.
+      //  - PvP lockstep: the transport stamps each action with one shared seq counter, so
+      //    if the non-actor client also originates one both sides stamp the same seq and
+      //    each drops the other's copy as "already applied" -> silent divergence.
+      //  - vs AI: the human's dispatch must never move the AI's turn along (skipping its
+      //    main phase, say). The AI applies its own moves directly, not through here.
+      // Hotseat is exempt: one person legitimately drives both sides.
+      // Enforce it here, at the only place local input enters.
+      if ((s.mode === 'pvp' || s.mode === 'ai') && s.myId !== actorOf(s.game)) return;
       const tel = s.mode !== 'pvp' ? telegraphFor(s.game, action) : null;
       const apply = () => {
         const cur = get();

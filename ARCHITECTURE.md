@@ -117,9 +117,11 @@ Key subtleties:
 - `actorOf` is reused everywhere the "who acts now" question is asked: the reducer's `castSorcery`
   caster, the validator's `castSorcery` caster, and the store's `telegraphFor`. **Do not
   re-inline this expression** — call `actorOf`.
-- **In PvP, the store enforces this:** `dispatch` drops any local action when
-  `myId !== actorOf(game)` (`gameStore.ts` `dispatch`). Without that guard, the non-actor client
-  can stamp the same lockstep `seq` as the actor and permanently desync (see §7, Recent fixes).
+- **In PvP and vs AI, the store enforces this:** `dispatch` drops any local action when
+  `myId !== actorOf(game)` (`gameStore.ts` `dispatch`). In PvP, without that guard the non-actor
+  client can stamp the same lockstep `seq` as the actor and permanently desync (see §7, Recent
+  fixes); vs AI, it stops a stray human action from moving the AI's turn along. Hotseat is exempt
+  (one person drives both sides). The AI applies its own moves directly, never through `dispatch`.
 
 ---
 
@@ -211,6 +213,22 @@ few percent. Depth is presentation only and never touches timing, so it is safe 
 on, except for reduced-motion or low-memory/two-core devices, and the in-game menu toggle overrides
 the default either way.
 
+**Block planning — `ui/blockSelection.ts`.** The defender builds blocks over several taps before
+confirming, and all of the rules of that interaction are pure functions here (`tapBlocker`,
+`tapAttacker`, `prune`), unit-tested without a browser. Legality is not re-derived: it comes from
+`rules.canBlock`/`blockError`, the same function `validateAction` enforces, so the UI cannot offer a
+pairing the engine would reject. One rule per gesture: tap an unassigned blocker to assign it (at
+once if there is a single live attacker, otherwise it becomes *pending*); tap a pending blocker to
+cancel; tap an assigned blocker to remove just that block; tap an attacker to give a pending blocker
+its target. A refused pairing returns a `hint` that Board shows as a banner, and the attackers a
+pending blocker cannot block are dimmed. `prune` runs from an effect in Board and drops any plan
+that stopped being true (an instant killed the attacker). A property test (400 random block steps
+with random taps and a mid-step kill) asserts the guarantee that matters: **no tap sequence can
+produce a `declareBlockers` the reducer throws on.** Engine side of the same fix: `checkDeaths`
+removes dead creatures from `combat.attackers`/`combat.blocks`, so `combat` never names a creature
+that left play, and a dead **token** simply ceases to exist (`cards.isToken`, derived from the
+`token` effects) instead of padding the graveyard.
+
 **HUD — `ui/PlayerBar.tsx`, `ui/PhaseBar.tsx`.** Each player's badge is the shield (`data-player`,
 the element every spell and attack aims at — keep that attribute on it), life, mana and, for the
 opponent only, the counts a player cannot otherwise see: hand size, deck size and a button that
@@ -222,6 +240,17 @@ must stay in the DOM: `LandAbsorbFx` anchors its "Mana +1" float to it. One CSS 
 knowing: card-size overrides for a zone belong on the **zone**, not on `.card`, because the
 battlefield's `min-height` reads `--card-h` too — with the override on `.card` the phone layout
 reserved 148px for 108px cards.
+
+Hit areas are part of the HUD's contract. The player's shield and bar rise 24px above the platform,
+over the middle of the hand, so `.player-platform .playerbar` is `pointer-events: none` (the shield
+takes clicks only while it is a spell target) — when it was not, the centre of the middle hand card
+could not be clicked. The click handler for aiming at a face lives on the padded `.shield-hit`
+wrapper, not the clip-pathed shield. On touch screens buttons keep their size and gain an invisible
+`::after` margin instead (growing them would spend height the short screens lack); remember an
+absolutely positioned child's `inset` is measured **inside** the border. `.center` must not shrink
+(`flex: 0 0 auto`): squeezed below its content it spilled the wrapped prompt and buttons over the
+player's own creatures. The Activity panel sits top-right, never over the hand, and starts collapsed
+on any phone, portrait or landscape.
 
 **Effect timing — `ui/fxTiming.ts` and `ui/useTimers.ts`.** Every choreography constant (telegraph
 windows, projectile flight, strike stagger, impact point) lives in `fxTiming.ts`; the store reads
@@ -289,6 +318,7 @@ from this list.
 | **Med** | **No double-deck-out terminal.** Deck-out is only checked on a forced draw. | `reducer.ts` `drawCard` | A both-empty board has no terminal condition (unlikely at 20 life / 30 cards). |
 | **Med** | **Host/join race + multiple-joiner corruption**; unhandled Supabase send/subscribe errors; 4-char room code with no uniqueness/auth; peer deck id trusted with divergent fallbacks. | `net/match.ts` `createMatch`/`joinMatch` | Handshake robustness gaps; a stray joiner can corrupt an in-progress match. |
 | **Med** | **Two version sources to keep in sync** (`version.ts` and `package.json`, both `1.0.2`); **no `prefers-reduced-motion`** despite `repeat:Infinity` loops. | `package.json`, `src/version.ts`, `ui/ImpactFx.tsx` | Regressions land unnoticed; accessibility/versioning drift. |
+| **Low** | **Confirm Blocks reaches only 36px on a 320x568 screen** (a 2016 iPhone SE; 44-47px on every other phone tested). The player's creature row sits right under it and the layout has no spare height there. | `styles/index.css` | Only the legacy size. Shrinking that size's creature cards would close it. |
 | **Low** | **No audio settings beyond on/off** (no volume slider); `spellTrigger` loop reads a live-mutated array (`reducer.ts` `castSorcery`); `destroy` isn't truly unconditional (>9999 toughness survives); unbounded net resend history; click-only cards with no keyboard path. | various | Latent hazards + accessibility gaps. |
 
 ---
@@ -408,6 +438,40 @@ Two measurement traps worth remembering, both of which produced convincing wrong
   tell.
   Use `Performance.getMetrics` (ScriptDuration / RecalcStyleDuration / LayoutDuration) and a
   control run.
+
+### (f) Combat-board test, and what it found
+The combat board was tested at three layers: the engine against an independent oracle (11,200 games,
+about 100,000 combats, every ordered pairing, under the shipped AI and a random "chaos" policy that
+makes the attack/block/instant choices the AI never would); all 56 matchups in a real browser with
+the human side played only through real clicks, every resulting state change compared with
+`applyAction`; and targeted scenarios for interactions no policy produces. Findings, all fixed:
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | A block planned against an attacker that then dies (Take Counter) could not be confirmed: "attacker no longer in play" | `checkDeaths` prunes `combat`; Board prunes its plan |
+| 2 | A ground creature could be assigned to block a flyer | one `canBlock` shared by validator and UI |
+| 3 | With 2+ attackers a block could never be removed, and the banner promised a cancel that did nothing | toggle-off / cancel semantics in `blockSelection.ts` |
+| 4 | A second blocker could be put on one attacker, then Confirm failed | refused with a hint |
+| 5 | Result screen: "Spells cast" ignored instants (32 of 112 rows wrong); creatures cast/lost counted tokens | `resultStats.ts` |
+| 6 | Dead tokens filled the graveyard (every game) | tokens cease to exist on death |
+| 7 | Activity panel covered the last hand card on a 1280px window | moved clear of the hand |
+| 8 | The shield covered the centre of the middle hand card — a regression from the versus theme, found only while re-testing | `pointer-events: none` over the hand |
+| 9 | Combat controls were 18-34px to tap | invisible hit areas; 44-52px on common phones |
+| 10 | Local actor guard existed only for PvP | extended to vs AI |
+| 11 | Any screen shake (the pre-cast charge peaks at 10px) widened the page by up to 10px on phones; seen as a rare `H_SCROLL` flag in the phone run, reproduced on demand with one 10px animation on `.board` | `body.in-game #root { overflow: hidden }` |
+
+How it was proven, worth repeating on the next change: every fix has a test that goes **red without
+it** (the engine and store tests by temporarily removing the fix; the scenarios by running them on
+the unfixed tree, where 13 of 17 failed). The oracle itself was mutation-tested (six injected
+reducer bugs, six caught) and the DOM auditor was given nine deliberate sabotages, nine caught — a
+checker that cannot fail proves nothing. Three measurement traps cost real time and are worth
+knowing:
+- A card that dies keeps its **frozen last render** (selection ring, ATK tag, sword overlay) for its
+  1.8s exit animation, so any "stale selection" check must count only cards still in the game state.
+- Overlay labels read right after a click can still be the **exiting** element; wait for the spring.
+- Playwright's click targets the element's centre and fails when something intercepts it, which
+  makes it a free hit-test — but only if the test asserts its preconditions. An earlier scenario
+  "passed" because its own click silently missed.
 
 ## 8. Run it
 

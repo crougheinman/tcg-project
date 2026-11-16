@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { getDef } from '../cards/cards';
-import { actorOf, availableMana, canAttack, isCreature, isLand } from '../engine/rules';
+import { actorOf, availableMana, canAttack, canBlock, isCreature, isLand } from '../engine/rules';
 import type { CardInstance, PlayerId } from '../engine/types';
 import { needsTarget, opponentOf } from '../engine/types';
 import { CardView } from './CardView';
+import { prune, tapAttacker, tapBlocker } from './blockSelection';
 import { CardPreview } from './CardPreview';
 import { HoverCtx } from './hover';
 import { PhaseBar } from './PhaseBar';
@@ -129,6 +130,21 @@ export function Board() {
     const t = setTimeout(() => setAnnounce(null), hold);
     return () => clearTimeout(t);
   }, [announce, guided]);
+
+  // A planned block must stay true. (Defined AFTER the log-announce effect on purpose: effects run in
+  // order and the last setAnnounce wins, so the kill's own "Dread Maw dies" banner would otherwise
+  // hide this notice.) An instant cast during the step can kill an
+  // attacker (or a blocker), leaving an assignment the engine would reject: drop it now
+  // and say so, instead of letting Confirm fail with an error toast.
+  useEffect(() => {
+    if (game.phase !== 'combat_block') return;
+    const r = prune({ blocks, pending: pendingBlocker }, game);
+    if (r.sel.blocks !== blocks) setBlocks(r.sel.blocks);
+    if (r.sel.pending !== pendingBlocker) setPendingBlocker(r.sel.pending);
+    if (r.dropped) {
+      setAnnounce({ id: announceId.current++, text: '🛡 A planned block was removed — that creature is gone', ms: 2600 });
+    }
+  }, [game, blocks, pendingBlocker]);
 
   // Auto-skip your combat when no creature can attack — notify with the reason,
   // hold the banner ~3s, then advance past combat.
@@ -389,32 +405,14 @@ export function Board() {
         return next;
       });
     } else if (game.phase === 'combat_block') {
-      if (side === localId) {
-        if (!isCreature(c) || c.tapped) return;
-        const atks = game.combat?.attackers ?? [];
-        // One attacker -> no ambiguity: tapping your blocker assigns it right away
-        // (tap again to unassign). This avoids the "selected a blocker but damage
-        // still went through" trap of the two-step flow.
-        if (atks.length === 1) {
-          const atk = game.players[game.active].battlefield.find((x) => x.iid === atks[0]);
-          const flyer = atk ? (getDef(atk.def).keywords ?? []).includes('flying') : false;
-          const blockerFlies = (getDef(c.def).keywords ?? []).includes('flying');
-          if (atk && (!flyer || blockerFlies)) {
-            setBlocks((prev) => {
-              const next = { ...prev };
-              if (next[c.iid]) delete next[c.iid];
-              else next[c.iid] = atk.iid;
-              return next;
-            });
-            setPendingBlocker(null);
-            return;
-          }
-        }
-        setPendingBlocker(c.iid); // multiple attackers: pick which one to block next
-      } else if (pendingBlocker && attackingIids.has(c.iid)) {
-        setBlocks((prev) => ({ ...prev, [pendingBlocker]: c.iid }));
-        setPendingBlocker(null);
-      }
+      // All of the block-planning rules live in blockSelection.ts (pure, tested, and
+      // built on the engine's own canBlock). This only routes the tap and shows why a
+      // pairing was refused.
+      const sel = { blocks, pending: pendingBlocker };
+      const r = side === localId ? tapBlocker(sel, game, c.iid) : tapAttacker(sel, game, c.iid);
+      if (r.sel.blocks !== blocks) setBlocks(r.sel.blocks);
+      if (r.sel.pending !== pendingBlocker) setPendingBlocker(r.sel.pending);
+      if (r.hint) setAnnounce({ id: announceId.current++, text: `⚠ ${r.hint}`, ms: 2600 });
     }
   }
 
@@ -426,6 +424,10 @@ export function Board() {
   }
 
   // ---- render helpers ----
+
+  const pendingBlockerCard = pendingBlocker
+    ? (game.players[localId].battlefield.find((x) => x.iid === pendingBlocker) ?? null)
+    : null;
 
   function permanents(pid: PlayerId, side: PlayerId, mine = false) {
     const p = game.players[pid];
@@ -455,6 +457,9 @@ export function Board() {
                     sorceryTargetable(c) ||
                     (game.pending?.kind === 'whipflash' && c.iid !== game.pending.source)
                   }
+                  // With a blocker waiting for its target, dim the attackers it cannot legally
+                  // block (e.g. a flyer vs a ground creature) so that is clear BEFORE the tap.
+                  dim={!!pendingBlockerCard && attackingIids.has(c.iid) && !canBlock(pendingBlockerCard, c)}
                   onClick={() => creatureClick(c, side)}
                 />
                 {attackingIids.has(c.iid) && <span className="combat-tag atk">ATK</span>}
@@ -498,13 +503,13 @@ export function Board() {
                       />,
                       <motion.span
                         key="rblock"
-                        className={'ready-box block' + (blocks[c.iid] ? '' : ' pending')}
+                        className={'ready-box block' + (pendingBlocker === c.iid ? ' pending' : '')}
                         initial={{ opacity: 0, y: 12 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 12 }}
                         transition={{ type: 'spring', stiffness: 480, damping: 24 }}
                       >
-                        {blocks[c.iid] ? 'Blocking' : 'Pick a target…'}
+                        {pendingBlocker === c.iid ? 'Pick a target…' : 'Blocking'}
                       </motion.span>,
                     ]}
                   </AnimatePresence>
@@ -633,7 +638,7 @@ export function Board() {
                 if (pendingBlocker) {
                   setAnnounce({
                     id: announceId.current++,
-                    text: '⚠ Tap an attacker for your selected blocker (or tap it again to cancel)',
+                    text: '⚠ Tap an attacker for your selected blocker (or tap the blocker again to cancel)',
                     ms: 2600,
                   });
                   return;
