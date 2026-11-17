@@ -584,4 +584,4 @@ npm run qa:smoke      # 8 real matches, every deck twice: the check for small ch
 ```
 
 Online PvP needs a free Supabase project — copy `.env.local.example` to `.env.local` and fill in
-`VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` (see `README.md`).
+`VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` (the legacy `VITE_SUPABASE_ANON_KEY` is still read as a fallback; `net/keys.ts` picks the key and refuses a secret one) (see `README.md`).

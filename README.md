@@ -27,9 +27,14 @@ npm run build    # type-check + production build into dist/
 1. Create a free project at https://supabase.com
 2. `cp .env.local.example .env.local` and fill in **Project Settings → API**:
    ```
-   VITE_SUPABASE_URL=...
-   VITE_SUPABASE_ANON_KEY=...
+   VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+   VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
    ```
+   (The legacy `VITE_SUPABASE_ANON_KEY` still works as a fallback until Supabase retires it. Never use a
+   secret / `service_role` key: it would be shipped to every visitor, so the app refuses it.)
+   **On Vercel** (or any host), add the same two variables and mark them **Config**, not Secret: they are
+   public by design, and the "remove the public framework prefix" warning is only about that. Then
+   **redeploy**: `VITE_` values are baked in at build time.
 3. Restart `npm run dev`. The "Online PvP" button is now enabled.
 4. One player **Hosts** (gets a 4-letter room code), the other **Joins** with that code.
 
