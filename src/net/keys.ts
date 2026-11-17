@@ -11,6 +11,20 @@ export interface SupabaseConfig {
   problem: string | null;
 }
 
+/**
+ * The project URL as supabase-js wants it: just the address (https://<ref>.supabase.co). People often paste an
+ * endpoint instead (https://<ref>.supabase.co/rest/v1), which makes the realtime socket connect to
+ * /rest/v1/realtime/v1/websocket and fail with "HTTP Authentication failed". Strip the service path and any
+ * trailing slashes. A custom path that is not a Supabase service path (a reverse proxy prefix) is kept.
+ */
+export function normalizeSupabaseUrl(raw: string): string | null {
+  let url = raw.trim();
+  if (!url) return null;
+  url = url.replace(/[?#].*$/, '').replace(/\/+$/, '');
+  url = url.replace(/\/(rest|realtime|auth|storage|functions|graphql)\/v1(\/.*)?$/, '');
+  return url.replace(/\/+$/, '') || null;
+}
+
 /** Is this a server-only key: the new `sb_secret_…` form, or a legacy JWT whose role is `service_role`? */
 export function isSecretKey(key: string): boolean {
   if (key.startsWith('sb_secret_')) return true;
@@ -33,7 +47,7 @@ export function resolveSupabaseConfig(env: {
   VITE_SUPABASE_PUBLISHABLE_KEY?: string;
   VITE_SUPABASE_ANON_KEY?: string;
 }): SupabaseConfig {
-  const url = (env.VITE_SUPABASE_URL ?? '').trim().replace(/\/+$/, '') || null;
+  const url = normalizeSupabaseUrl(env.VITE_SUPABASE_URL ?? '');
   const key = (env.VITE_SUPABASE_PUBLISHABLE_KEY || env.VITE_SUPABASE_ANON_KEY || '').trim() || null;
   if (key && isSecretKey(key)) {
     return {

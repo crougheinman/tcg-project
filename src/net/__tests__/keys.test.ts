@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isSecretKey, resolveSupabaseConfig } from '../keys';
+import { isSecretKey, normalizeSupabaseUrl, resolveSupabaseConfig } from '../keys';
 
 // JWT-shaped keys built in the test (header.payload.signature); the signature is irrelevant here.
 const jwt = (role: string) => `eyJhbGciOiJIUzI1NiJ9.${btoa(JSON.stringify({ role })).replace(/=+$/, '')}.sig`;
@@ -21,6 +21,17 @@ describe('which Supabase key a browser build may use', () => {
     expect(both.key).toBe('sb_publishable_new');
     const legacy = resolveSupabaseConfig({ VITE_SUPABASE_URL: 'https://x.supabase.co', VITE_SUPABASE_ANON_KEY: jwt('anon') });
     expect(legacy.key).toBe(jwt('anon'));
+  });
+
+  it('strips a pasted service path: /rest/v1 made the realtime socket hit /rest/v1/realtime/v1/websocket', () => {
+    const base = 'https://x.supabase.co';
+    for (const pasted of [base, `${base}/`, `${base}/rest/v1`, `${base}/rest/v1/`, `${base}/realtime/v1/websocket`, `${base}/auth/v1`, ` ${base}/rest/v1 `, `${base}/rest/v1/?apikey=z`]) {
+      expect(normalizeSupabaseUrl(pasted), pasted).toBe(base);
+    }
+    expect(normalizeSupabaseUrl('')).toBeNull();
+    expect(normalizeSupabaseUrl('   ')).toBeNull();
+    // a reverse-proxy prefix that is not a Supabase service path is left alone
+    expect(normalizeSupabaseUrl('https://api.example.com/supabase/')).toBe('https://api.example.com/supabase');
   });
 
   it('cleans the URL: surrounding spaces and trailing slashes', () => {
