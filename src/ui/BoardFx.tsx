@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { getDef } from '../cards/cards';
 import { isCreature, isLand, power, toughness } from '../engine/rules';
@@ -24,6 +25,8 @@ import {
   CHARGE_MS,
   HEAL_SPELLS,
   ATTACK_MS,
+  DEATH_CRACK_MS,
+  DEATH_DUST_MS,
   FS_INTRO_MS,
   FS_SLASH_MS,
   FS_SPOT_MS,
@@ -38,6 +41,7 @@ import {
   travelMsFor,
 } from './fxTiming';
 import { FirstStrikeFx } from './FirstStrikeFx';
+import { CrackFx, DustFx } from './ShatterFx';
 import { useTimers } from './useTimers';
 import type { Burst } from './Vfx';
 
@@ -68,6 +72,12 @@ export function BoardFx({ game }: { game: GameState }) {
   const [projectiles, setProjectiles] = useState<Projectile[]>([]);
   const [destroys, setDestroys] = useState<
     { id: number; x: number; y: number; style: 'fire' | 'debris' | 'wither' }[]
+  >([]);
+  // A creature killed in combat: cracks ride inside its card (portalled into `el`), then the card
+  // bursts into pieces (`crumbles`) fixed over where it stood. See ShatterFx.
+  const [cracks, setCracks] = useState<{ id: number; el: Element }[]>([]);
+  const [crumbles, setCrumbles] = useState<
+    { id: number; x: number; y: number; w: number; h: number; art?: string; rot: number }[]
   >([]);
   const [smokes, setSmokes] = useState<
     { id: number; x: number; y: number; color: string; ms: number }[]
@@ -576,6 +586,37 @@ export function BoardFx({ game }: { game: GameState }) {
     for (const pid of ['A', 'B'] as PlayerId[]) {
       for (const c of before.players[pid].battlefield) {
         if (isCreature(c) && !aliveNow.has(c.iid)) {
+          // Killed in combat: strike lands -> cracks (DEATH_CRACK_MS) -> pulverized (DEATH_DUST_MS).
+          // The card itself is held on the board until the pieces appear (Board's exit delay).
+          if (combatHit && resolved && (resolved.attackers.includes(c.iid) || c.iid in resolved.blocks)) {
+            const impactAt = deathDelay(c.iid);
+            const cid = dmgId.current++;
+            later(() => {
+              const el = stackEl(c.iid);
+              if (!el) return;
+              setCracks((k) => [...k, { id: cid, el }]);
+              later(() => setCracks((k) => k.filter((x) => x.id !== cid)), DEATH_CRACK_MS + 60);
+            }, impactAt);
+            later(() => {
+              const card = document.querySelector<HTMLElement>(`[data-iid="${c.iid}"]`);
+              if (!card) return;
+              const b = card.getBoundingClientRect(); // live: an attacker may have lunged
+              setCrumbles((d) => [
+                ...d,
+                {
+                  id: cid,
+                  x: b.left + b.width / 2,
+                  y: b.top + b.height / 2,
+                  w: card.offsetWidth,
+                  h: card.offsetHeight,
+                  art: getDef(c.def).art,
+                  rot: c.tapped ? 90 : 0,
+                },
+              ]);
+              later(() => setCrumbles((d) => d.filter((x) => x.id !== cid)), DEATH_DUST_MS + 100);
+            }, impactAt + DEATH_CRACK_MS);
+            continue;
+          }
           const r = creatureRects.current[c.iid];
           if (!r) continue;
           const fx = { id: dmgId.current++, x: r.x, y: r.y, style: deathStyle };
@@ -682,6 +723,11 @@ export function BoardFx({ game }: { game: GameState }) {
           <DestroyFx key={d.id} x={d.x} y={d.y} onDone={() => removeDestroy(d.id)} />
         ),
       )}
+
+      {cracks.map((k) => createPortal(<CrackFx key={k.id} />, k.el))}
+      {crumbles.map((d) => (
+        <DustFx key={d.id} x={d.x} y={d.y} w={d.w} h={d.h} art={d.art} rot={d.rot} />
+      ))}
 
       {smokes.map((s) => (
         <SmokeFx key={s.id} x={s.x} y={s.y} color={s.color} ms={s.ms} />

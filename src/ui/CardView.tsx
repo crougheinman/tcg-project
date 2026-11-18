@@ -223,7 +223,14 @@ export function CardView({
         arenaToken ? { opacity: 0, scale: 1.55, y: -30 } : { opacity: 0, scale: 0.7, x: 48 }
       }
       animate={{ opacity: 1, scale: 1, x: 0, y: 0, rotate: inst.tapped ? 90 : 0 }}
-      exit={{ opacity: 0, scale: 0.5 }}
+      // A creature killed in combat (Board hands the AnimatePresence its impact delays as `custom`) keeps
+      // its face until the stack around it fades it out after the hit -> crack -> pulverize; every other
+      // card shrinks away at once.
+      variants={{
+        out: (delays?: Record<string, number>) =>
+          delays?.[inst.iid] ? { opacity: 1, transition: { duration: 0 } } : { opacity: 0, scale: 0.5 },
+      }}
+      exit="out"
       whileHover={onClick && !draggable ? { y: -6 } : undefined}
       drag={draggable}
       dragSnapToOrigin

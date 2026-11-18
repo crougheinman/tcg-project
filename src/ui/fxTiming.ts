@@ -68,6 +68,11 @@ export const LUNGE_MS = 360; // the strike itself: out and back
 export const ATTACK_MS = WINDUP_MS + LUNGE_MS; // one attacker's whole move
 export const IMPACT_MS = WINDUP_MS + 150; // time into the move when the hit "lands"
 
+// ---- a creature killed in combat: strike lands -> cracks -> pulverized ----
+
+export const DEATH_CRACK_MS = 300; // hairline cracks spread over the card
+export const DEATH_DUST_MS = 200; // the card bursts into pieces that scatter and vanish
+
 // ---- first strike (a first striker clashing with its blocker/attacker) ----
 
 export const FS_SPOT_MS = 900; // "First Strike!" with the card floating

@@ -2332,3 +2332,30 @@ button.count-chip:hover:not(:disabled) { color: var(--vs-ink); background: var(-
   box-shadow: 0 0 14px rgba(var(--me-rgb), 0.5);
 }
 .zone-flash:hover { background: #8cf1ff; }
+
+/* ---- Combat death: crack (0.3s) -> pulverize (0.2s). See ShatterFx.tsx ---- */
+.crackfx { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
+.dustfx { position: fixed; z-index: 71; pointer-events: none; }
+.sh-crack { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; animation: shhide 0s var(--crack) forwards; }
+.sh-crack path { fill: none; stroke-linecap: square; stroke-linejoin: miter; stroke-dasharray: 1; stroke-dashoffset: 1; animation: shdraw 165ms cubic-bezier(.2, .8, .3, 1) forwards; }
+.sh-line-dark { stroke: #120a05; stroke-width: 2.6; }
+.sh-line-dark.thin { stroke-width: 1.6; animation-delay: 0.08s; }
+.sh-line-lite { stroke: #fff6dc; stroke-width: 0.9; }
+@keyframes shdraw { to { stroke-dashoffset: 0; } }
+@keyframes shhide { to { opacity: 0; visibility: hidden; } }
+.sh-flash { position: absolute; inset: 0; border-radius: 8px; background: #fff; opacity: 0; mix-blend-mode: screen; animation: shflash 0.12s ease-out; }
+@keyframes shflash { 0% { opacity: 0.75; } 100% { opacity: 0; } }
+.sh-tile {
+  position: absolute; display: block; background-color: #2a1d12; will-change: transform, opacity;
+  animation: shdust var(--dust) cubic-bezier(.15, .7, .3, 1) forwards;
+}
+@keyframes shdust {
+  0%   { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+  60%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--spin)) scale(0.3); }
+}
+
+/* Attack phase banner still playing: cards ignore clicks (Board.tsx guards the handlers too, for the
+   keyboard), and the pointer says so. Hover previews keep working. */
+.board.cards-locked .card, .board.cards-locked .stack { cursor: default; }
+.board.cards-locked .stack.can-attack .card, .board.cards-locked .stack.can-attack { animation: none; translate: none; }

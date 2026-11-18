@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { combatImpactDelays } from './firstStrike';
+import { DEATH_CRACK_MS, DEATH_DUST_MS } from './fxTiming';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { getDef } from '../cards/cards';
@@ -54,6 +56,8 @@ export function Board() {
   const [blocks, setBlocks] = useState<Record<string, string>>({});
   const [pendingBlocker, setPendingBlocker] = useState<string | null>(null);
   const [hovered, setHovered] = useState<CardInstance | null>(null);
+  // Cards can't be clicked while the Attack phase banner is on its way in, up, and out (PhaseBanner).
+  const [cardsLocked, setCardsLocked] = useState(false);
   // A click on a summoning-sick creature: it shakes its head and sheds a tear (n re-keys the tear
   // so a second click replays it).
   const [denied, setDenied] = useState<{ iid: string; n: number } | null>(null);
@@ -145,7 +149,7 @@ export function Board() {
   const myFieldRef = useRef<HTMLDivElement>(null);
   function dropPlay(inst: CardInstance, point: { x: number; y: number }) {
     const field = myFieldRef.current;
-    if (!field) return;
+    if (!field || cardsLocked) return;
     const r = field.getBoundingClientRect();
     const inside = point.x >= r.left && point.x <= r.right && point.y >= r.top && point.y <= r.bottom;
     if (!inside) return;
@@ -249,6 +253,10 @@ export function Board() {
   // the attacker (the engine resolves the block silently). Runs after the
   // log-announce effect so the block banner wins for that frame.
   const prevForBlock = useRef(game);
+  // A creature killed in combat stays on the board until its strike lands (then fades under the death
+  // fx): the exit below waits for its entry here. Read during render, while the ref still holds the
+  // previous state, so it is ready by the render that removes the card.
+  const impactDelays = useMemo(() => combatImpactDelays(prevForBlock.current, game), [game]);
   useEffect(() => {
     const before = prevForBlock.current;
     prevForBlock.current = game;
@@ -433,7 +441,7 @@ export function Board() {
   }
 
   function handHclick(c: CardInstance) {
-    if (!canPlay(c)) return; // greyed/unplayable cards are fully disabled
+    if (cardsLocked || !canPlay(c)) return; // greyed/unplayable cards are fully disabled
     const def = getDef(c.def);
     if (def.type === 'land') dispatch({ type: 'playLand', iid: c.iid });
     else if (def.type === 'creature') dispatch({ type: 'castCreature', iid: c.iid });
@@ -444,6 +452,7 @@ export function Board() {
   }
 
   function creatureClick(c: CardInstance, side: PlayerId) {
+    if (cardsLocked) return; // the Attack phase banner is still playing
     // Resolving a pending Whipflash takes priority.
     if (game.pending?.kind === 'enter' && myTurnToAct) {
       if (c.iid !== game.pending.source) dispatch({ type: 'resolveTrigger', target: c.iid });
@@ -558,13 +567,29 @@ export function Board() {
         ref={mine ? myFieldRef : undefined}
       >
         <div className="row creatures" data-focus-zone tabIndex={-1}>
-          <AnimatePresence>
+          <AnimatePresence custom={impactDelays}>
             {creatures.map((c) => (
               <motion.div
                 key={c.iid}
                 className={'stack' + stackNudge(c, side)}
                 initial={false}
-                exit={{ opacity: 0, scale: 0.85, transition: { duration: 1.8, ease: 'easeIn' } }}
+                custom={impactDelays}
+                variants={{
+                  out: (delays: Record<string, number>) => ({
+                    opacity: 0,
+                    scale: delays[c.iid] ? 0.94 : 0.85,
+                    transition: {
+                      // Killed in combat: impact -> crack (DEATH_CRACK_MS) -> pulverize (DEATH_DUST_MS) ->
+                      // gone. The card is held whole through the hit and the cracking, and only disappears
+                      // across the pulverize, finishing exactly when the pieces do (ShatterFx). Anything
+                      // else fades slowly as before.
+                      duration: delays[c.iid] ? DEATH_DUST_MS / 1000 : 1.8,
+                      ease: delays[c.iid] ? 'linear' : 'easeIn',
+                      delay: delays[c.iid] ? (delays[c.iid] + DEATH_CRACK_MS) / 1000 : 0,
+                    },
+                  }),
+                }}
+                exit="out"
               >
                 <CardView
                   inst={c}
@@ -828,6 +853,7 @@ export function Board() {
           className={
             'board' +
             (depth ? ' depth-3d' : '') +
+            (cardsLocked ? ' cards-locked' : '') +
             (myTurnToAct && game.phase === 'main1' && !sorceryIid && !game.pending && !game.winner
               ? ' nudge-main'
               : '')
@@ -880,9 +906,9 @@ export function Board() {
                       key={c.iid}
                       inst={c}
                       onClick={() => handHclick(c)}
-                      dim={!canPlay(c)}
+                      dim={cardsLocked || !canPlay(c)}
                       greenGlow={game.phase === 'combat_block' && (getDef(c.def).type === 'instant' || hasKeyword(c, 'flash')) && canPlay(c)}
-                      draggable={canPlay(c) && getDef(c.def).type !== 'sorcery' && getDef(c.def).type !== 'instant'}
+                      draggable={!cardsLocked && canPlay(c) && getDef(c.def).type !== 'sorcery' && getDef(c.def).type !== 'instant'}
                       onDragChange={setDragActive}
                       onDrop={(point) => dropPlay(c, point)}
                     />
@@ -935,7 +961,7 @@ export function Board() {
         <BlockLines lines={blockLines} />
         <CastSpotlight />
         {!game.winner && <div className={'turn-glow ' + (game.active === localId ? 'me' : 'foe')} aria-hidden />}
-        <PhaseBanner game={game} localId={localId} guided={guided} />
+        <PhaseBanner game={game} localId={localId} guided={guided} onLock={setCardsLocked} />
 
         <AnimatePresence>
           {hovered && !sorceryIid && !game.pending && (

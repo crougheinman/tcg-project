@@ -12,8 +12,22 @@ import { phaseBannerInfo, type PhaseBannerInfo } from './phaseInfo';
 const spring = { type: 'spring' as const, stiffness: 340, damping: 26 };
 const EXIT_MS = 280; // the banner's exit transition below
 
-export function PhaseBanner({ game, localId, guided }: { game: GameState; localId: PlayerId; guided: boolean }) {
+export function PhaseBanner({
+  game,
+  localId,
+  guided,
+  onLock,
+}: {
+  game: GameState;
+  localId: PlayerId;
+  guided: boolean;
+  /** true from the moment the Attack phase begins until its banner has fully left; the board locks its cards. */
+  onLock?: (locked: boolean) => void;
+}) {
   const info = phaseBannerInfo(game, localId);
+  const lockT = useRef<ReturnType<typeof setTimeout>>();
+  const onLockRef = useRef(onLock);
+  onLockRef.current = onLock;
   const [shown, setShown] = useState<PhaseBannerInfo | null>(null);
   const lastKey = useRef('');
   const prevGame = useRef<GameState | null>(null);
@@ -28,12 +42,19 @@ export function PhaseBanner({ game, localId, guided }: { game: GameState; localI
     if (over) {
       clearTimeout(showT.current);
       clearTimeout(hideT.current);
+      clearTimeout(lockT.current);
+      onLockRef.current?.(false);
       setShown(null);
       return;
     }
     if (info.key === lastKey.current) return;
     lastKey.current = info.key;
     const now = Date.now();
+    // Going to combat: no clicking on cards from the moment the phase changes until the Attack phase
+    // banner (which may wait for the gap before it) has played and left. Any other phase unlocks.
+    clearTimeout(lockT.current);
+    const locks = game.phase === 'combat_attack';
+    onLockRef.current?.(locks);
     // Combat just resolved: its clash (first-strike cinematic, then each attacker's strike) plays out
     // first; the banner for the phase that follows waits for it plus a beat, instead of landing on top.
     const hold = combatHoldMs(prevGame.current, game);
@@ -50,6 +71,7 @@ export function PhaseBanner({ game, localId, guided }: { game: GameState; localI
       clearTimeout(hideT.current);
       setShown(info);
       hideT.current = setTimeout(() => setShown((cur) => (cur?.key === info.key ? null : cur)), dur);
+      if (locks) lockT.current = setTimeout(() => onLockRef.current?.(false), dur + EXIT_MS);
     };
     clearTimeout(showT.current);
     if (startAt > now) showT.current = setTimeout(show, startAt - now);
@@ -62,6 +84,7 @@ export function PhaseBanner({ game, localId, guided }: { game: GameState; localI
     () => () => {
       clearTimeout(showT.current);
       clearTimeout(hideT.current);
+      clearTimeout(lockT.current);
     },
     [],
   );

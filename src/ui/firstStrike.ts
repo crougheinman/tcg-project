@@ -1,6 +1,14 @@
 import { getDef } from '../cards/cards';
 import type { CardInstance, GameState, PlayerId } from '../engine/types';
-import { ATTACK_MS, COMBAT_BANNER_GAP_MS, FS_INTRO_MS, STRIKE_STAGGER_MS } from './fxTiming';
+import {
+  ATTACK_MS,
+  COMBAT_BANNER_GAP_MS,
+  DEATH_CRACK_MS,
+  DEATH_DUST_MS,
+  FS_INTRO_MS,
+  IMPACT_MS,
+  STRIKE_STAGGER_MS,
+} from './fxTiming';
 
 /**
  * How long the board is busy with the combat that `before` -> `after` just resolved: the first-strike
@@ -15,7 +23,29 @@ export function combatHoldMs(before: GameState | null, after: GameState): number
   // (no window in the node test environment; reduced motion skips the cinematic, not the strikes)
   const reduced = typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const intro = !reduced && findFirstStrikeClash(before, after) ? FS_INTRO_MS : 0;
-  return intro + (attackers - 1) * STRIKE_STAGGER_MS + ATTACK_MS + COMBAT_BANNER_GAP_MS;
+  // the last strike's move, or the hit -> crack -> pulverize of whatever it killed, whichever ends later
+  const lastFx = Math.max(ATTACK_MS, IMPACT_MS + DEATH_CRACK_MS + DEATH_DUST_MS);
+  return intro + (attackers - 1) * STRIKE_STAGGER_MS + lastFx + COMBAT_BANNER_GAP_MS;
+}
+
+/**
+ * When each creature in the combat that `before` -> `after` just resolved is hit, in ms from the
+ * state change: attacker i lands at (clash intro) + i * stagger + impact, and its blocker with it.
+ * A creature that dies there must stay on the board until then. Empty when combat did not just resolve.
+ */
+export function combatImpactDelays(before: GameState | null, after: GameState): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!before || !combatJustResolved(before, after) || !after.lastCombat) return out;
+  const reduced = typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const intro = !reduced && findFirstStrikeClash(before, after) ? FS_INTRO_MS : 0;
+  const blockerByAtk: Record<string, string> = {};
+  for (const [blk, atk] of Object.entries(after.lastCombat.blocks)) blockerByAtk[atk] = blk;
+  after.lastCombat.attackers.forEach((atk, i) => {
+    const at = intro + i * STRIKE_STAGGER_MS + IMPACT_MS; // same formula as BoardFx's strikeDelay
+    out[atk] = at;
+    if (blockerByAtk[atk]) out[blockerByAtk[atk]] = at;
+  });
+  return out;
 }
 
 /** Did combat just resolve (block step -> end) this action? Same test BoardFx and the phase banner use. */
