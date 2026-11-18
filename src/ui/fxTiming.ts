@@ -39,10 +39,13 @@ export const TRIGGER_SPOT_MS = 1000;
 
 // ---- phase banner ----
 
-export const PHASE_BANNER_MS = 1400; // how long the centred "ATTACK PHASE" banner holds
-// After a phase or turn change the AI waits this much longer before its next move, so the banner can be
-// read (vs AI and hotseat only; online play never delays an action).
-export const PHASE_PAUSE_MS = 900;
+export const PHASE_BANNER_MS = 3000; // how long the centred "ATTACK PHASE" banner holds
+// Consecutive banners never touch: the next one waits this long after the previous one has gone.
+export const PHASE_GAP_MS = 1200;
+// After a phase or turn change the AI waits this much longer before its next move, so each banner gets
+// its own slot (banner + gap, less the AI's own ~600ms think time). vs AI and hotseat only; online play
+// never delays an action.
+export const PHASE_PAUSE_MS = PHASE_BANNER_MS + PHASE_GAP_MS - 600;
 
 // ---- projectiles ----
 
@@ -59,9 +62,19 @@ export const TRIGGER_CHARGE_MS = 650;
 
 // ---- combat (MTG Arena pacing: attackers strike one after another) ----
 
-export const STRIKE_STAGGER_MS = 260; // gap between consecutive attacker strikes
-export const LUNGE_MS = 360; // one attacker's out-and-back
-export const IMPACT_MS = 150; // time into a lunge when the hit "lands" (~40%)
+export const STRIKE_STAGGER_MS = 320; // gap between consecutive attacker strikes
+export const WINDUP_MS = 300; // float up and rock back, building momentum, before the strike
+export const LUNGE_MS = 360; // the strike itself: out and back
+export const ATTACK_MS = WINDUP_MS + LUNGE_MS; // one attacker's whole move
+export const IMPACT_MS = WINDUP_MS + 150; // time into the move when the hit "lands"
+
+// ---- first strike (a first striker clashing with its blocker/attacker) ----
+
+export const FS_SPOT_MS = 900; // "First Strike!" with the card floating
+export const FS_SLASH_MS = 620; // blackout + three slashes
+export const FS_INTRO_MS = FS_SPOT_MS + FS_SLASH_MS; // combat's strikes wait this long
+// ...and the phase banner that follows combat (the End phase) waits this long after the last strike lands.
+export const COMBAT_BANNER_GAP_MS = 1300;
 
 // ---- entrances ----
 

@@ -3,6 +3,7 @@ import { getDef } from '../cards/cards';
 import { power, toughness } from '../engine/rules';
 import type { CardInstance } from '../engine/types';
 import { artFallback } from './artFallback';
+import { Fangs } from './Fangs';
 
 // Large hover preview — parchment card frame (name ribbon, cost orb, art window,
 // type banner, rules scroll, P/T shield). Springs in on the right, click-through.
@@ -53,6 +54,7 @@ export function PCard({ inst }: { inst: CardInstance }) {
         {def.flavor && <p className="pcard-flavor">{def.flavor}</p>}
       </div>
 
+      {isCreature && inst.blitz && <Fangs />}
       {isCreature && (
         <div className="pcard-shield">
           <span className={inst.damage > 0 ? 'damaged' : ''}>

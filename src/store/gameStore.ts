@@ -8,6 +8,7 @@ import { isMuted, playCues, setMuted as persistMuted } from '../audio/sfx';
 import { deckById, randomDeck } from '../cards/decks';
 import { resolveDeck } from '../cards/customDecks';
 import { readDepth, saveDepth } from '../ui/depth';
+import { combatHoldMs } from '../ui/firstStrike';
 import { getDef } from '../cards/cards';
 import { aiShouldAct, pickAction } from '../ai/ai';
 import {
@@ -176,6 +177,7 @@ export const useGame = create<Store>((set, get) => {
             const next = applyAction(cur.game, action);
             sfx(action, cur.game, next);
             if (next.phase !== cur.game.phase || next.active !== cur.game.active) pause = PHASE_PAUSE_MS;
+            pause += combatHoldMs(cur.game, next); // let the clash and its banner play out
             set({ game: next, charging: null });
           } catch (e) {
             set({ error: `AI error: ${(e as Error).message}`, charging: null });
@@ -373,7 +375,11 @@ export const useGame = create<Store>((set, get) => {
         set({ game: next, error: null, charging: null });
         if (next.winner) clearMatch(); // finished — nothing left to reconnect to
         if (cur.mode === 'pvp' && cur.net) cur.net.sendAction(action);
-        if (cur.mode === 'ai') scheduleAi(next.phase !== cur.game.phase || next.active !== cur.game.active ? PHASE_PAUSE_MS : 0);
+        if (cur.mode === 'ai')
+          scheduleAi(
+            (next.phase !== cur.game.phase || next.active !== cur.game.active ? PHASE_PAUSE_MS : 0) +
+              combatHoldMs(cur.game, next),
+          );
       };
       if (tel) {
         // Telegraph first (charge orb at caster, or smoke at the target — the target

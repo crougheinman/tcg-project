@@ -5,6 +5,7 @@ import { power, toughness } from '../engine/rules';
 import type { CardInstance } from '../engine/types';
 import { useSetHover } from './hover';
 import { artFallback } from './artFallback';
+import { Fangs } from './Fangs';
 
 const LONG_PRESS_MS = 320;
 
@@ -253,7 +254,7 @@ export function CardView({
           {def.art && (
             <img className="arena-art" src={def.art} alt="" draggable={false} onError={artFallback} />
           )}
-          {(inst.buffP > 0 || inst.buffT > 0 || (inst.tempP ?? 0) > 0 || (inst.tempT ?? 0) > 0 || inst.blitz) && (
+          {(inst.buffP > 0 || inst.buffT > 0 || (inst.tempP ?? 0) > 0 || (inst.tempT ?? 0) > 0) && (
             <motion.div
               className="buff-crown"
               title="Buffed"
@@ -267,6 +268,7 @@ export function CardView({
               <span className="buff-eye" aria-hidden />
             </motion.div>
           )}
+          {inst.blitz && <Fangs />}
           <div className={'arena-pt' + (inst.damage > 0 ? ' damaged' : '')}>
             <span>
               {pwr}/{tuf - inst.damage}
@@ -291,6 +293,7 @@ export function CardView({
             <img className="card-art" src={def.art} alt="" draggable={false} onError={artFallback} />
           )}
           {def.text && <div className="card-text">{def.text}</div>}
+          {inst.blitz && isCreature && <Fangs />}
           <div className="card-bottom">
             {isCreature && (
               <span className={'card-pt' + (inst.damage > 0 ? ' damaged' : '')}>

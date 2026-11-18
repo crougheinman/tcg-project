@@ -6,7 +6,8 @@ import { actorOf, availableMana, canAttack, canBlock, hasKeyword, isCreature, is
 import type { CardInstance, PlayerId } from '../engine/types';
 import { needsTarget, opponentOf } from '../engine/types';
 import { CardView } from './CardView';
-import { prune, tapAttacker, tapBlocker } from './blockSelection';
+import { liveAttackers, prune, tapAttacker, tapBlocker } from './blockSelection';
+import { BlockLines, type BlockLine } from './BlockLines';
 import { CardPreview } from './CardPreview';
 import { HoverCtx } from './hover';
 import { PhaseBar } from './PhaseBar';
@@ -53,6 +54,49 @@ export function Board() {
   const [blocks, setBlocks] = useState<Record<string, string>>({});
   const [pendingBlocker, setPendingBlocker] = useState<string | null>(null);
   const [hovered, setHovered] = useState<CardInstance | null>(null);
+  // A click on a summoning-sick creature: it shakes its head and sheds a tear (n re-keys the tear
+  // so a second click replays it).
+  const [denied, setDenied] = useState<{ iid: string; n: number } | null>(null);
+  // Haste creatures that entered THIS turn wear a "Can Attack" tag until the end phase.
+  const [hasteIids, setHasteIids] = useState<Set<string>>(new Set());
+  const seenIids = useRef<Set<string> | null>(null); // null until the first look, so the opening board isn't tagged
+  const hasteTurn = useRef(game.turn);
+  useEffect(() => {
+    const now = new Set<string>();
+    const fresh: string[] = [];
+    for (const pid of ['A', 'B'] as PlayerId[])
+      for (const c of game.players[pid].battlefield) {
+        if (!isCreature(c)) continue;
+        now.add(c.iid);
+        if (seenIids.current && !seenIids.current.has(c.iid) && hasKeyword(c, 'haste')) fresh.push(c.iid);
+      }
+    seenIids.current = now;
+    const newTurn = hasteTurn.current !== game.turn;
+    hasteTurn.current = game.turn;
+    setHasteIids((prev) => {
+      if (game.phase === 'end' || newTurn) return prev.size ? new Set() : prev; // the effect ends with the turn's last phase
+      const next = new Set([...prev].filter((i) => now.has(i)));
+      for (const i of fresh) next.add(i);
+      return next.size === prev.size && [...next].every((i) => prev.has(i)) ? prev : next;
+    });
+  }, [game]);
+
+  const denyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(denyTimer.current), []);
+
+  function denyTired(iid: string) {
+    setDenied((d) => ({ iid, n: (d?.n ?? 0) + 1 }));
+    clearTimeout(denyTimer.current);
+    denyTimer.current = setTimeout(() => setDenied(null), 1500);
+    // Horizontal head-shake on the stack (imperative: framer owns the card's transform).
+    const stack = document.querySelector(`[data-iid="${iid}"]`)?.closest('.stack') as HTMLElement | null;
+    if (stack && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      stack.animate(
+        [0, -8, 8, -6, 6, -3, 3, 0].map((x) => ({ transform: `translateX(${x}px)` })),
+        { duration: 440, easing: 'ease-out' },
+      );
+    }
+  }
 
   // Lock page scroll to this screen only — the board owns the viewport, while
   // menus / deck-select / rulebook keep their normal scrolling.
@@ -238,6 +282,10 @@ export function Board() {
     (c) => isCreature(c) && !c.tapped,
   );
 
+  // Block step, you defending: the live attackers drive the "who can block what" cues.
+  const inBlock = game.phase === 'combat_block' && myTurnToAct && !game.winner;
+  const liveAtk = inBlock ? liveAttackers(game) : [];
+
   // Guided mode: pick the ONE tip that matches the current situation (priority order).
   // Teaches core MTG-style flow: lands -> mana -> creatures -> attack -> block.
   function coachTip(): Tip | null {
@@ -410,6 +458,12 @@ export function Board() {
     }
     if (!myTurnToAct) return;
 
+    // Your own creature that cannot attack yet: refuse with the tired shake + tear.
+    if (side === localId && c.summoningSick && (game.phase === 'main1' || game.phase === 'combat_attack')) {
+      denyTired(c.iid);
+      return;
+    }
+
     if (game.phase === 'combat_attack' && side === localId) {
       if (!canAttack(c)) return;
       setAttackers((prev) => {
@@ -443,6 +497,55 @@ export function Board() {
     ? (game.players[localId].battlefield.find((x) => x.iid === pendingBlocker) ?? null)
     : null;
 
+  const blockedNow = new Set(Object.values(blocks));
+
+  // Which "your move" cue a battlefield creature gets (CSS class on its stack):
+  //   can-attack   attack step: your creatures that may attack, until picked
+  //   can-block    block step: your untapped creatures that can block something, until used
+  //   block-target block step, a blocker selected: the attackers it can legally take
+  function stackNudge(c: CardInstance, side: PlayerId): string {
+    if (!myTurnToAct) return '';
+    if (game.phase === 'combat_attack') {
+      return side === localId && !attackers.has(c.iid) && canAttack(c) ? ' can-attack' : '';
+    }
+    if (!inBlock) return '';
+    if (side === localId) {
+      return !pendingBlocker && !blocks[c.iid] && !c.tapped && liveAtk.some((a) => canBlock(c, a))
+        ? ' can-block'
+        : '';
+    }
+    return pendingBlockerCard &&
+      liveAtk.some((a) => a.iid === c.iid) &&
+      !blockedNow.has(c.iid) &&
+      canBlock(pendingBlockerCard, c)
+      ? ' block-target'
+      : '';
+  }
+
+  // Curves: confirmed blocks, plus every attacker the selected blocker could still take.
+  const blockLines: BlockLine[] = inBlock
+    ? [
+        ...Object.entries(blocks).map(([b, a]) => ({ from: b, to: a, kind: 'set' as const })),
+        ...(pendingBlockerCard
+          ? liveAtk
+              .filter((a) => !blockedNow.has(a.iid) && canBlock(pendingBlockerCard, a))
+              .map((a) => ({ from: pendingBlockerCard.iid, to: a.iid, kind: 'candidate' as const }))
+          : []),
+      ]
+    : [];
+
+  // A flyer can only be blocked by a flyer or a reach creature: say so on the card, and
+  // say "unblockable" when nothing of yours can take it.
+  function flyMark(c: CardInstance) {
+    if (!inBlock || !attackingIids.has(c.iid) || !hasKeyword(c, 'flying')) return null;
+    const takeable = me.battlefield.some((b) => isCreature(b) && !b.tapped && canBlock(b, c));
+    return (
+      <span className={'fly-mark' + (takeable ? '' : ' none')}>
+        ✈ {takeable ? 'Reach only' : 'Unblockable'}
+      </span>
+    );
+  }
+
   function permanents(pid: PlayerId, side: PlayerId, mine = false) {
     const p = game.players[pid];
     const lands = p.battlefield.filter(isLand);
@@ -459,7 +562,7 @@ export function Board() {
             {creatures.map((c) => (
               <motion.div
                 key={c.iid}
-                className="stack"
+                className={'stack' + stackNudge(c, side)}
                 initial={false}
                 exit={{ opacity: 0, scale: 0.85, transition: { duration: 1.8, ease: 'easeIn' } }}
               >
@@ -476,7 +579,14 @@ export function Board() {
                   dim={!!pendingBlockerCard && attackingIids.has(c.iid) && !canBlock(pendingBlockerCard, c)}
                   onClick={() => creatureClick(c, side)}
                 />
+                {denied?.iid === c.iid && (
+                  <span key={denied.n} className="deny-tear" aria-hidden>
+                    <i />
+                  </span>
+                )}
+                {hasteIids.has(c.iid) && !attackingIids.has(c.iid) && <span className="haste-tag">Can Attack</span>}
                 {attackingIids.has(c.iid) && <span className="combat-tag atk">ATK</span>}
+                {side !== localId && flyMark(c)}
                 {blockerOf(c.iid) && <span className="combat-tag blk">blocked</span>}
                 <div className="attack-overlay">
                   <AnimatePresence>
@@ -601,9 +711,13 @@ export function Board() {
         };
         // No creature can attack → combat is pointless; offer only End Turn.
         if (!canAnyAttack) {
+          // Nothing castable, no flashback, nothing to attack with: say so, and make
+          // End Turn pulse straight away (no 5s wait) — it is the only thing left to do.
+          const noMovesLeft = !me.hand.some(canPlay) && !me.graveyard.some(canFlashback);
           return (
             <div className="actions">
-              <button className="primary" onClick={endTurn}>
+              {noMovesLeft && <span className="prompt nomoves">No more moves</span>}
+              <button className={'primary' + (noMovesLeft ? ' urgent' : '')} onClick={endTurn}>
                 End Turn
               </button>
             </div>
@@ -643,7 +757,7 @@ export function Board() {
         );
       case 'combat_block': {
         const instantHint = instantInHand && (
-          <span className="prompt-hint">✨ …or cast a glowing card</span>
+          <span className="prompt-hint">…or cast a glowing card</span>
         );
         // No creature can block. Still let them cast an instant (or pass) if they have one;
         // otherwise the auto-resolve effect lets damage through.
@@ -708,7 +822,17 @@ export function Board() {
   return (
     <HoverCtx.Provider value={setHovered}>
       <LayoutGroup>
-        <div className={'board' + (depth ? ' depth-3d' : '')}>
+        {/* nudge-main: your main phase with nothing pending — CSS pulses the playable
+            hand cards (after a delay) so the next move is easy to spot */}
+        <div
+          className={
+            'board' +
+            (depth ? ' depth-3d' : '') +
+            (myTurnToAct && game.phase === 'main1' && !sorceryIid && !game.pending && !game.winner
+              ? ' nudge-main'
+              : '')
+          }
+        >
           <header className="topbar">
             <button className="menu-btn" onClick={() => setMenuOpen(true)} aria-label="Menu" title="Menu">
               ☰
@@ -808,6 +932,7 @@ export function Board() {
         of `.board`, not children, keeps them truly viewport-fixed regardless of
         what `.board` is doing. */}
         <BoardFx game={game} />
+        <BlockLines lines={blockLines} />
         <CastSpotlight />
         {!game.winner && <div className={'turn-glow ' + (game.active === localId ? 'me' : 'foe')} aria-hidden />}
         <PhaseBanner game={game} localId={localId} guided={guided} />
