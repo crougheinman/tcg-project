@@ -28,6 +28,10 @@ export const HEAL_MS: Record<string, number> = { soothe: 2000, soul_siphon: 3000
 // skill fires the moment they are cast: the card floats up, glows, and the effect waits for it.
 export const CAST_MS = 1300;
 export const SKILL_MS = 1300;
+// Beast Blitz is an "ultimate": the caster's art cuts in at the bottom right (BlitzUltimate), so its window is longer.
+export const BLITZ_ULT_MS = 2400;
+/** How long a creature's cast-time skill holds the spotlight (and so delays its effect). */
+export const skillMs = (skill: string): number => (skill === 'Beast Blitz' ? BLITZ_ULT_MS : SKILL_MS);
 // Derived from the card data (`skill` on a creature = a skill that fires as it enters), not hand-kept.
 export const SKILL_CREATURES: Record<string, string> = Object.fromEntries(
   Object.values(CARDS)

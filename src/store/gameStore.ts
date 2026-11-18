@@ -19,7 +19,7 @@ import {
   HEAL_SPELLS,
   PHASE_PAUSE_MS,
   SKILL_CREATURES,
-  SKILL_MS,
+  skillMs,
   SMOKE_MS,
   SMOKE_SPELLS,
 } from '../ui/fxTiming';
@@ -123,7 +123,9 @@ export const useGame = create<Store>((set, get) => {
     if (!card) return null;
     if (action.type === 'castCreature') {
       // only creatures whose skill fires the moment they are cast get a window
-      return SKILL_CREATURES[card.def] ? { casterId, def: card.def, kind: 'cast', ms: SKILL_MS } : null;
+      return SKILL_CREATURES[card.def]
+        ? { casterId, def: card.def, kind: 'cast', ms: skillMs(SKILL_CREATURES[card.def]) }
+        : null;
     }
     if (CHARGE_SPELLS.has(card.def) && getDef(card.def).effect?.type === 'damage')
       return { casterId, def: card.def, kind: 'charge', ms: CHARGE_MS };
@@ -144,7 +146,7 @@ export const useGame = create<Store>((set, get) => {
     if (!card) return null;
     if (action.type === 'castCreature') {
       const skill = SKILL_CREATURES[card.def];
-      return skill ? { card, ownerId: casterId, label: `✦ ${skill}`, ms } : null;
+      return skill ? { card, ownerId: casterId, label: `✦ ${skill}`, ms: Math.max(ms, skillMs(skill)) } : null;
     }
     return { card, ownerId: casterId, label: getDef(card.def).type === 'instant' ? 'Instant' : 'Casting', ms };
   }

@@ -96,6 +96,19 @@ export function PhaseBanner({
 
   return (
     <div className="phase-banner-wrap" role="status" aria-live="polite">
+      {/* a dark backdrop while a banner is up, so the phase is what you read */}
+      <AnimatePresence>
+        {shown && (
+          <motion.div
+            key="pb-dim"
+            className="pb-dim"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: EXIT_MS / 1000 } }}
+            transition={{ duration: 0.25 }}
+          />
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {shown && (
           <motion.div
