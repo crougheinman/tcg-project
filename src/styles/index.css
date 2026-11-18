@@ -2360,39 +2360,65 @@ button.count-chip:hover:not(:disabled) { color: var(--vs-ink); background: var(-
 .board.cards-locked .card, .board.cards-locked .stack { cursor: default; }
 .board.cards-locked .stack.can-attack .card, .board.cards-locked .stack.can-attack { animation: none; translate: none; }
 
-/* ---- Beast Blitz "ultimate" cut-in (BlitzUltimate.tsx): bottom right, click-through ---- */
+/* ---- Beast Blitz "ultimate" cut-in (BlitzUltimate.tsx): a slanted band across the middle of the screen
+   showing the fierce-eyes art, speed lines and a flash; behind the floating card, click-through ---- */
 .blitz-ult {
-  position: absolute; right: -1vw; bottom: 0; height: min(58vh, 540px); aspect-ratio: 720 / 1017;
+  --h: min(34vh, 300px);
+  position: absolute; left: 0; right: 0; top: calc(48% - var(--h) / 2); height: var(--h);
   pointer-events: none; z-index: -1; /* behind the floating card */
 }
-.blitz-ult .bu-art {
-  position: relative; display: block; width: 100%; height: 100%; object-fit: contain;
-  filter: drop-shadow(0 0 10px rgba(255, 150, 40, 0.95)) drop-shadow(0 0 30px rgba(255, 70, 40, 0.55));
-  animation: bushake 0.42s ease-out, buglow 0.55s ease-in-out 0.42s infinite alternate;
+.blitz-ult .bu-band {
+  position: absolute; inset: 0; overflow: hidden; background: #140806;
+  clip-path: polygon(0 10%, 100% 0, 100% 90%, 0 100%);
+  animation: bushake 0.42s ease-out;
 }
+.blitz-ult .bu-art {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 52%;
+  animation: buzoom 2.4s cubic-bezier(.15, .6, .3, 1) forwards;
+}
+@keyframes buzoom { from { scale: 1.22; translate: -2% 0; } to { scale: 1; translate: 1.5% 0; } }
 @keyframes bushake {
   0% { translate: 0 0; } 15% { translate: -9px 5px; } 30% { translate: 8px -6px; } 45% { translate: -6px 3px; }
   60% { translate: 4px -2px; } 100% { translate: 0 0; }
 }
-@keyframes buglow {
-  from { filter: drop-shadow(0 0 8px rgba(255, 150, 40, 0.8)) drop-shadow(0 0 22px rgba(255, 70, 40, 0.4)); }
-  to   { filter: drop-shadow(0 0 16px rgba(255, 190, 70, 1)) drop-shadow(0 0 44px rgba(255, 70, 40, 0.8)); }
+/* red-gold edge lines on the slanted top and bottom of the band, pulsing */
+.blitz-ult .bu-edge {
+  position: absolute; inset: 0; clip-path: polygon(0 10%, 100% 0, 100% 90%, 0 100%);
+  background:
+    linear-gradient(to bottom, rgba(255, 214, 90, 0.95) 0, rgba(255, 80, 40, 0.9) 6px, transparent 7px) top / 100% 100% no-repeat,
+    linear-gradient(to top, rgba(255, 214, 90, 0.95) 0, rgba(255, 80, 40, 0.9) 6px, transparent 7px) bottom / 100% 100% no-repeat;
+  filter: drop-shadow(0 0 12px rgba(255, 90, 40, 0.9));
+  animation: buedge 0.5s ease-in-out infinite alternate;
 }
-.blitz-ult .bu-rays {
-  position: absolute; inset: -22% -60% -8% -50%; z-index: 0; transform-origin: 62% 56%;
-  background: repeating-conic-gradient(from 0deg at 62% 56%, rgba(255, 196, 80, 0.62) 0 3.2deg, rgba(255, 90, 40, 0) 3.2deg 9deg);
-  -webkit-mask-image: radial-gradient(circle at 62% 56%, #000 0, rgba(0, 0, 0, 0.7) 28%, transparent 68%);
-  mask-image: radial-gradient(circle at 62% 56%, #000 0, rgba(0, 0, 0, 0.7) 28%, transparent 68%);
-  animation: burays 2.4s linear forwards;
+@keyframes buedge { from { opacity: 0.65; } to { opacity: 1; } }
+/* horizontal speed lines racing across the art */
+.blitz-ult .bu-lines {
+  position: absolute; inset: 0; mix-blend-mode: screen; opacity: 0;
+  background:
+    repeating-linear-gradient(to bottom, transparent 0 7px, rgba(255, 235, 180, 0.5) 7px 8px, transparent 8px 19px, rgba(255, 120, 60, 0.4) 19px 20px, transparent 20px 31px);
+  -webkit-mask-image: linear-gradient(to right, #000 0, transparent 22%, transparent 78%, #000 100%);
+  mask-image: linear-gradient(to right, #000 0, transparent 22%, transparent 78%, #000 100%);
+  animation: bulines 0.28s linear 3 forwards;
 }
-@keyframes burays { 0% { rotate: 0deg; opacity: 0; } 12% { opacity: 1; } 80% { opacity: 0.9; } 100% { rotate: 38deg; opacity: 0; } }
+@keyframes bulines { 0% { opacity: 0.9; background-position: 0 0; } 100% { opacity: 0.9; background-position: 90px 0; } }
 .blitz-ult .bu-flash {
-  position: absolute; right: -120vw; bottom: -120vh; width: 260vw; height: 260vh; z-index: 2;
-  background: radial-gradient(circle at 78% 82%, rgba(255, 240, 190, 0.95), rgba(255, 140, 50, 0.4) 14%, transparent 34%);
-  mix-blend-mode: screen; opacity: 0; animation: buflash 0.55s ease-out;
+  position: absolute; inset: 0; background: #fff; opacity: 0; mix-blend-mode: screen; animation: buflash 0.5s ease-out;
 }
-@keyframes buflash { 0% { opacity: 1; } 100% { opacity: 0; } }
-@media (max-width: 640px) { .blitz-ult { height: min(44vh, 330px); right: -2vw; } }
-@media (orientation: landscape) and (max-height: 500px) { .blitz-ult { height: 70vh; } }
+@keyframes buflash { 0% { opacity: 0.95; } 100% { opacity: 0; } }
+@media (max-width: 640px) { .blitz-ult { --h: min(24vh, 190px); } }
+@media (orientation: landscape) and (max-height: 500px) { .blitz-ult { --h: 52vh; } }
 .bu-dim { position: absolute; inset: 0; z-index: -2; pointer-events: none; background: rgba(0, 0, 0, 0.5); } /* behind the art (-1) and the card */
 .pb-dim { position: absolute; inset: 0; pointer-events: none; background: rgba(0, 0, 0, 0.55); } /* under the banner slab; the wrap is click-through */
+
+/* ---- Drag a ready creature onto the enemy board to attack ---- */
+.card.arena.can-drag { cursor: grab; }
+.row.creatures .stack.dragging { z-index: 60; } /* above its neighbours and the enemy zone while it is carried */
+.board .battlefield.attack-drop {
+  background: rgba(var(--foe-rgb), 0.16);
+  box-shadow: inset 0 0 0 3px var(--foe);
+  animation: atkdropglow 0.9s steps(1) infinite;
+}
+@keyframes atkdropglow {
+  0%, 100% { box-shadow: inset 0 0 0 3px var(--foe); }
+  50% { box-shadow: inset 0 0 0 3px var(--vs-yellow); }
+}

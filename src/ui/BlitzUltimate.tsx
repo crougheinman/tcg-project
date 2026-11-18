@@ -1,21 +1,24 @@
-// Beast Blitz announced: Kunoichi and her pack cut in at the bottom right like an ultimate skill —
-// a burst of light, spinning rays, and the cut-out art (public/ui/blitz-ultimate.webp, background
-// removed) slamming in with a glow. Rendered by CastSpotlight for the spotlight's whole window.
-// Click-through and hidden from assistive tech (the action log announces the skill).
+// Beast Blitz announced: the fierce-eyes art (public/ui/blitz-eyes.webp) cuts in as a slanted band across
+// the middle of the screen like an ultimate skill — slides in, flashes, speed lines, slow zoom — and
+// slides out when the spotlight ends. Rendered by CastSpotlight for the spotlight's whole window, behind
+// the floating card. Click-through and hidden from assistive tech (the action log announces the skill).
 import { motion } from 'framer-motion';
 
 export function BlitzUltimate() {
   return (
     <motion.div
       className="blitz-ult"
-      initial={{ opacity: 0, x: 140, y: 60, scale: 0.86 }}
-      animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
-      exit={{ opacity: 0, x: 90, scale: 1.05, transition: { duration: 0.35 } }}
-      transition={{ type: 'spring', stiffness: 230, damping: 19 }}
+      initial={{ opacity: 0, x: '-70%' }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: '45%', transition: { duration: 0.3 } }}
+      transition={{ type: 'spring', stiffness: 240, damping: 26 }}
     >
-      <i className="bu-flash" />
-      <i className="bu-rays" />
-      <img className="bu-art" src="/ui/blitz-ultimate.webp" alt="" draggable={false} />
+      <div className="bu-band">
+        <img className="bu-art" src="/ui/blitz-eyes.webp" alt="" draggable={false} />
+        <i className="bu-lines" />
+        <i className="bu-flash" />
+      </div>
+      <i className="bu-edge" />
     </motion.div>
   );
 }

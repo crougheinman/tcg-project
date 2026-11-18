@@ -42,7 +42,7 @@ interface Props {
   greenGlow?: boolean; // castable instant during the block step — pulses green
   dim?: boolean;
   arena?: boolean; // battlefield creature: image-only + floating P/T
-  draggable?: boolean; // hand card can be dragged onto the battlefield to play it
+  draggable?: boolean; // hand card: drag onto the battlefield to play it; ready creature: drag onto the enemy board to attack
   onDrop?: (point: { x: number; y: number }) => void;
   onDragChange?: (active: boolean) => void;
   onClick?: () => void;
@@ -159,6 +159,7 @@ export function CardView({
     greenGlow ? 'green-glow' : '',
     dim ? 'dim' : '',
     onClick ? 'clickable' : '',
+    draggable ? 'can-drag' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -239,7 +240,7 @@ export function CardView({
       onDragStart={() => {
         didDrag.current = true;
         clearTimeout(pressTimer.current);
-        setHover(inst);
+        if (!arena) setHover(inst); // a battlefield creature is dragged at the enemy: the preview would cover the target
         onDragChange?.(true);
       }}
       onDragEnd={(_e, info) => {
