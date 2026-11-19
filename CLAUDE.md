@@ -70,6 +70,12 @@ the change (below). Playwright is not a project dependency; it must exist where 
   creature cast outside `main1` (attack or block step); cast in the main phase it is an ordinary creature. Colours are CSS vars on `.blitz-ult.<kind>`.
   One band per kind at a time. To add one: art in `public/ui/`, entry in `CutIn.tsx` `ART`, a table entry, a
   colour block in `index.css`. `--cut-bg` can be a gradient.
+- **First-strike cut-in** (`FS_CUTINS`, `fsSpotMs`, `fsIntroMs` in `fxTiming.ts`; `FirstStrikeFx`, `BoardFx.tsx`): when a first
+  striker clashes with its blocker/attacker, the cinematic is "First Strike!" spotlight, then blackout and slashes. A first
+  striker listed in `FS_CUTINS` (Kensei Duelist, kind `strike`, `strike-face.webp`) puts its cut-in band on that spotlight and
+  holds it longer (`FS_CUTIN_SPOT_MS` 1.7 s vs `FS_SPOT_MS` 0.9 s); `combatHoldMs` / `combatImpactDelays` (`firstStrike.ts`) use the
+  per-card `fsIntroMs`, so strikes and the next banner wait for it. Plays alongside the action, so online play is untouched. To add
+  one: art in `public/ui/`, a `CutIn.tsx` `ART` entry, an `FS_CUTINS` entry, a colour block in `index.css`.
 - **Moment cut-ins** (`momentCues.ts`, `BoardFx.tsx`): creatures whose signature *moment* cuts in without delaying the action: Iron Shogun's The Charge (`charge`, when declared as an attacker), Storm Drake's Thunder (`thunder`, when it enters), Rotting Hulk's Last breath (`breath`, when it dies). `momentCues(before, after)` is a pure diff of two game states (unit-tested), table `MOMENT_CUTINS`; `BoardFx` pushes the spotlight, so it plays alongside the action in PvP too. The Charge is parked until the block-step phase banner has left (`locked` from `Board`, failsafe `PARKED_CUE_FAILSAFE_MS`). Note: `src/ui/__tests__` runs in the jsdom project, which needs `jsdom` installed.
 - **Beast Blitz** (engine + store): Kunoichi gives `BLITZ_BEASTS` (+1/+1: Swift Lancer, Sky Talon, Stoneback
   Cub, Wolf, Thornwood Brute, Dread Maw). `blitzCue(player, card)` decides when it *announces* (log line,
@@ -164,7 +170,7 @@ rotting_hulk, carrion_colossus, raise_horde, wolf_token, ronin_blade, kensei_due
 warding_stance, scorch, ashigaru, cinderbolt, shuriken_volley, topple, take_counter, grasp_from_grave, soul_siphon, wild_growth, aether_well, withering_touch (every card now has new art).
 The design guide (house style, shared prompt line, composition rules, and a prompt per card) is `card-art.md`: use it when
 asking for new art, and add a prompt there for any card whose art is replaced.
-Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.webp`, `pyre-glare.webp`, `whip-face.webp`, `flash-guard.webp`, `rot-face.webp`, `charge-face.webp`, `thunder-face.webp`, `breath-face.webp`).
+Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.webp`, `pyre-glare.webp`, `whip-face.webp`, `flash-guard.webp`, `rot-face.webp`, `charge-face.webp`, `thunder-face.webp`, `breath-face.webp`, `strike-face.webp`).
 
 ## Workflow rules from the owner
 
@@ -184,9 +190,9 @@ Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.
 
 ## Known issues
 
-- `npm run lint` currently reports one warning (`src/ui/Board.tsx` ~line 154, `react-hooks/exhaustive-deps`, a
-  missing `game.players` dependency in a `useEffect`). It came in with the owner's Board UX commits; the lint
-  script allows zero warnings, so fix it (carefully: it changes when that effect runs) before relying on lint.
+- `npm run lint` currently reports two `react-hooks/exhaustive-deps` warnings, both from the owner's recent commits: `src/ui/Board.tsx`
+  ~line 154 (missing `game.players` in a `useEffect`) and `src/ui/BoardFx.tsx` ~line 694 (missing `flushCues`). The lint script
+  allows zero warnings, so fix them (carefully: each changes when its effect runs) before relying on lint.
 - Not done: keyword badges on board cards; Beast Blitz is not data-driven; no animation for discard/recall
   beyond the log and the cast spotlight; the full 56-match browser pass has not been run since the mechanics phases.
 
@@ -194,7 +200,8 @@ Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.
 
 - New Thornwood Brute Whipflash cut-in face (panda-faced brute mid-lash, dark background, 1002x394); the `whip` band loses its multiply-over-gradient trick and gets a dark green background; `card-art.md` prompt added.
 - Moment cut-ins for Iron Shogun (The Charge, on attack), Storm Drake (Thunder, on enter) and Rotting Hulk (Last breath, on death): new `charge` / `thunder` / `breath` kinds, `momentCues` diff helper with tests, parked behind the block banner for The Charge.
-- `card-art.md`: Kensei Duelist First strike cut-in prompt (cold steel-silver and indigo, Hana's eyes snapping open; not wired in the game yet).
+- Kensei Duelist card text: rules stay "Haste. First strike."; the flavour now carries Hana's personality from `LORE.md` (calm, strict, four duels she walked away from) next to her signature line.
+- Kensei Duelist First-strike cut-in: new `strike` kind (`public/ui/strike-face.webp`, 1024x434, Hana's eyes snapping open, cold steel-silver band) on the "First Strike!" spotlight, which holds 1.7 s for her instead of 0.9 s (`FS_CUTINS`, `fsSpotMs`, `fsIntroMs`); `firstStrike.test.ts` added; `card-art.md` prompt marked delivered.
 - `card-art.md`: cut-in prompts for Iron Shogun (the Charge), Storm Drake (Thunder) and Rotting Hulk (Last breath); not wired in the game yet.
 - `card-art.md`: Plague Priest Rot cut-in prompt (new `rot` kind, not wired yet) and a refined Withering Touch card art prompt.
 - New Aether Well card art; new Grave Necromancer card art and Grave Call cut-in face (`grave-grin.webp`, 731x365, Sael matched to the Soul Siphon art); old Aether Well PNG deleted.

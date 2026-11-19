@@ -5,8 +5,8 @@ import {
   COMBAT_BANNER_GAP_MS,
   DEATH_CRACK_MS,
   DEATH_DUST_MS,
-  FS_INTRO_MS,
   IMPACT_MS,
+  fsIntroMs,
   STRIKE_STAGGER_MS,
 } from './fxTiming';
 
@@ -22,7 +22,8 @@ export function combatHoldMs(before: GameState | null, after: GameState): number
   if (!attackers) return 0;
   // (no window in the node test environment; reduced motion skips the cinematic, not the strikes)
   const reduced = typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  const intro = !reduced && findFirstStrikeClash(before, after) ? FS_INTRO_MS : 0;
+  const clash = reduced ? null : findFirstStrikeClash(before, after);
+  const intro = clash ? fsIntroMs(clash.card.def) : 0;
   // the last strike's move, or the hit -> crack -> pulverize of whatever it killed, whichever ends later
   const lastFx = Math.max(ATTACK_MS, IMPACT_MS + DEATH_CRACK_MS + DEATH_DUST_MS);
   return intro + (attackers - 1) * STRIKE_STAGGER_MS + lastFx + COMBAT_BANNER_GAP_MS;
@@ -37,7 +38,8 @@ export function combatImpactDelays(before: GameState | null, after: GameState): 
   const out: Record<string, number> = {};
   if (!before || !combatJustResolved(before, after) || !after.lastCombat) return out;
   const reduced = typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  const intro = !reduced && findFirstStrikeClash(before, after) ? FS_INTRO_MS : 0;
+  const clash = reduced ? null : findFirstStrikeClash(before, after);
+  const intro = clash ? fsIntroMs(clash.card.def) : 0;
   const blockerByAtk: Record<string, string> = {};
   for (const [blk, atk] of Object.entries(after.lastCombat.blocks)) blockerByAtk[atk] = blk;
   after.lastCombat.attackers.forEach((atk, i) => {

@@ -2445,9 +2445,14 @@ button.count-chip:hover:not(:disabled) { color: var(--vs-ink); background: var(-
   --cut-hi: rgba(220, 200, 255, 0.95); --cut-lo: rgba(130, 70, 190, 0.9); --cut-glow: rgba(160, 100, 220, 0.9);
   --cut-l1: rgba(225, 215, 255, 0.5); --cut-l2: rgba(120, 200, 120, 0.4); --cut-bg: #0c0813;
 }
+/* Kensei Duelist: First strike. Cold steel-silver and white on indigo-black, one thread of crimson. */
+.blitz-ult.strike {
+  --cut-hi: rgba(240, 246, 255, 0.98); --cut-lo: rgba(150, 160, 190, 0.95); --cut-glow: rgba(200, 215, 245, 0.95);
+  --cut-l1: rgba(240, 246, 255, 0.55); --cut-l2: rgba(190, 40, 65, 0.4); --cut-bg: #0a0c14;
+}
 /* the face (or eyes) sits right of centre so the floating card does not cover it */
 .blitz-ult.blitz .bu-art, .blitz-ult.grave .bu-art, .blitz-ult.pyre .bu-art, .blitz-ult.whip .bu-art, .blitz-ult.flash .bu-art, .blitz-ult.rot .bu-art,
-.blitz-ult.charge .bu-art, .blitz-ult.thunder .bu-art, .blitz-ult.breath .bu-art {
+.blitz-ult.charge .bu-art, .blitz-ult.thunder .bu-art, .blitz-ult.breath .bu-art, .blitz-ult.strike .bu-art {
   left: auto; right: 0; width: 56%; object-position: 50% 40%;
   -webkit-mask-image: linear-gradient(to right, transparent 0, #000 24%);
   mask-image: linear-gradient(to right, transparent 0, #000 24%);

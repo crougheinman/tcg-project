@@ -1,6 +1,6 @@
 // An ultimate skill announced: the caster's face cuts in as a slanted band across the middle of the screen —
 // slides in, flashes, speed lines, slow zoom — and slides out when the spotlight ends. Beast Blitz shows
-// Kunoichi's battle cry (gold/red), Grave Call the necromancer's grin (green), Pyre Adept's burning glare (orange), Thornwood Brute's Whipflash snarl (thorn green), Bulwark's flash guard (steel and gold). Rendered by CastSpotlight
+// Kunoichi's battle cry (gold/red), Grave Call the necromancer's grin (green), Pyre Adept's burning glare (orange), Thornwood Brute's Whipflash snarl (thorn green), Bulwark's flash guard (steel and gold), Kensei Duelist's first strike (cold steel-silver). Rendered by CastSpotlight
 // for the spotlight's whole window, behind the floating card. Click-through and hidden from assistive tech
 // (the action log announces the skill). Styles: .blitz-ult / .bu-* in index.css.
 import { motion } from 'framer-motion';
@@ -16,6 +16,7 @@ const ART: Record<CutInKind, string> = {
   charge: '/ui/charge-face.webp',
   thunder: '/ui/thunder-face.webp',
   breath: '/ui/breath-face.webp',
+  strike: '/ui/strike-face.webp',
 };
 
 export function CutIn({ kind }: { kind: CutInKind }) {

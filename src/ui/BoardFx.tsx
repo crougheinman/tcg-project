@@ -27,9 +27,8 @@ import {
   ATTACK_MS,
   DEATH_CRACK_MS,
   DEATH_DUST_MS,
-  FS_INTRO_MS,
   FS_SLASH_MS,
-  FS_SPOT_MS,
+  FS_CUTINS,
   IMPACT_MS,
   WINDUP_MS,
   PARKED_CUE_FAILSAFE_MS,
@@ -42,6 +41,8 @@ import {
   TRIGGER_CUTINS,
   TRIGGER_SPOT_MS,
   travelMsFor,
+  fsIntroMs,
+  fsSpotMs,
 } from './fxTiming';
 import { FirstStrikeFx } from './FirstStrikeFx';
 import { CrackFx, DustFx } from './ShatterFx';
@@ -256,7 +257,7 @@ export function BoardFx({ game, locked = false }: { game: GameState; locked?: bo
     // (fsShift). Skipped for reduced motion, which would otherwise just black the screen out.
     const reduced = !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     const fsClash = reduced ? null : findFirstStrikeClash(before, game);
-    const fsShift = fsClash ? FS_INTRO_MS : 0;
+    const fsShift = fsClash ? fsIntroMs(fsClash.card.def) : 0;
     const strikeDelay = (i: number) => fsShift + i * STRIKE_STAGGER_MS + IMPACT_MS;
     const firstUnblocked = resolved
       ? resolved.attackers.findIndex((a) => !blockerByAtk[a])
@@ -533,10 +534,17 @@ export function BoardFx({ game, locked = false }: { game: GameState; locked?: bo
     if (fsClash) {
       const st = useGame.getState();
       const mineId = st.mode === 'hotseat' ? before.active : st.myId;
-      st.pushSpotlight({ card: fsClash.card, ownerId: fsClash.owner, label: 'First Strike!', ms: FS_SPOT_MS });
+      const spotMs = fsSpotMs(fsClash.card.def); // longer when the first striker has a cut-in (Kensei Duelist)
+      st.pushSpotlight({
+        card: fsClash.card,
+        ownerId: fsClash.owner,
+        label: 'First Strike!',
+        ms: spotMs,
+        cutIn: FS_CUTINS[fsClash.card.def],
+      });
       const fx = { id: dmgId.current++, side: fsClash.owner === mineId ? ('me' as const) : ('foe' as const) };
-      later(() => setFsFx(fx), FS_SPOT_MS);
-      later(() => setFsFx((cur) => (cur?.id === fx.id ? null : cur)), FS_SPOT_MS + FS_SLASH_MS);
+      later(() => setFsFx(fx), spotMs);
+      later(() => setFsFx((cur) => (cur?.id === fx.id ? null : cur)), spotMs + FS_SLASH_MS);
     }
     if (combatHit && resolved) {
       const defenderShield =document.querySelector(`[data-player="${opponentOf(before.active)}"]`);

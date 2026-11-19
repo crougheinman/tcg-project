@@ -244,13 +244,13 @@ Flash. Same shared style line with "Wide 2.5:1 composition".
 
 > Wide 2.5:1 extreme close-up of Tadeo Kurosa's face, a battle-scarred Shogun in a dark iron crested horned helm, a deep scar through one brow, eyes hard and level, jaw set, mouth open in a roar to the line behind him. A huge crimson iron-blossom banner whips across the frame at the right edge and a sword blade flashes along the edge of the frame, sparks and dust streaking past as he charges. Faint rows of spear points rise in the dark haze behind him. Palette: dark iron, deep crimson, black, warm gold flecks, with a bright catchlight in the eyes. Keep the left third dark and calm.
 
-**Kensei Duelist: First strike (Hana cuts before the blow can land)** (prompt only; not wired in the game yet)
+**Kensei Duelist: First strike (Hana cuts before the blow can land)** (delivered as `strike-face.webp`, 1024x434; wired as the `strike` kind, plays on the "First Strike!" spotlight when she clashes as the first striker)
 Lore: Hana of the Single Breath, who never strikes twice at the same opponent: "One breath, one cut. There is no second."
 Match the card art (white and crimson kimono, black hair in a bun held by red pins). In the card art her eyes are closed; for
 the cut-in her eyes snap open at the instant of the draw. To stay apart from the crimson-and-black Iron Shogun band and the
-Bulwark gold, make this one cold: pale steel-silver and white on indigo-black with a single thread of crimson. To wire it: art in
-`public/ui/<kind>.webp` (suggested kind `cut`), an entry in `CutIn.tsx` `ART`, a trigger in `fxTiming.ts` (a moment cue, like
-`charge`, for the clash where she strikes first), and a colour block in `index.css`. Same shared style line with "Wide 2.5:1
+Bulwark gold, make this one cold: pale steel-silver and white on indigo-black with a single thread of crimson. Wired: art in
+`public/ui/strike-face.webp`, an entry in `CutIn.tsx` `ART`, `FS_CUTINS` in `fxTiming.ts` (so her "First Strike!" spotlight carries the band and
+holds longer), and a colour block in `index.css`. Same shared style line with "Wide 2.5:1
 composition".
 
 > Wide 2.5:1 extreme close-up of Hana's face, a calm young swordmaster with pale skin, black hair in a bun held by red pins, a thin line of crimson at the lips, her eyes snapping open at the instant of the draw, pupils sharp and fixed on the viewer, utterly still. A bright silver katana blade flashes across the lower right of the frame in a single long streak of light, a perfect white arc of cut air behind it, and a drifting cherry blossom is sliced cleanly in two, both halves hanging in the air. Fine ink-wash speed lines and a few specks of dust trail past. A hint of white kimono collar with a crimson edge at the bottom of the frame. Palette: steel silver, white, deep indigo-black, with one thread of crimson, and bright white catchlights in the eyes. Keep the left third dark and calm.

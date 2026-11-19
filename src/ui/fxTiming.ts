@@ -30,7 +30,7 @@ export const CAST_MS = 1300;
 export const SKILL_MS = 1300;
 // Some skills are "ultimates": the caster's face cuts in as a band across the middle (CutIn), so their window
 // is longer. Keyed by skill name; the value picks the art and colours.
-export type CutInKind = 'blitz' | 'grave' | 'pyre' | 'whip' | 'flash' | 'rot' | 'charge' | 'thunder' | 'breath';
+export type CutInKind = 'blitz' | 'grave' | 'pyre' | 'whip' | 'flash' | 'rot' | 'charge' | 'thunder' | 'breath' | 'strike';
 export const CUTINS: Record<string, CutInKind> = { 'Beast Blitz': 'blitz', 'Grave Call': 'grave', Whipflash: 'whip', Rot: 'rot' };
 export const CUTIN_MS = 2400;
 // Flash creatures that cut in when cast at instant speed (isFlashCast): Bulwark snapping the line shut. Keyed by card id.
@@ -92,6 +92,14 @@ export const DEATH_DUST_MS = 200; // the card bursts into pieces that scatter an
 export const FS_SPOT_MS = 900; // "First Strike!" with the card floating
 export const FS_SLASH_MS = 620; // blackout + three slashes
 export const FS_INTRO_MS = FS_SPOT_MS + FS_SLASH_MS; // combat's strikes wait this long
+// A first striker with a signature cut-in (Kensei Duelist: Hana's eyes snap open) holds the "First Strike!" spotlight
+// longer, so the band has time to slide in and be read; combat's strikes wait for it. Keyed by card id.
+export const FS_CUTINS: Record<string, CutInKind> = { kensei_duelist: 'strike' };
+export const FS_CUTIN_SPOT_MS = 1700;
+/** How long this first striker's "First Strike!" spotlight holds (longer when it carries a cut-in). */
+export const fsSpotMs = (def: string): number => (FS_CUTINS[def] ? FS_CUTIN_SPOT_MS : FS_SPOT_MS);
+/** The whole first-strike intro for this first striker: the spotlight, then the blackout and slashes. */
+export const fsIntroMs = (def: string): number => fsSpotMs(def) + FS_SLASH_MS;
 // ...and the phase banner that follows combat (the End phase) waits this long after the last strike lands.
 export const COMBAT_BANNER_GAP_MS = 1300;
 
