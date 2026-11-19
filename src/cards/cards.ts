@@ -120,6 +120,7 @@ export const CARDS: Record<string, CardDef> = {
     id: 'pyre_adept',
     name: 'Pyre Adept',
     type: 'creature',
+    art: '/cards/pyre_adept.webp', // 420px WebP; other cards auto-wire to <id>.png
     cost: 2,
     power: 1,
     toughness: 2,
@@ -242,6 +243,7 @@ export const CARDS: Record<string, CardDef> = {
     id: 'grave_necromancer',
     name: 'Grave Necromancer',
     type: 'creature',
+    art: '/cards/grave_necromancer.webp', // 420x422 WebP; other cards auto-wire to <id>.png
     cost: 3,
     power: 1,
     toughness: 3,

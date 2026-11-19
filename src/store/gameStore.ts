@@ -12,10 +12,12 @@ import { combatHoldMs } from '../ui/firstStrike';
 import { getDef } from '../cards/cards';
 import { aiShouldAct, pickAction } from '../ai/ai';
 import {
-  BLITZ_ULT_MS,
   CAST_MS,
   CHARGE_MS,
   CHARGE_SPELLS,
+  CUTIN_MS,
+  CUTINS,
+  type CutInKind,
   HEAL_MS,
   HEAL_SPELLS,
   PHASE_PAUSE_MS,
@@ -105,8 +107,8 @@ export interface Spotlight {
   ownerId: PlayerId;
   label: string;
   ms: number;
-  /** Beast Blitz was set off by this cast: the Kunoichi cut-in plays too. */
-  blitz?: boolean;
+  /** This cast is an ultimate: its face cuts in across the screen (CutIn). */
+  cutIn?: CutInKind;
 }
 
 /** A card the player can cast right now by id: from the hand, or from the graveyard (flashback). */
@@ -128,7 +130,7 @@ export const useGame = create<Store>((set, get) => {
     if (action.type === 'castCreature') {
       // Beast Blitz: only when Kunoichi and a beast meet (she enters with a beast out, or a beast enters
       // with her out); on her own she is a plain creature. Other skills fire the moment they are cast.
-      if (blitz) return { casterId, def: card.def, kind: 'cast', ms: BLITZ_ULT_MS };
+      if (blitz) return { casterId, def: card.def, kind: 'cast', ms: CUTIN_MS };
       const skill = SKILL_CREATURES[card.def];
       return skill && skill !== 'Beast Blitz' ? { casterId, def: card.def, kind: 'cast', ms: skillMs(skill) } : null;
     }
@@ -139,7 +141,7 @@ export const useGame = create<Store>((set, get) => {
     if (HEAL_SPELLS.has(card.def))
       return { casterId, def: card.def, kind: 'heal', ms: HEAL_MS[card.def] ?? 2000 };
     // every other sorcery/instant: a plain spotlight window, no extra effect
-    return { casterId, def: card.def, kind: 'cast', ms: blitz ? BLITZ_ULT_MS : CAST_MS };
+    return { casterId, def: card.def, kind: 'cast', ms: blitz ? CUTIN_MS : CAST_MS };
   }
 
   // The card to float in the spotlight for this action, read BEFORE the action is applied
@@ -152,18 +154,18 @@ export const useGame = create<Store>((set, get) => {
     const blitz = blitzCue(g.players[casterId], card);
     if (action.type === 'castCreature') {
       // Beast Blitz features Kunoichi (the one entering, or the one already out when a beast arrives)
-      if (blitz) return { card: blitz.show, ownerId: casterId, label: '✦ Beast Blitz', ms: Math.max(ms, BLITZ_ULT_MS), blitz: true };
+      if (blitz) return { card: blitz.show, ownerId: casterId, label: '✦ Beast Blitz', ms: Math.max(ms, CUTIN_MS), cutIn: 'blitz' };
       const skill = SKILL_CREATURES[card.def];
       return skill && skill !== 'Beast Blitz'
-        ? { card, ownerId: casterId, label: `✦ ${skill}`, ms: Math.max(ms, skillMs(skill)) }
+        ? { card, ownerId: casterId, label: `✦ ${skill}`, ms: Math.max(ms, skillMs(skill)), ...(CUTINS[skill] ? { cutIn: CUTINS[skill] } : {}) }
         : null;
     }
     return {
       card,
       ownerId: casterId,
       label: getDef(card.def).type === 'instant' ? 'Instant' : 'Casting',
-      ms: blitz ? Math.max(ms, BLITZ_ULT_MS) : ms,
-      ...(blitz ? { blitz: true } : {}),
+      ms: blitz ? Math.max(ms, CUTIN_MS) : ms,
+      ...(blitz ? { cutIn: 'blitz' as const } : {}),
     };
   }
 

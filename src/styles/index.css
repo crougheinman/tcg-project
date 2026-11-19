@@ -2362,11 +2362,13 @@ button.count-chip:hover:not(:disabled) { color: var(--vs-ink); background: var(-
    showing the fierce-eyes art, speed lines and a flash; behind the floating card, click-through ---- */
 .blitz-ult {
   --h: min(34vh, 300px);
+  --cut-hi: rgba(255, 214, 90, 0.95); --cut-lo: rgba(255, 80, 40, 0.9); --cut-glow: rgba(255, 90, 40, 0.9);
+  --cut-l1: rgba(255, 235, 180, 0.5); --cut-l2: rgba(255, 120, 60, 0.4); --cut-bg: #140806;
   position: absolute; left: 0; right: 0; top: calc(48% - var(--h) / 2); height: var(--h);
   pointer-events: none; z-index: -1; /* behind the floating card */
 }
 .blitz-ult .bu-band {
-  position: absolute; inset: 0; overflow: hidden; background: #140806;
+  position: absolute; inset: 0; overflow: hidden; background: var(--cut-bg);
   clip-path: polygon(0 10%, 100% 0, 100% 90%, 0 100%);
   animation: bushake 0.42s ease-out;
 }
@@ -2379,13 +2381,29 @@ button.count-chip:hover:not(:disabled) { color: var(--vs-ink); background: var(-
   0% { translate: 0 0; } 15% { translate: -9px 5px; } 30% { translate: 8px -6px; } 45% { translate: -6px 3px; }
   60% { translate: 4px -2px; } 100% { translate: 0 0; }
 }
+/* Grave Call: the same band in necrotic green */
+.blitz-ult.grave {
+  --cut-hi: rgba(190, 255, 200, 0.95); --cut-lo: rgba(40, 200, 100, 0.9); --cut-glow: rgba(60, 230, 120, 0.9);
+  --cut-l1: rgba(200, 255, 215, 0.5); --cut-l2: rgba(60, 220, 120, 0.4); --cut-bg: #06140c;
+}
+/* Pyre Adept: molten orange */
+.blitz-ult.pyre {
+  --cut-hi: rgba(255, 240, 170, 0.98); --cut-lo: rgba(255, 120, 20, 0.95); --cut-glow: rgba(255, 130, 30, 0.95);
+  --cut-l1: rgba(255, 245, 190, 0.55); --cut-l2: rgba(255, 130, 30, 0.45); --cut-bg: #1a0a02;
+}
+/* the face (or eyes) sits right of centre so the floating card does not cover it */
+.blitz-ult.blitz .bu-art, .blitz-ult.grave .bu-art, .blitz-ult.pyre .bu-art {
+  left: auto; right: 0; width: 56%; object-position: 50% 40%;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 24%);
+  mask-image: linear-gradient(to right, transparent 0, #000 24%);
+}
 /* red-gold edge lines on the slanted top and bottom of the band, pulsing */
 .blitz-ult .bu-edge {
   position: absolute; inset: 0; clip-path: polygon(0 10%, 100% 0, 100% 90%, 0 100%);
   background:
-    linear-gradient(to bottom, rgba(255, 214, 90, 0.95) 0, rgba(255, 80, 40, 0.9) 6px, transparent 7px) top / 100% 100% no-repeat,
-    linear-gradient(to top, rgba(255, 214, 90, 0.95) 0, rgba(255, 80, 40, 0.9) 6px, transparent 7px) bottom / 100% 100% no-repeat;
-  filter: drop-shadow(0 0 12px rgba(255, 90, 40, 0.9));
+    linear-gradient(to bottom, var(--cut-hi) 0, var(--cut-lo) 6px, transparent 7px) top / 100% 100% no-repeat,
+    linear-gradient(to top, var(--cut-hi) 0, var(--cut-lo) 6px, transparent 7px) bottom / 100% 100% no-repeat;
+  filter: drop-shadow(0 0 12px var(--cut-glow));
   animation: buedge 0.5s ease-in-out infinite alternate;
 }
 @keyframes buedge { from { opacity: 0.65; } to { opacity: 1; } }
@@ -2393,7 +2411,7 @@ button.count-chip:hover:not(:disabled) { color: var(--vs-ink); background: var(-
 .blitz-ult .bu-lines {
   position: absolute; inset: 0; mix-blend-mode: screen; opacity: 0;
   background:
-    repeating-linear-gradient(to bottom, transparent 0 7px, rgba(255, 235, 180, 0.5) 7px 8px, transparent 8px 19px, rgba(255, 120, 60, 0.4) 19px 20px, transparent 20px 31px);
+    repeating-linear-gradient(to bottom, transparent 0 7px, var(--cut-l1) 7px 8px, transparent 8px 19px, var(--cut-l2) 19px 20px, transparent 20px 31px);
   -webkit-mask-image: linear-gradient(to right, #000 0, transparent 22%, transparent 78%, #000 100%);
   mask-image: linear-gradient(to right, #000 0, transparent 22%, transparent 78%, #000 100%);
   animation: bulines 0.28s linear 3 forwards;

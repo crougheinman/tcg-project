@@ -28,10 +28,16 @@ export const HEAL_MS: Record<string, number> = { soothe: 2000, soul_siphon: 3000
 // skill fires the moment they are cast: the card floats up, glows, and the effect waits for it.
 export const CAST_MS = 1300;
 export const SKILL_MS = 1300;
-// Beast Blitz is an "ultimate": the caster's art cuts in at the bottom right (BlitzUltimate), so its window is longer.
-export const BLITZ_ULT_MS = 2400;
+// Some skills are "ultimates": the caster's face cuts in as a band across the middle (CutIn), so their window
+// is longer. Keyed by skill name; the value picks the art and colours.
+export type CutInKind = 'blitz' | 'grave' | 'pyre';
+export const CUTINS: Record<string, CutInKind> = { 'Beast Blitz': 'blitz', 'Grave Call': 'grave' };
+export const CUTIN_MS = 2400;
+// Creatures whose spell-trigger (not a cast-time skill) also cuts in. It fires on every sorcery, so the window is shorter.
+export const TRIGGER_CUTINS: Record<string, CutInKind> = { pyre_adept: 'pyre' };
+export const TRIGGER_CUTIN_MS = 1800;
 /** How long a creature's cast-time skill holds the spotlight (and so delays its effect). */
-export const skillMs = (skill: string): number => (skill === 'Beast Blitz' ? BLITZ_ULT_MS : SKILL_MS);
+export const skillMs = (skill: string): number => (CUTINS[skill] ? CUTIN_MS : SKILL_MS);
 // Derived from the card data (`skill` on a creature = a skill that fires as it enters), not hand-kept.
 export const SKILL_CREATURES: Record<string, string> = Object.fromEntries(
   Object.values(CARDS)

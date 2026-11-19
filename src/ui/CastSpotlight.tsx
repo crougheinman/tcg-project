@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { getDef } from '../cards/cards';
 import { useGame } from '../store/gameStore';
 import { PCard } from './CardPreview';
-import { BlitzUltimate } from './BlitzUltimate';
+import { CutIn } from './CutIn';
 
 // While a sorcery, instant or creature skill is being cast, its card floats up in the middle
 // of the table and glows, so the player can see WHAT is being cast and WHO is casting it.
@@ -43,10 +43,10 @@ export function CastSpotlight() {
           );
         })}
       </AnimatePresence>
-      {/* Beast Blitz is an ultimate: the art cuts in across the middle for the whole window */}
+      {/* An ultimate (Beast Blitz, Grave Call): its face cuts in across the middle for the whole window */}
       <AnimatePresence>
         {spots
-          .filter((sp) => sp.blitz)
+          .filter((sp, i, all) => sp.cutIn && all.findIndex((o) => o.cutIn === sp.cutIn) === i) // one band per kind
           .flatMap((sp) => [
             // a dim backdrop so the skill is the only thing to look at
             <motion.div
@@ -57,7 +57,7 @@ export function CastSpotlight() {
               exit={{ opacity: 0, transition: { duration: 0.4 } }}
               transition={{ duration: 0.3 }}
             />,
-            <BlitzUltimate key={'ult' + sp.id} />,
+            <CutIn key={'ult' + sp.id} kind={sp.cutIn!} />,
           ])}
       </AnimatePresence>
     </div>

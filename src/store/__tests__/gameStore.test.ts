@@ -339,7 +339,7 @@ describe('cast spotlight', () => {
       useGame.getState().dispatch({ type: 'castCreature', iid: k2 });
       expect(useGame.getState().charging?.kind).toBe('cast');
       expect(useGame.getState().spotlights[0].label).toBe('✦ Beast Blitz');
-      expect(useGame.getState().spotlights[0].blitz).toBe(true);
+      expect(useGame.getState().spotlights[0].cutIn).toBe('blitz');
       vi.advanceTimersByTime(2400);
       expect(inHand('kunoichi')).toBe(false);
 
@@ -349,7 +349,7 @@ describe('cast spotlight', () => {
       g2.players.A.battlefield.push(card('kunoichi', 'A'));
       useGame.setState({ game: g2 });
       useGame.getState().dispatch({ type: 'castCreature', iid: cub });
-      expect(useGame.getState().spotlights[0].blitz).toBe(true);
+      expect(useGame.getState().spotlights[0].cutIn).toBe('blitz');
       expect(useGame.getState().spotlights[0].card.def).toBe('kunoichi');
       vi.advanceTimersByTime(2400);
 
@@ -358,6 +358,16 @@ describe('cast spotlight', () => {
       expect(useGame.getState().charging).toBeNull(); // no skill -> no delay, no spotlight
       expect(useGame.getState().spotlights).toEqual([]);
       expect(inHand('ember_sprite')).toBe(false); // resolved at once
+    });
+
+    it('Grave Call (Grave Necromancer) gets the green cut-in window', () => {
+      const n = park(['grave_necromancer']);
+      useGame.getState().dispatch({ type: 'castCreature', iid: n });
+      expect(useGame.getState().charging?.kind).toBe('cast');
+      expect(useGame.getState().spotlights[0].label).toBe('✦ Grave Call');
+      expect(useGame.getState().spotlights[0].cutIn).toBe('grave');
+      vi.advanceTimersByTime(2400);
+      expect(inHand('grave_necromancer')).toBe(false);
     });
 
     it('still ignores input while the card is on show', () => {

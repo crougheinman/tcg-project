@@ -37,6 +37,8 @@ import {
   SMOKE_SPELLS,
   STRIKE_STAGGER_MS,
   TRIGGER_CHARGE_MS,
+  TRIGGER_CUTIN_MS,
+  TRIGGER_CUTINS,
   TRIGGER_SPOT_MS,
   travelMsFor,
 } from './fxTiming';
@@ -411,7 +413,9 @@ export function BoardFx({ game }: { game: GameState }) {
             card: cr,
             ownerId: sp.owner,
             label: `✦ ${crDef.name} triggers`,
-            ms: TRIGGER_SPOT_MS,
+            ...(TRIGGER_CUTINS[cr.def]
+              ? { ms: TRIGGER_CUTIN_MS, cutIn: TRIGGER_CUTINS[cr.def] }
+              : { ms: TRIGGER_SPOT_MS }),
           });
         }
         if (crDef.spellTrigger.type !== 'damage') continue;
