@@ -370,6 +370,16 @@ describe('cast spotlight', () => {
       expect(inHand('grave_necromancer')).toBe(false);
     });
 
+    it('Whipflash (Thornwood Brute) gets the green cut-in window', () => {
+      const n = park(['thornwood_brute']);
+      useGame.getState().dispatch({ type: 'castCreature', iid: n });
+      expect(useGame.getState().charging?.kind).toBe('cast');
+      expect(useGame.getState().spotlights[0].label).toBe('✦ Whipflash');
+      expect(useGame.getState().spotlights[0].cutIn).toBe('whip');
+      vi.advanceTimersByTime(2400);
+      expect(inHand('thornwood_brute')).toBe(false);
+    });
+
     it('still ignores input while the card is on show', () => {
       const iid = park(['insight']);
       useGame.getState().dispatch({ type: 'castSorcery', iid });

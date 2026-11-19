@@ -30,8 +30,8 @@ export const CAST_MS = 1300;
 export const SKILL_MS = 1300;
 // Some skills are "ultimates": the caster's face cuts in as a band across the middle (CutIn), so their window
 // is longer. Keyed by skill name; the value picks the art and colours.
-export type CutInKind = 'blitz' | 'grave' | 'pyre';
-export const CUTINS: Record<string, CutInKind> = { 'Beast Blitz': 'blitz', 'Grave Call': 'grave' };
+export type CutInKind = 'blitz' | 'grave' | 'pyre' | 'whip';
+export const CUTINS: Record<string, CutInKind> = { 'Beast Blitz': 'blitz', 'Grave Call': 'grave', Whipflash: 'whip' };
 export const CUTIN_MS = 2400;
 // Creatures whose spell-trigger (not a cast-time skill) also cuts in. It fires on every sorcery, so the window is shorter.
 export const TRIGGER_CUTINS: Record<string, CutInKind> = { pyre_adept: 'pyre' };

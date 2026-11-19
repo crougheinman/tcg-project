@@ -65,10 +65,11 @@ the change (below). Playwright is not a project dependency; it must exist where 
   card stays until then via `CardView` variants.
 - **Skill cut-ins** (`CutIn.tsx`, `CastSpotlight.tsx`): a slanted band across the middle with the caster's face
   right of centre (so the floating spotlight card never covers it), speed lines, flash, dim backdrop. Kinds in
-  `fxTiming.ts`: `CUTINS` (cast-time skills: Beast Blitz `blitz`, Grave Call `grave`, 2.4 s) and
+  `fxTiming.ts`: `CUTINS` (cast-time skills: Beast Blitz `blitz`, Grave Call `grave`, Thornwood Brute's Whipflash `whip`, 2.4 s) and
   `TRIGGER_CUTINS` (spell triggers: Pyre Adept `pyre`, 1.8 s). Colours are CSS vars on `.blitz-ult.<kind>`.
   One band per kind at a time. To add one: art in `public/ui/`, entry in `CutIn.tsx` `ART`, a table entry, a
-  colour block in `index.css`.
+  colour block in `index.css`. The `whip` art is on white, so its `.bu-art` uses `mix-blend-mode: multiply` over a green gradient band (`--cut-bg`
+  can be a gradient).
 - **Beast Blitz** (engine + store): Kunoichi gives `BLITZ_BEASTS` (+1/+1: Swift Lancer, Sky Talon, Stoneback
   Cub, Wolf, Thornwood Brute, Dread Maw). `blitzCue(player, card)` decides when it *announces* (log line,
   spotlight, cut-in): only when Kunoichi and a beast meet, whichever arrives second, or Call Wolves makes wolves
@@ -157,7 +158,7 @@ captions), size it for its use (landscape 4:3 art window in the hover preview, p
 `art: '/cards/<id>.webp'` on the card in `cards.ts`, and check it in the game at desktop and phone.
 Replaced so far: insight, kunoichi, swift_lancer, pyre_adept, grave_necromancer, ember_sprite, stoneback_cub,
 sky_talon, thornwood_brute, granite_sentinel, storm_drake, dread_maw.
-Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.webp`, `pyre-glare.webp`).
+Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.webp`, `pyre-glare.webp`, `whip-face.webp`).
 
 ## Workflow rules from the owner
 
@@ -185,6 +186,7 @@ Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.
 
 ## Change log (newest first; add a line per change)
 
+- Skill cut-in for Thornwood Brute's Whipflash (snarling badger on a thorn-green band); new `whip` cut-in kind.
 - Card Codex detail card tilts in 3D: follows the mouse on desktop, the gyroscope on phones; parallax art, floating panel, glare.
 - Card Codex detail view: the art fills the whole modal; details sit in a translucent frosted panel over it.
 - New optimized WebP art (420-480px, ~40 KB) for Ember Sprite, Stoneback Cub, Sky Talon, Thornwood Brute, Granite
