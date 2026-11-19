@@ -51,16 +51,23 @@ painterly textured background. One clear subject, a readable silhouette, an expr
 Kunoichi, Swift Lancer, Pyre Adept, Grave Necromancer, Insight, Ember Sprite, Stoneback Cub, Sky Talon, Thornwood
 Brute, Granite Sentinel, Storm Drake, Dread Maw, Soothe, Pyroblast, Ancient Treant, Call Wolves, Overgrowth, Bulwark,
 Zombie token, Shambling Ghoul, Plague Priest, Rotting Hulk, Carrion Colossus, Raise Horde, Wolf token, Ronin Blade,
-Kensei Duelist, Iron Shogun, Iaijutsu Strike, Warding Stance, Scorch.
+Kensei Duelist, Iron Shogun, Iaijutsu Strike, Warding Stance, Scorch, Ashigaru, Cinderbolt, Shuriken Volley, Topple, Take Counter, Grasp from the Grave, Soul Siphon, Wild Growth, Aether Well, Withering Touch.
 
 ## To do (still on the original art)
 
-Still original and without a prompt yet: Ashigaru, Aether Well, Cinderbolt, Grasp from the Grave, Shuriken Volley, Soul Siphon,
-Take Counter, Topple, Wild Growth, Withering Touch.
+Nothing: every card has new art.
 
 ---
 
 ## Prompts: Grave Tide (undead)
+
+**Grave Necromancer** (1/3; Grave Call: return your most recently fallen creature to hand; whenever you cast a spell, raise a 1/1 Zombie; "The dead make patient students.")
+Lore: Sael, First of the Read Terms, Sorae's brother, trained at the Pyre beside her. He decided the record was correct and
+stopped drawing on the living account. Not a fanatic, just exact. He keeps a ledger. Match his look in the Soul Siphon art
+(hooded black-green robe, paper ritual tags, bone-claw necklace, bandaged hand, satchel, skull staff with green flame). The
+art in the game is this redo (delivered).
+
+> Sael, the Grave Necromancer, a gaunt pale young man under a deep black-green hood, faintly glowing green eyes, a calm thin smile. Torn dark robes with paper ritual tags and a bone-claw necklace, a bandaged left hand holding an open ledger, a leather satchel at his hip, and a gnarled staff topped with a skull wreathed in pale green flame in his right hand. He beckons with two fingers; behind him a translucent pale-green soldier in old armour steps up out of an open grave, called back by name, while a small ragged zombie claws out of the soil by his boot. A foggy graveyard at dusk with leaning headstones and a broken banner. Palette: black-green, ghostly pale green, bone white, muted grey sky.
 
 **Zombie token** (1/1: "It rises again, and again, and again.")
 Drawn as a dead Clan footman (Ashigaru). There is also a living Ashigaru card, which is separate.
@@ -97,6 +104,12 @@ Lore: not raised by anyone; enough hollowed dead lie together until they "agree"
 
 ## Prompts: Iron Blossom Clans
 
+**Ashigaru** (2/1; "A footman of the clan — spear steady, honor steadier.")
+The living counterpart of the Zombie token (a dead Ashigaru): same lacquered armour and straw hat, so the pair reads as
+"before and after". Keep him a plain rank-and-file soldier, steady rather than heroic.
+
+> An Ashigaru, a young clan foot soldier in red-brown lacquered armour over a dark tunic, a wide conical straw jingasa hat, standing in a braced forward stance with a long spear levelled at the viewer, his jaw set and eyes steady. A small clan crest on his chest plate. Behind him a few more spears and banners of the Iron Blossom clan in a dusty early-morning field, with a few cherry petals drifting past. Palette: rust red, dark iron, straw yellow, dusty tan, petal pink accents.
+
 **Ronin Blade** (2/2, haste; "A masterless sword, restless even in the fray.")
 Lore: Juro, the Masterless, who broke from the banner at the Kettle.
 
@@ -127,6 +140,59 @@ Kept distinct from Pyroblast (a vortex from one palm): this is a sweeping wall o
 
 > A robed Pyre monk with both arms thrown wide as a rolling wall of white-orange flame sweeps across a stone courtyard toward the viewer, the ground glassed and cracking where it passes, heat-haze warping the air. His sleeves burn away into ribbons of light. A line of fire reaching the horizon at sunset. Palette: white-hot yellow, deep orange, charcoal.
 
+**Cinderbolt** (sorcery, 3 damage, cost 1; "A handful of the old warmth, spent all at once.")
+Kept small and fast next to Pyroblast (a vortex) and Scorch (a wall): one tight bolt.
+
+> A Pyre adept's cupped hands thrown forward in the foreground, just releasing a single tight white-orange bolt of fire the size of a fist, a thin trail of sparks and heat-ripple streaking across a dusky stone courtyard toward a distant target. Her sleeves flutter back, her face half-lit by the glow, calm and exact. The flame is compact and bright, not a blaze. Palette: white-hot core, orange, deep blue-black dusk, charcoal.
+
+## Prompts: Iron Blossom Clans (spells)
+
+**Shuriken Volley** (instant, 3 damage; "Steel falls like rain, and just as quietly.")
+Uses Hana of the Single Breath (the Kensei Duelist card): white and crimson kimono, black hair in a bun with red pins.
+
+> Hana of the Single Breath, the Kensei Duelist, in her white and crimson kimono with her black hair in a bun held by red pins, mid-throw with one arm swept across her body, a fan of a dozen steel shuriken spinning outward from her hand toward the viewer in a wide arc, each with a thin silver motion trail. Her eyes are calm and focused. A dark tiled courtyard at dusk behind her, a few cherry petals sliced in two by the blades. Palette: white, crimson, steel silver, deep blue-grey dusk.
+
+## Prompts: Stonewall
+
+**Take Counter** (instant, cast only while blocking, destroy a tapped creature; "Strike when its guard is down.")
+Lore: the Counter-Stroke, the trained patience to stand still while a thing commits, then kill it where it cannot withdraw.
+
+> A Stonewall defender in grey-blue plain armour standing perfectly still as a huge armoured attacker lunges at him with a raised axe, overextended and off balance. At the last instant the defender's short blade flashes in one clean upward counter-stroke, a bright silver slash across the frame. A narrow stone gateway behind them with dust kicked up. Calm face, steady stance. Palette: slate grey, steel silver, dusty tan, a single warm gold glint on the blade.
+
+**Topple** (instant, tap all opposing creatures with toughness 2 or less; "The small ones never see the ground rise to meet them.")
+
+> A cracked stone road buckling upward in a sudden wave, throwing a swarm of small, quick enemy raiders (light-armoured, with short blades) off their feet mid-charge, arms flailing, weapons flying. In the background a lone Stonewall guard stands unmoved, one palm pressed to the ground. Dust, stone chips and a low heavy shockwave ring. Palette: slate grey, dusty tan, pale blue, deep brown shadow.
+
+## Prompts: Grave Tide (spells)
+
+**Grasp from the Grave** (instant, cast only while blocking, destroy a tapped creature; "Cold hands close around its ankles.")
+Different from Raise Horde (a crowd rising): this is a few pale hands taking one overcommitted attacker.
+
+> A heavily armoured attacker mid-stride across a misty graveyard path, suddenly yanked down as pale, grey-green skeletal hands burst from the soil and clamp around his ankles and shins, his face lit by shock, his weapon falling from his hand. Cracked grave-soil, a leaning headstone, and a faint cold green glow from the ground. Palette: sickly green, bone grey, cold black-blue, mud brown.
+
+**Soul Siphon** (instant, gain 5 life; "Their last breath becomes your first.")
+
+> A hooded Grave Tide necromancer standing over a fallen soldier at dusk, one open palm raised as ghostly pale-green wisps of soul stream out of the dying man's chest and mouth into the necromancer's hand and chest in a curling ribbon. The necromancer's eyes glow faint green, his expression calm and grave rather than gleeful. A dim battlefield behind them with broken banners. Palette: ghostly green, black cloak, bone white, muted grey sky.
+
+**Withering Touch** (instant, 3 damage; "Flesh sloughs from bone at the lightest caress.")
+
+Lore: the Tide's slow arithmetic, one touch and the account is settled. No flames, no blast: a quiet, intimate decay. Keep it distinct from Soul Siphon (a necromancer over a body) and Grasp from the Grave (hands from the earth). Square, one clear focal point.
+
+> A close view of a pale, thin bare hand in a ragged black-green sleeve, reaching in from the left and resting two fingertips on the gauntlet of a veteran soldier in dented plate armour. Where the fingers touch, the steel is flaking to rust and the glove beneath is blackening and crumbling, grey-green veins of rot spreading outward across the armour in a branching fan. A small green leaf and a few flowers at the soldier's belt wither and turn to brown dust beside it. The soldier's face is turned half to the viewer, wide-eyed, mouth open in silent horror. A misty graveyard track at dusk behind them. Palette: grey-green, ash black, sickly yellow, rust brown, deep shadow.
+
+## Prompts: Wild (spell)
+
+**Wild Growth** (sorcery, +2/+2; "It never wears off. The forest is not in the habit of taking back.")
+
+> A young stoneback bear cub (or any small beast) in a sunlit forest clearing, caught mid-swell as green light and curling vines wrap around it and its body visibly grows larger and stronger, muscles thickening, moss and small flowers blooming along its fur. Fresh shoots and glowing leaves swirl upward around it. A calm, confident look on its face. Palette: bright spring green, golden light, warm brown fur, soft white blossoms.
+
+## Prompts: Land
+
+**Aether Well** (land, tap for one mana; "It hums with borrowed light.")
+Lore: a puncture in the buried body of the dead Sleeper; what rises through it is not water and not light but the last warmth of a dream going cold. Keep it quiet and ancient, not flashy.
+
+> An ancient circular stone well at the centre of a quiet ruined shrine courtyard, its mouth filled with a soft pale blue-gold light that wells up and spills in slow glowing ripples over the stone rim. Tiny motes of light drift upward like fading embers, and faint hairline cracks run through the ancient paving, glowing at the edges. Moss on old stones, a lantern or two, a calm hush. Palette: soft blue-gold glow, mossy green-grey stone, deep blue shadow.
+
 ---
 
 ## Skill cut-in art (the band that slams across the screen when a skill fires)
@@ -154,6 +220,21 @@ Marrek, who has held the middle pass for thirty-one years: "we are not here to w
 the card art (dented steel plate, round shield, golden barrier). Same shared style line with "Wide 2.5:1 composition".
 
 > Wide 2.5:1 extreme close-up of Castellan Marrek's face, a grim veteran with a weathered, scarred face and a short grey beard, wearing a dented steel helmet with a nose guard, eyes hard and unblinking, jaw set. A large round steel shield edge cuts across the lower foreground, and a translucent golden dome of light flashes outward around him, blasting dust and small stones past the frame in streaks. Behind him a dim stone mountain pass. A sudden bright flash of gold light at the shield's rim. Palette: steel grey, warm gold, dusty tan, deep blue-grey shadow. Keep the left third dark and calm.
+
+**Grave Necromancer: Grave Call (Sael calls the most recently fallen back to your hand)** (delivered as `grave-grin.webp`, cropped to 731x365)
+Same shared style line with "Wide 2.5:1 composition". The `grave` band is dark green (`#06140c`) with pale mint and green edges,
+so keep the background near black-green. Matches the card art above (Sael: hood, glowing eyes, calm thin smile).
+
+> Wide 2.5:1 extreme close-up of Sael's face, a gaunt pale necromancer under a deep black-green hood, eyes glowing bright pale green and fixed on the viewer, a slow thin smile of quiet certainty. One bandaged hand rises at the right edge of the frame, two fingers curled in a beckoning gesture with a curl of green flame, and ghostly pale-green faces and reaching hands drift up out of the dark haze beside him, answering the call. Faint green motes and ash streak past. Paper ritual tags and a bone-claw necklace just visible at the collar. Palette: black-green, pale mint-green glow, bone white, with bright catchlights in the eyes. Keep the left third dark and calm.
+
+**Plague Priest: Rot (Mother Vess reads your hand aloud, and what she reads is gone)** (delivered as `rot-face.webp`, 1010x401; wired as the `rot` kind)
+Lore: Mother Vess prepares the living to rise whole; she is patient, never cruel. Rot makes the opponent discard a card at
+random when she enters. Match the card art (tattered green-black vestments, censer smoke, drifting pages). Same shared style
+line with "Wide 2.5:1 composition". Keep this one a different colour from the bright mint Grave Call band: murky yellow-green
+with candle-gold, so the two Grave Tide cut-ins do not look alike. To wire it: art in `public/ui/rot-face.webp`, a `rot` entry
+in `CutIn.tsx` `ART`, `CUTINS` (`Rot: 'rot'`) in `fxTiming.ts`, a colour block in `index.css`, and the shared right-offset rule.
+
+> Wide 2.5:1 extreme close-up of Mother Vess's face, a serene pale priestess under a tattered green-black hood, heavy-lidded eyes lowered as if reading, lips parted mid-recitation, a calm, almost tender expression. A thin curl of grey-green censer smoke crosses the frame, and from the right edge several torn cards and scraps of parchment drift past her, their edges crumbling to ash and spores as if the words on them are being unwritten. Tiny yellow-green motes glow in the dark haze. A single candle-gold catchlight on her cheek. Palette: murky yellow-green, ash grey, bruise-black, candle gold. Keep the left third dark and calm.
 
 **Pyre Adept: spell trigger (every sorcery she casts burns the opponent)** (delivered as `pyre-glare.webp`, 1014x402)
 Uses the shared style line, with "Wide 2.5:1 composition" in place of "Square composition".

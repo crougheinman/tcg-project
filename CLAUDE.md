@@ -65,7 +65,7 @@ the change (below). Playwright is not a project dependency; it must exist where 
   card stays until then via `CardView` variants.
 - **Skill cut-ins** (`CutIn.tsx`, `CastSpotlight.tsx`): a slanted band across the middle with the caster's face
   right of centre (so the floating spotlight card never covers it), speed lines, flash, dim backdrop. Kinds in
-  `fxTiming.ts`: `CUTINS` (cast-time skills: Beast Blitz `blitz`, Grave Call `grave`, Thornwood Brute's Whipflash `whip`, 2.4 s) and
+  `fxTiming.ts`: `CUTINS` (cast-time skills: Beast Blitz `blitz`, Grave Call `grave`, Thornwood Brute's Whipflash `whip`, Plague Priest's Rot `rot`, 2.4 s) and
   `TRIGGER_CUTINS` (spell triggers: Pyre Adept `pyre`, 1.8 s). `FLASH_CUTINS` (keyed by card id: Bulwark `flash`, 2.4 s) plays only for a Flash cast, i.e. `isFlashCast` in `rules.ts`: a flash
   creature cast outside `main1` (attack or block step); cast in the main phase it is an ordinary creature. Colours are CSS vars on `.blitz-ult.<kind>`.
   One band per kind at a time. To add one: art in `public/ui/`, entry in `CutIn.tsx` `ART`, a table entry, a
@@ -76,6 +76,7 @@ the change (below). Playwright is not a project dependency; it must exist where 
   spotlight, cut-in): only when Kunoichi and a beast meet, whichever arrives second, or Call Wolves makes wolves
   beside her. Kunoichi alone is a plain 2/1. Empowered beasts wear `Lightning.tsx` (yellow bolts revolving around
   the card).
+- **Home duellists** (`MainMenu.tsx` `useDuelists`, `.vs-side` in `index.css`): the two slabs behind the menu show random creatures from the eight decks, each swapped every 9 s (left first, right half a cycle later, never the same card on both sides). The corner tag shows the card name and its deck, and re-fades with the art. The art fades in, then drifts sideways (`vs-drift`, 18 s, opposite directions; the 1.3 zoom leaves room to travel). Reduced motion keeps the swap, drops the drift. Art comes from `def.art`, so it follows card-art replacements automatically.
 - **Drag to attack** (`Board.tsx`, `CardView.tsx`): in your Main phase, dragging an untapped, non-summoning-sick
   creature onto the enemy zone (`.player-zone.opp`) advances to combat with it pre-picked (`autoAttack` ref).
   Other creatures are not draggable. Works for mouse and touch (framer sets `touch-action: none`).
@@ -160,10 +161,10 @@ captions), size it for its use (landscape 4:3 art window in the hover preview, p
 Replaced so far: insight, kunoichi, swift_lancer, pyre_adept, grave_necromancer, ember_sprite, stoneback_cub,
 sky_talon, thornwood_brute, granite_sentinel, storm_drake, dread_maw, soothe, pyroblast, ancient_treant, call_wolves, overgrowth, bulwark, zombie_token, shambling_ghoul, plague_priest,
 rotting_hulk, carrion_colossus, raise_horde, wolf_token, ronin_blade, kensei_duelist, iron_shogun, iaijutsu_strike,
-warding_stance, scorch.
+warding_stance, scorch, ashigaru, cinderbolt, shuriken_volley, topple, take_counter, grasp_from_grave, soul_siphon, wild_growth, aether_well, withering_touch (every card now has new art).
 The design guide (house style, shared prompt line, composition rules, and a prompt per card) is `card-art.md`: use it when
 asking for new art, and add a prompt there for any card whose art is replaced.
-Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.webp`, `pyre-glare.webp`, `whip-face.webp`, `flash-guard.webp`).
+Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.webp`, `pyre-glare.webp`, `whip-face.webp`, `flash-guard.webp`, `rot-face.webp`).
 
 ## Workflow rules from the owner
 
@@ -191,6 +192,15 @@ Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.
 
 ## Change log (newest first; add a line per change)
 
+- `card-art.md`: Plague Priest Rot cut-in prompt (new `rot` kind, not wired yet) and a refined Withering Touch card art prompt.
+- New Aether Well card art; new Grave Necromancer card art and Grave Call cut-in face (`grave-grin.webp`, 731x365, Sael matched to the Soul Siphon art); old Aether Well PNG deleted.
+- `card-art.md`: prompts for a redo of the Grave Necromancer card art and the Grave Call cut-in (Sael, matched to the Soul Siphon art).
+- New card art for Topple, Take Counter, Grasp from the Grave, Soul Siphon and Wild Growth, 420px WebP; old PNGs deleted. Only Withering Touch and Aether Well remain on original art.
+- New Cinderbolt (flame in an open hand) and Shuriken Volley (Hana mid-throw) card art, 420px WebP; old PNGs deleted.
+- Home page: random creature art on both sides with the matching name and deck, swapping every 9 s and drifting slowly sideways (also fixes the broken hardcoded Iron Shogun / Storm Drake PNGs).
+- `card-art.md`: prompts for the last nine cards on original art (Cinderbolt, Shuriken Volley, Take Counter, Topple, Grasp from the Grave, Soul Siphon, Withering Touch, Wild Growth, Aether Well).
+- New Ashigaru card art (clan footman with a levelled spear), 420px WebP; old PNG deleted.
+- `card-art.md`: added the Ashigaru card art prompt.
 - Bulwark Flash cut-in: new `flash` kind with Marrek's face (`public/ui/flash-guard.webp`), played only when a flash creature is cast at instant speed (`isFlashCast`); tests added.
 - New 420px WebP art (~33-44 KB) for the Wolf token, Ronin Blade, Kensei Duelist, Iron Shogun, Iaijutsu Strike, Warding Stance and Scorch; old PNGs deleted; `card-art.md` status updated.
 - `card-art.md`: added the Bulwark Flash cut-in prompt (art only; no `flash` cut-in exists in the game yet).
