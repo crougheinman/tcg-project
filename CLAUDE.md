@@ -78,6 +78,16 @@ the change (below). Playwright is not a project dependency; it must exist where 
   creature onto the enemy zone (`.player-zone.opp`) advances to combat with it pre-picked (`autoAttack` ref).
   Other creatures are not draggable. Works for mouse and touch (framer sets `touch-action: none`).
 
+- **Codex detail view** (`CardGallery.tsx`, `.gallery-detail` in `index.css`): the whole modal is the card. The art
+  (`.gallery-detail-art`, `object-fit: cover`) fills it edge to edge and name / type / cost / P/T / rules / flavor sit in a
+  frosted translucent panel (`.gallery-detail-info`) at the bottom. Phone width uses a shorter box and a compact panel so
+  landscape art (Dread Maw) keeps its face visible. Grid cards and the deck builder still use `CardFace`.
+  **3D tilt** (`useTilt.ts`): the card (`.gallery-detail`, inside `.gallery-stage` which holds the perspective) rotates toward the
+  pointer (mouse/pen/finger drag, up to 14deg) or the phone's gyroscope (`deviceorientation`, relative to how the phone is held when
+  the card opens; iOS needs `requestGyro()` called from the opening tap). A rAF loop eases and writes CSS vars (`--rx/--ry`
+  degrees, `--px/--py` -1..1, `--gx/--gy` glare) so there are no React re-renders; the art counter-slides, the info panel slides
+  with the tilt, and a soft-light sheen follows the light. Off under `prefers-reduced-motion`. Gyro needs a secure context (https/localhost).
+
 ## Preview / testing quirks
 
 - The preview tab can throttle and serve stale screenshots; to inspect a transient effect, clone the DOM and
@@ -145,7 +155,8 @@ Art auto-wires to `public/cards/<id>.png`. To replace art: crop to the interior 
 captions), size it for its use (landscape 4:3 art window in the hover preview, portrait board cards use
 `object-fit: cover`), export **WebP** (about 400-480 px, target under 45 KB), delete the old PNG, set
 `art: '/cards/<id>.webp'` on the card in `cards.ts`, and check it in the game at desktop and phone.
-Replaced so far: insight, kunoichi, swift_lancer, pyre_adept, grave_necromancer.
+Replaced so far: insight, kunoichi, swift_lancer, pyre_adept, grave_necromancer, ember_sprite, stoneback_cub,
+sky_talon, thornwood_brute, granite_sentinel, storm_drake, dread_maw.
 Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.webp`, `pyre-glare.webp`).
 
 ## Workflow rules from the owner
@@ -174,6 +185,10 @@ Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.
 
 ## Change log (newest first; add a line per change)
 
+- Card Codex detail card tilts in 3D: follows the mouse on desktop, the gyroscope on phones; parallax art, floating panel, glare.
+- Card Codex detail view: the art fills the whole modal; details sit in a translucent frosted panel over it.
+- New optimized WebP art (420-480px, ~40 KB) for Ember Sprite, Stoneback Cub, Sky Talon, Thornwood Brute, Granite
+  Sentinel, Storm Drake and Dread Maw; explicit `art:` set, old PNGs deleted.
 - Merged `main` (owner's CLAUDE.md, new Kunoichi/Swift Lancer art) into this branch; one CLAUDE.md now holds the owner's rules
   plus the UI-systems notes and this log. Attribution rule kept as "never credit Claude".
 - Skill cut-ins for Grave Call (necromancer grin) and Pyre Adept's spell trigger (burning glare); Kunoichi's cut-in

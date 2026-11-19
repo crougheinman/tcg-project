@@ -319,11 +319,25 @@ input {
   position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 20px;
   background: rgba(6, 8, 13, 0.82);
 }
+.gallery-stage { width: 100%; max-width: 520px; perspective: 1000px; }
 .gallery-detail {
-  position: relative; display: flex; gap: 22px; align-items: center;
-  max-width: 580px; width: 100%; color: var(--vs-paper);
+  position: relative; isolation: isolate; display: flex; flex-direction: column; justify-content: flex-end;
+  width: 100%; min-height: min(520px, 72vh); overflow: hidden; color: var(--vs-paper);
   background: var(--vs-ink); border: 3px solid var(--vs-yellow); border-radius: 0;
-  padding: 24px; box-shadow: 10px 10px 0 rgba(0, 0, 0, 0.55);
+  /* --rx/--ry/--px/--py/--gx/--gy are written by useTilt (pointer on desktop, gyroscope on phones). */
+  transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); will-change: transform;
+  box-shadow: calc(10px - var(--px, 0) * 16px) calc(10px - var(--py, 0) * 16px) 0 rgba(0, 0, 0, 0.55);
+}
+/* The picture is the whole card; the details ride on a frosted panel over it. Art slides against the tilt,
+   the panel slides with it, and a sheen follows the light, so the layers read as depth. */
+.gallery-detail-art {
+  position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%;
+  object-fit: cover; object-position: 66% 40%; pointer-events: none; user-select: none; -webkit-user-drag: none;
+  scale: 1.12; translate: calc(var(--px, 0) * -16px) calc(var(--py, 0) * -16px);
+}
+.gallery-detail::after {
+  content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none; mix-blend-mode: soft-light;
+  background: radial-gradient(circle at var(--gx, 50%) var(--gy, 50%), rgba(255, 255, 255, 0.55), transparent 55%);
 }
 .gallery-detail-close {
   position: absolute; top: 8px; right: 12px; z-index: 2; padding: 0;
@@ -331,13 +345,12 @@ input {
   color: var(--vs-paper); background: rgba(10, 12, 19, 0.86); border: 2px solid rgba(139, 147, 166, 0.55); transform: skewX(-12deg);
 }
 .gallery-detail-close:hover:not(:disabled) { background: var(--vs-yellow); color: var(--vs-ink); border-color: var(--vs-ink); transform: skewX(-12deg); }
-.gallery-detail-cardwrap { flex: none; width: calc(var(--card-w) * 1.5); height: calc(var(--card-h) * 1.5); }
-.gcard-big { transform: scale(1.5); transform-origin: top left; cursor: default; }
-.gcard-big:hover {
-  transform: scale(1.5);
-  box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px var(--wood), 0 4px 10px rgba(0, 0, 0, 0.4);
+.gallery-detail-info {
+  min-width: 0; margin: 14px; padding: 14px 16px 16px;
+  background: rgba(8, 10, 16, 0.6); border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  translate: calc(var(--px, 0) * 7px) calc(var(--py, 0) * 7px);
 }
-.gallery-detail-info { flex: 1; min-width: 0; }
 .gallery-detail-info h3 { font: 400 30px / 1.05 'Anton', sans-serif; letter-spacing: 0.05em; text-transform: uppercase; color: var(--vs-paper); margin: 0 0 10px; }
 .gallery-detail-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .meta-pill {
@@ -349,8 +362,12 @@ input {
 .gallery-detail-flavor { color: rgba(242, 239, 228, 0.6); font-style: italic; font-size: 16px; line-height: 1.35; margin: 0; }
 
 @media (max-width: 560px) {
-  .gallery-detail { flex-direction: column; text-align: center; }
-  .gallery-detail-cardwrap { margin: 0 auto; }
+  .gallery-detail { text-align: center; min-height: 430px; }
+  .gallery-detail-info { margin: 10px; padding: 10px 12px 12px; }
+  .gallery-detail-info h3 { font-size: 24px; margin-bottom: 8px; }
+  .gallery-detail-meta { margin-bottom: 8px; }
+  .gallery-detail-rules { font-size: 15px; margin-bottom: 6px; }
+  .gallery-detail-flavor { font-size: 13px; }
   .gallery-detail-meta { justify-content: center; }
 }
 @media (max-width: 640px) {

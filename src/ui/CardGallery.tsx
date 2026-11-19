@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CARDS } from '../cards/cards';
 import { KEYWORD_INFO, keywordLabel } from '../cards/keywords';
 import type { CardDef, CardType } from '../engine/types';
 import { CardFace } from './CardFace';
+import { artFallback } from './artFallback';
+import { requestGyro, useTilt } from './useTilt';
 
 // A browsable codex of every card in the game: search + type filter, and a click
 // to open a larger detail view with full rules text and flavor. Reuses the in-game
@@ -26,6 +28,14 @@ export function CardGallery({ onBack }: { onBack: () => void }) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [selected, setSelected] = useState<CardDef | null>(null);
+  const tiltRef = useRef<HTMLDivElement>(null);
+  useTilt(!!selected, tiltRef);
+
+  // Opening a card is the user gesture iOS needs before it will share the gyroscope.
+  const open = (def: CardDef) => {
+    void requestGyro();
+    setSelected(def);
+  };
 
   const all = useMemo(() => Object.values(CARDS), []);
 
@@ -103,11 +113,11 @@ export function CardGallery({ onBack }: { onBack: () => void }) {
                 className={`card card-${def.type} gcard`}
                 role="button"
                 tabIndex={0}
-                onClick={() => setSelected(def)}
+                onClick={() => open(def)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    setSelected(def);
+                    open(def);
                   }
                 }}
               >
@@ -139,44 +149,44 @@ export function CardGallery({ onBack }: { onBack: () => void }) {
             onClick={() => setSelected(null)}
           >
             <motion.div
-              className="gallery-detail"
+              className="gallery-stage"
               initial={{ opacity: 0, scale: 0.9, y: 12 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.92, y: 8 }}
               transition={{ type: 'spring', stiffness: 380, damping: 28 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <button
-                className="gallery-detail-close"
-                onClick={() => setSelected(null)}
-                aria-label="Close"
-              >
-                ×
-              </button>
-              <div className="gallery-detail-cardwrap">
-                <div className={`card card-${selected.type} gcard gcard-big`}>
-                  <CardFace def={selected} />
+              <div className="gallery-detail" ref={tiltRef}>
+                <button
+                  className="gallery-detail-close"
+                  onClick={() => setSelected(null)}
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+                {selected.art && (
+                  <img className="gallery-detail-art" src={selected.art} alt="" draggable={false} onError={artFallback} />
+                )}
+                <div className="gallery-detail-info">
+                  <h3>{selected.name}</h3>
+                  <div className="gallery-detail-meta">
+                    <span className={'gchip on ' + selected.type}>{selected.type}</span>
+                    {selected.type !== 'land' && <span className="meta-pill">◈ {selected.cost}</span>}
+                    {selected.type === 'creature' && (
+                      <span className="meta-pill">
+                        {selected.power}/{selected.toughness}
+                      </span>
+                    )}
+                    {selected.keywords?.map((k) => (
+                      <span key={k} className="meta-pill key" title={KEYWORD_INFO[k].rule}>
+                        {keywordLabel(k)}
+                      </span>
+                    ))}
+                    {selected.blockOnly && <span className="meta-pill key">block-only</span>}
+                  </div>
+                  {selected.text && <p className="gallery-detail-rules">{selected.text}</p>}
+                  {selected.flavor && <p className="gallery-detail-flavor">“{selected.flavor}”</p>}
                 </div>
-              </div>
-              <div className="gallery-detail-info">
-                <h3>{selected.name}</h3>
-                <div className="gallery-detail-meta">
-                  <span className={'gchip on ' + selected.type}>{selected.type}</span>
-                  {selected.type !== 'land' && <span className="meta-pill">◈ {selected.cost}</span>}
-                  {selected.type === 'creature' && (
-                    <span className="meta-pill">
-                      {selected.power}/{selected.toughness}
-                    </span>
-                  )}
-                  {selected.keywords?.map((k) => (
-                    <span key={k} className="meta-pill key" title={KEYWORD_INFO[k].rule}>
-                      {keywordLabel(k)}
-                    </span>
-                  ))}
-                  {selected.blockOnly && <span className="meta-pill key">block-only</span>}
-                </div>
-                {selected.text && <p className="gallery-detail-rules">{selected.text}</p>}
-                {selected.flavor && <p className="gallery-detail-flavor">“{selected.flavor}”</p>}
               </div>
             </motion.div>
           </motion.div>
