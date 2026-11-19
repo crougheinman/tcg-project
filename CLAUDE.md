@@ -194,6 +194,7 @@ Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.
 
 - New Thornwood Brute Whipflash cut-in face (panda-faced brute mid-lash, dark background, 1002x394); the `whip` band loses its multiply-over-gradient trick and gets a dark green background; `card-art.md` prompt added.
 - Moment cut-ins for Iron Shogun (The Charge, on attack), Storm Drake (Thunder, on enter) and Rotting Hulk (Last breath, on death): new `charge` / `thunder` / `breath` kinds, `momentCues` diff helper with tests, parked behind the block banner for The Charge.
+- `card-art.md`: Kensei Duelist First strike cut-in prompt (cold steel-silver and indigo, Hana's eyes snapping open; not wired in the game yet).
 - `card-art.md`: cut-in prompts for Iron Shogun (the Charge), Storm Drake (Thunder) and Rotting Hulk (Last breath); not wired in the game yet.
 - `card-art.md`: Plague Priest Rot cut-in prompt (new `rot` kind, not wired yet) and a refined Withering Touch card art prompt.
 - New Aether Well card art; new Grave Necromancer card art and Grave Call cut-in face (`grave-grin.webp`, 731x365, Sael matched to the Soul Siphon art); old Aether Well PNG deleted.
