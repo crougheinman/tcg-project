@@ -32,6 +32,7 @@ import {
   FS_SPOT_MS,
   IMPACT_MS,
   WINDUP_MS,
+  PARKED_CUE_FAILSAFE_MS,
   PROJECTILE_TRAVEL_MS,
   SLAM_DUST_MS,
   SMOKE_SPELLS,
@@ -45,6 +46,7 @@ import {
 import { FirstStrikeFx } from './FirstStrikeFx';
 import { CrackFx, DustFx } from './ShatterFx';
 import { useTimers } from './useTimers';
+import { momentCues, type MomentCue } from './momentCues';
 import type { Burst } from './Vfx';
 
 // three.js is heavy — split it into its own chunk, loaded only in-game.
@@ -59,7 +61,9 @@ const TRIGGER_THEME: SpellTheme = { core: '#fff2cf', glow: '#ff8a33', ring: '#ff
  * Self-contained: reads `game`, owns all fx state, queries the DOM by the
  * data-attributes Board renders. Pure flourish — never dispatches.
  */
-export function BoardFx({ game }: { game: GameState }) {
+export function BoardFx({ game, locked = false }: { game: GameState; locked?: boolean }) {
+  // The Charge waits here for the block-step phase banner to leave (see the moment cues below).
+  const parkedCues = useRef<MomentCue[]>([]);
   const [bursts, setBursts] = useState<Burst[]>([]);
   const [faceFlash, setFaceFlash] = useState(0);
   const [fsFx, setFsFx] = useState<{ id: number; side: 'me' | 'foe' } | null>(null);
@@ -169,6 +173,24 @@ export function BoardFx({ game }: { game: GameState }) {
     return () => setCharges((c) => c.filter((x) => x.id !== id));
   }, [charging]);
 
+  const showCue = (cue: MomentCue) =>
+    useGame.getState().pushSpotlight({
+      card: cue.card,
+      ownerId: cue.ownerId,
+      label: cue.label,
+      ms: TRIGGER_CUTIN_MS,
+      cutIn: cue.kind,
+    });
+  const flushCues = () => {
+    for (const cue of parkedCues.current.splice(0)) showCue(cue);
+  };
+  const wasLocked = useRef(false);
+  useEffect(() => {
+    if (wasLocked.current && !locked) flushCues();
+    wasLocked.current = locked;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locked]);
+
   // Spawn three.js particle bursts on damage (face + surviving creatures).
   useEffect(() => {
     const before = prevGame.current;
@@ -179,6 +201,7 @@ export function BoardFx({ game }: { game: GameState }) {
     // them all on fire; there is nothing to animate between two games.
     if (before.seed !== game.seed || game.turn < before.turn) {
       clearAll();
+      parkedCues.current = [];
       creatureRects.current = {};
       setDestroys([]);
       setProjectiles([]);
@@ -447,6 +470,17 @@ export function BoardFx({ game }: { game: GameState }) {
           ]);
         }, TRIGGER_CHARGE_MS);
       }
+    }
+
+    // Signature moments (The Charge, Thunder, Last breath): the creature's card floats up under its cut-in.
+    // Fired from the diff, so it plays alongside the action and never delays it (online included).
+    // Declaring attackers also raises the block-step phase banner, so The Charge is parked until the banner
+    // has left (`locked` falls), with a failsafe in case no banner ever comes.
+    for (const cue of momentCues(before, game)) {
+      if (cue.on === 'attack') {
+        parkedCues.current.push(cue);
+        later(flushCues, PARKED_CUE_FAILSAFE_MS);
+      } else showCue(cue);
     }
 
     // A land just entered -> it vaporizes into a blue mana orb that flies to its

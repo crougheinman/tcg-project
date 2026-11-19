@@ -30,7 +30,7 @@ export const CAST_MS = 1300;
 export const SKILL_MS = 1300;
 // Some skills are "ultimates": the caster's face cuts in as a band across the middle (CutIn), so their window
 // is longer. Keyed by skill name; the value picks the art and colours.
-export type CutInKind = 'blitz' | 'grave' | 'pyre' | 'whip' | 'flash' | 'rot';
+export type CutInKind = 'blitz' | 'grave' | 'pyre' | 'whip' | 'flash' | 'rot' | 'charge' | 'thunder' | 'breath';
 export const CUTINS: Record<string, CutInKind> = { 'Beast Blitz': 'blitz', 'Grave Call': 'grave', Whipflash: 'whip', Rot: 'rot' };
 export const CUTIN_MS = 2400;
 // Flash creatures that cut in when cast at instant speed (isFlashCast): Bulwark snapping the line shut. Keyed by card id.
@@ -38,6 +38,8 @@ export const FLASH_CUTINS: Record<string, CutInKind> = { bulwark: 'flash' };
 // Creatures whose spell-trigger (not a cast-time skill) also cuts in. It fires on every sorcery, so the window is shorter.
 export const TRIGGER_CUTINS: Record<string, CutInKind> = { pyre_adept: 'pyre' };
 export const TRIGGER_CUTIN_MS = 1800;
+// The Charge (Iron Shogun) waits for the block-step banner; if none ever clears it, it plays after this long anyway.
+export const PARKED_CUE_FAILSAFE_MS = 8000;
 /** How long a creature's cast-time skill holds the spotlight (and so delays its effect). */
 export const skillMs = (skill: string): number => (CUTINS[skill] ? CUTIN_MS : SKILL_MS);
 // Derived from the card data (`skill` on a creature = a skill that fires as it enters), not hand-kept.

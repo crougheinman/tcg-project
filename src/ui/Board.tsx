@@ -1021,7 +1021,7 @@ export function Board() {
         (this is what misplaced the charge-up orb). Rendering these as siblings
         of `.board`, not children, keeps them truly viewport-fixed regardless of
         what `.board` is doing. */}
-        <BoardFx game={live} />
+        <BoardFx game={live} locked={cardsLocked} />
         <BlockLines lines={blockLines} />
         <CastSpotlight />
         {!game.winner && <div className={'turn-glow ' + (game.active === localId ? 'me' : 'foe')} aria-hidden />}

@@ -13,6 +13,9 @@ const ART: Record<CutInKind, string> = {
   whip: '/ui/whip-face.webp',
   flash: '/ui/flash-guard.webp',
   rot: '/ui/rot-face.webp',
+  charge: '/ui/charge-face.webp',
+  thunder: '/ui/thunder-face.webp',
+  breath: '/ui/breath-face.webp',
 };
 
 export function CutIn({ kind }: { kind: CutInKind }) {

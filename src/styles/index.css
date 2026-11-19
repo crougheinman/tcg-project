@@ -2430,10 +2430,26 @@ button.count-chip:hover:not(:disabled) { color: var(--vs-ink); background: var(-
 /* Plague Priest: Rot. Murky yellow-green and candle gold, the words being unwritten. */
 .blitz-ult.rot {
   --cut-hi: rgba(236, 232, 150, 0.98); --cut-lo: rgba(150, 160, 50, 0.95); --cut-glow: rgba(200, 200, 80, 0.95);
+/* Iron Shogun: The Charge. Deep crimson and black with gold, the banner streaming. */
+.blitz-ult.charge {
+  --cut-hi: rgba(255, 205, 110, 0.98); --cut-lo: rgba(170, 25, 40, 0.95); --cut-glow: rgba(210, 40, 50, 0.95);
+  --cut-l1: rgba(255, 225, 160, 0.55); --cut-l2: rgba(190, 40, 55, 0.45); --cut-bg: #0f0a0b;
+}
+/* Storm Drake: Thunder. Electric blue-white on storm slate. */
+.blitz-ult.thunder {
+  --cut-hi: rgba(220, 245, 255, 0.98); --cut-lo: rgba(60, 150, 230, 0.95); --cut-glow: rgba(120, 200, 255, 0.95);
+  --cut-l1: rgba(235, 250, 255, 0.6); --cut-l2: rgba(80, 170, 240, 0.45); --cut-bg: #070e12;
+}
+/* Rotting Hulk: Last breath. Bruised purple and putrid green. */
+.blitz-ult.breath {
+  --cut-hi: rgba(220, 200, 255, 0.95); --cut-lo: rgba(130, 70, 190, 0.9); --cut-glow: rgba(160, 100, 220, 0.9);
+  --cut-l1: rgba(225, 215, 255, 0.5); --cut-l2: rgba(120, 200, 120, 0.4); --cut-bg: #0c0813;
+}
   --cut-l1: rgba(248, 236, 170, 0.55); --cut-l2: rgba(160, 170, 60, 0.45); --cut-bg: #0d0f08;
 }
 /* the face (or eyes) sits right of centre so the floating card does not cover it */
-.blitz-ult.blitz .bu-art, .blitz-ult.grave .bu-art, .blitz-ult.pyre .bu-art, .blitz-ult.whip .bu-art, .blitz-ult.flash .bu-art, .blitz-ult.rot .bu-art {
+.blitz-ult.blitz .bu-art, .blitz-ult.grave .bu-art, .blitz-ult.pyre .bu-art, .blitz-ult.whip .bu-art, .blitz-ult.flash .bu-art, .blitz-ult.rot .bu-art,
+.blitz-ult.charge .bu-art, .blitz-ult.thunder .bu-art, .blitz-ult.breath .bu-art {
   left: auto; right: 0; width: 56%; object-position: 50% 40%;
   -webkit-mask-image: linear-gradient(to right, transparent 0, #000 24%);
   mask-image: linear-gradient(to right, transparent 0, #000 24%);
