@@ -120,7 +120,7 @@ export const CARDS: Record<string, CardDef> = {
     power: 2,
     toughness: 1,
     skill: 'Beast Blitz',
-    art: '/cards/kunoichi.webp', // 420x560 WebP; other cards auto-wire to <id>.png
+    art: '/cards/kunoichi.webp', // 420x564 WebP; other cards auto-wire to <id>.png
     text: 'Beast Blitz — your Swift Lancer, Sky Talon, Stoneback Cub, Thornwood Brute, Dread Maw, and Wolves get +1/+1.',
     flavor: 'One whistle, and the wild answers.',
   },
@@ -129,7 +129,7 @@ export const CARDS: Record<string, CardDef> = {
     id: 'pyre_adept',
     name: 'Pyre Adept',
     type: 'creature',
-    art: '/cards/pyre_adept.webp', // 420px WebP; other cards auto-wire to <id>.png
+    art: '/cards/pyre_adept.webp', // 420x420 WebP; other cards auto-wire to <id>.png
     cost: 2,
     power: 1,
     toughness: 2,
@@ -147,6 +147,7 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 7,
     keywords: ['trample'],
     text: 'Trample.',
+    art: '/cards/ancient_treant.webp', // 520x285 WebP; other cards auto-wire to <id>.png
     flavor: 'Older than the kingdoms that fear it.',
   },
   bulwark: {
@@ -158,6 +159,7 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 6,
     keywords: ['defender', 'reach', 'flash'],
     text: 'Flash. Defender (cannot attack). Reach.',
+    art: '/cards/bulwark.webp', // 420x419 WebP; other cards auto-wire to <id>.png
     flavor: 'The line holds here.',
   },
   wolf_token: {
@@ -224,6 +226,7 @@ export const CARDS: Record<string, CardDef> = {
     power: 1,
     toughness: 1,
     text: 'Token.',
+    art: '/cards/zombie_token.webp', // 420x418 WebP; other cards auto-wire to <id>.png
     flavor: 'It rises again, and again, and again.',
   },
   shambling_ghoul: {
@@ -233,6 +236,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 2,
     power: 2,
     toughness: 2,
+    art: '/cards/shambling_ghoul.webp', // 420x420 WebP; other cards auto-wire to <id>.png
     flavor: 'It shambles ever forward, and never tires.',
   },
   plague_priest: {
@@ -246,6 +250,7 @@ export const CARDS: Record<string, CardDef> = {
     skill: 'Rot',
     onEnter: { type: 'discard', amount: 1 },
     text: 'Rot — when it enters, your opponent discards a card at random. Whenever you cast a sorcery, they lose 1 life.',
+    art: '/cards/plague_priest.webp', // 420x423 WebP; other cards auto-wire to <id>.png
     flavor: 'Every incantation spreads the rot a little further.',
   },
   grave_necromancer: {
@@ -272,6 +277,7 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 5,
     onDeath: { type: 'token', token: 'zombie_token', count: 1 },
     text: 'Last breath — when it dies, raise a 1/1 Zombie.',
+    art: '/cards/rotting_hulk.webp', // 420x422 WebP; other cards auto-wire to <id>.png
     flavor: 'A mound of grave-flesh stitched with spite.',
   },
   carrion_colossus: {
@@ -283,6 +289,7 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 6,
     keywords: ['lifelink'],
     text: 'Lifelink.',
+    art: '/cards/carrion_colossus.webp', // 420x418 WebP; other cards auto-wire to <id>.png
     flavor: 'The tide of the dead, made flesh at last.',
   },
 
@@ -331,6 +338,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 4,
     effect: { type: 'damage', amount: 6, targets: 'any' },
     text: 'Deal 6 damage to any target.',
+    art: '/cards/pyroblast.webp', // 520x287 WebP; other cards auto-wire to <id>.png
     flavor: 'The sky itself catches fire.',
   },
   call_wolves: {
@@ -340,6 +348,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 2,
     effect: { type: 'token', token: 'wolf_token', count: 2 },
     text: 'Create two 1/1 Wolves.',
+    art: '/cards/call_wolves.webp', // 480x355 WebP; other cards auto-wire to <id>.png
     flavor: 'One howl, and the wild comes running.',
   },
   raise_horde: {
@@ -350,6 +359,7 @@ export const CARDS: Record<string, CardDef> = {
     effect: { type: 'token', token: 'zombie_token', count: 2 },
     flashback: 5,
     text: 'Raise two 1/1 Zombies. Flashback ◈5 — cast it from your graveyard, then exile it.',
+    art: '/cards/raise_horde.webp', // 420x420 WebP; other cards auto-wire to <id>.png
     flavor: 'The soil remembers every soldier it has swallowed.',
   },
   overgrowth: {
@@ -359,6 +369,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 2,
     effect: { type: 'ramp', amount: 2 },
     text: 'Put up to two lands from your hand onto the battlefield.',
+    art: '/cards/overgrowth.webp', // 520x264 WebP; other cards auto-wire to <id>.png
     flavor: 'The forest rushes to meet you.',
   },
   soothe: {
@@ -368,6 +379,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 2,
     effect: { type: 'heal', amount: 6 },
     text: 'Instant — Gain 6 life.',
+    art: '/cards/soothe.webp', // 420x421 WebP; other cards auto-wire to <id>.png
     flavor: 'Rest now. The walls will hold.',
   },
   topple: {
