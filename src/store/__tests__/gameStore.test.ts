@@ -370,6 +370,16 @@ describe('cast spotlight', () => {
       expect(inHand('grave_necromancer')).toBe(false);
     });
 
+    it('Rot (Plague Priest) gets the cut-in window', () => {
+      const n = park(['plague_priest']);
+      useGame.getState().dispatch({ type: 'castCreature', iid: n });
+      expect(useGame.getState().charging?.kind).toBe('cast');
+      expect(useGame.getState().spotlights[0].label).toBe('✦ Rot');
+      expect(useGame.getState().spotlights[0].cutIn).toBe('rot');
+      vi.advanceTimersByTime(2400);
+      expect(inHand('plague_priest')).toBe(false);
+    });
+
     it('Whipflash (Thornwood Brute) gets the green cut-in window', () => {
       const n = park(['thornwood_brute']);
       useGame.getState().dispatch({ type: 'castCreature', iid: n });

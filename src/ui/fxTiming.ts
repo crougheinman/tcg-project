@@ -30,8 +30,8 @@ export const CAST_MS = 1300;
 export const SKILL_MS = 1300;
 // Some skills are "ultimates": the caster's face cuts in as a band across the middle (CutIn), so their window
 // is longer. Keyed by skill name; the value picks the art and colours.
-export type CutInKind = 'blitz' | 'grave' | 'pyre' | 'whip' | 'flash';
-export const CUTINS: Record<string, CutInKind> = { 'Beast Blitz': 'blitz', 'Grave Call': 'grave', Whipflash: 'whip' };
+export type CutInKind = 'blitz' | 'grave' | 'pyre' | 'whip' | 'flash' | 'rot';
+export const CUTINS: Record<string, CutInKind> = { 'Beast Blitz': 'blitz', 'Grave Call': 'grave', Whipflash: 'whip', Rot: 'rot' };
 export const CUTIN_MS = 2400;
 // Flash creatures that cut in when cast at instant speed (isFlashCast): Bulwark snapping the line shut. Keyed by card id.
 export const FLASH_CUTINS: Record<string, CutInKind> = { bulwark: 'flash' };

@@ -2427,8 +2427,13 @@ button.count-chip:hover:not(:disabled) { color: var(--vs-ink); background: var(-
   --cut-hi: rgba(255, 240, 180, 0.98); --cut-lo: rgba(214, 168, 60, 0.95); --cut-glow: rgba(255, 214, 100, 0.95);
   --cut-l1: rgba(255, 246, 205, 0.55); --cut-l2: rgba(190, 196, 215, 0.45); --cut-bg: #0b0d13;
 }
+/* Plague Priest: Rot. Murky yellow-green and candle gold, the words being unwritten. */
+.blitz-ult.rot {
+  --cut-hi: rgba(236, 232, 150, 0.98); --cut-lo: rgba(150, 160, 50, 0.95); --cut-glow: rgba(200, 200, 80, 0.95);
+  --cut-l1: rgba(248, 236, 170, 0.55); --cut-l2: rgba(160, 170, 60, 0.45); --cut-bg: #0d0f08;
+}
 /* the face (or eyes) sits right of centre so the floating card does not cover it */
-.blitz-ult.blitz .bu-art, .blitz-ult.grave .bu-art, .blitz-ult.pyre .bu-art, .blitz-ult.whip .bu-art, .blitz-ult.flash .bu-art {
+.blitz-ult.blitz .bu-art, .blitz-ult.grave .bu-art, .blitz-ult.pyre .bu-art, .blitz-ult.whip .bu-art, .blitz-ult.flash .bu-art, .blitz-ult.rot .bu-art {
   left: auto; right: 0; width: 56%; object-position: 50% 40%;
   -webkit-mask-image: linear-gradient(to right, transparent 0, #000 24%);
   mask-image: linear-gradient(to right, transparent 0, #000 24%);
