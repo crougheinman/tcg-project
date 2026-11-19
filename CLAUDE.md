@@ -69,8 +69,8 @@ the change (below). Playwright is not a project dependency; it must exist where 
   `TRIGGER_CUTINS` (spell triggers: Pyre Adept `pyre`, 1.8 s). `FLASH_CUTINS` (keyed by card id: Bulwark `flash`, 2.4 s) plays only for a Flash cast, i.e. `isFlashCast` in `rules.ts`: a flash
   creature cast outside `main1` (attack or block step); cast in the main phase it is an ordinary creature. Colours are CSS vars on `.blitz-ult.<kind>`.
   One band per kind at a time. To add one: art in `public/ui/`, entry in `CutIn.tsx` `ART`, a table entry, a
-  colour block in `index.css`. The `whip` art is on white, so its `.bu-art` uses `mix-blend-mode: multiply` over a green gradient band (`--cut-bg`
-  can be a gradient).
+  colour block in `index.css`. `--cut-bg` can be a gradient.
+- **Moment cut-ins** (`momentCues.ts`, `BoardFx.tsx`): creatures whose signature *moment* cuts in without delaying the action: Iron Shogun's The Charge (`charge`, when declared as an attacker), Storm Drake's Thunder (`thunder`, when it enters), Rotting Hulk's Last breath (`breath`, when it dies). `momentCues(before, after)` is a pure diff of two game states (unit-tested), table `MOMENT_CUTINS`; `BoardFx` pushes the spotlight, so it plays alongside the action in PvP too. The Charge is parked until the block-step phase banner has left (`locked` from `Board`, failsafe `PARKED_CUE_FAILSAFE_MS`). Note: `src/ui/__tests__` runs in the jsdom project, which needs `jsdom` installed.
 - **Beast Blitz** (engine + store): Kunoichi gives `BLITZ_BEASTS` (+1/+1: Swift Lancer, Sky Talon, Stoneback
   Cub, Wolf, Thornwood Brute, Dread Maw). `blitzCue(player, card)` decides when it *announces* (log line,
   spotlight, cut-in): only when Kunoichi and a beast meet, whichever arrives second, or Call Wolves makes wolves
@@ -164,7 +164,7 @@ rotting_hulk, carrion_colossus, raise_horde, wolf_token, ronin_blade, kensei_due
 warding_stance, scorch, ashigaru, cinderbolt, shuriken_volley, topple, take_counter, grasp_from_grave, soul_siphon, wild_growth, aether_well, withering_touch (every card now has new art).
 The design guide (house style, shared prompt line, composition rules, and a prompt per card) is `card-art.md`: use it when
 asking for new art, and add a prompt there for any card whose art is replaced.
-Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.webp`, `pyre-glare.webp`, `whip-face.webp`, `flash-guard.webp`, `rot-face.webp`).
+Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.webp`, `pyre-glare.webp`, `whip-face.webp`, `flash-guard.webp`, `rot-face.webp`, `charge-face.webp`, `thunder-face.webp`, `breath-face.webp`).
 
 ## Workflow rules from the owner
 
@@ -192,6 +192,9 @@ Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.
 
 ## Change log (newest first; add a line per change)
 
+- New Thornwood Brute Whipflash cut-in face (panda-faced brute mid-lash, dark background, 1002x394); the `whip` band loses its multiply-over-gradient trick and gets a dark green background; `card-art.md` prompt added.
+- Moment cut-ins for Iron Shogun (The Charge, on attack), Storm Drake (Thunder, on enter) and Rotting Hulk (Last breath, on death): new `charge` / `thunder` / `breath` kinds, `momentCues` diff helper with tests, parked behind the block banner for The Charge.
+- `card-art.md`: cut-in prompts for Iron Shogun (the Charge), Storm Drake (Thunder) and Rotting Hulk (Last breath); not wired in the game yet.
 - `card-art.md`: Plague Priest Rot cut-in prompt (new `rot` kind, not wired yet) and a refined Withering Touch card art prompt.
 - New Aether Well card art; new Grave Necromancer card art and Grave Call cut-in face (`grave-grin.webp`, 731x365, Sael matched to the Soul Siphon art); old Aether Well PNG deleted.
 - `card-art.md`: prompts for a redo of the Grave Necromancer card art and the Grave Call cut-in (Sael, matched to the Soul Siphon art).
@@ -214,7 +217,7 @@ Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.
 - New 420px WebP art (~34-42 KB) for the Zombie token, Shambling Ghoul, Plague Priest, Rotting Hulk, Carrion Colossus and Raise Horde; old PNGs deleted; `card-art.md` status updated.
 - Added `card-art.md`: card art design guide (house style, composition rules, palettes, delivery checklist) with the prompt for each card.
 - New WebP art (420-520px, ~35-40 KB) for Pyroblast, Ancient Treant, Call Wolves, Overgrowth and Bulwark; old PNGs deleted.
-- Skill cut-in for Thornwood Brute's Whipflash (snarling badger on a thorn-green band); new `whip` cut-in kind.
+- Skill cut-in for Thornwood Brute's Whipflash (snarling panda-faced brute on a thorn-green band); new `whip` cut-in kind.
 - Card Codex detail card tilts in 3D: follows the mouse on desktop, the gyroscope on phones; parallax art, floating panel, glare.
 - Card Codex detail view: the art fills the whole modal; details sit in a translucent frosted panel over it.
 - New optimized WebP art (420-480px, ~40 KB) for Ember Sprite, Stoneback Cub, Sky Talon, Thornwood Brute, Granite

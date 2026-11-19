@@ -236,6 +236,38 @@ in `CutIn.tsx` `ART`, `CUTINS` (`Rot: 'rot'`) in `fxTiming.ts`, a colour block i
 
 > Wide 2.5:1 extreme close-up of Mother Vess's face, a serene pale priestess under a tattered green-black hood, heavy-lidded eyes lowered as if reading, lips parted mid-recitation, a calm, almost tender expression. A thin curl of grey-green censer smoke crosses the frame, and from the right edge several torn cards and scraps of parchment drift past her, their edges crumbling to ash and spores as if the words on them are being unwritten. Tiny yellow-green motes glow in the dark haze. A single candle-gold catchlight on her cheek. Palette: murky yellow-green, ash grey, bruise-black, candle gold. Keep the left third dark and calm.
 
+**Iron Shogun: The Charge (Tadeo Kurosa rides at the front)** (delivered as `charge-face.webp`, 1009x401; fires when he is declared as an attacker)
+Lore: the only Shogun in nine generations to ride at the front, doctrine not bravado: "a commander who sends others to pay a
+debt he incurred has not settled it." Match the card art (dark iron armour, crested horned helm). The Iron Blossom Clans have
+no cut-in yet, so this one sets their colour: deep crimson and black with a warm gold banner, not the steel-gold of Bulwark's
+Flash. Same shared style line with "Wide 2.5:1 composition".
+
+> Wide 2.5:1 extreme close-up of Tadeo Kurosa's face, a battle-scarred Shogun in a dark iron crested horned helm, a deep scar through one brow, eyes hard and level, jaw set, mouth open in a roar to the line behind him. A huge crimson iron-blossom banner whips across the frame at the right edge and a sword blade flashes along the edge of the frame, sparks and dust streaking past as he charges. Faint rows of spear points rise in the dark haze behind him. Palette: dark iron, deep crimson, black, warm gold flecks, with a bright catchlight in the eyes. Keep the left third dark and calm.
+
+**Storm Drake: Thunder (Vael's wings break the sky)** (delivered as `thunder-face.webp`, 1002x399; fires when it enters)
+Lore: Vael, the Storm Drake: "Thunder is merely the sound of its wings." Drakes are not bred, bound or owned; they roost near
+the holds because the holds are warm. The Skyward tradition has no cut-in yet, so this sets its colour: electric blue-white
+on storm slate, clearly different from the green and gold bands. The face is a drake's, so the eye is the point.
+
+> Wide 2.5:1 extreme close-up of Vael's face, a huge storm drake in profile three-quarter view, one slit-pupilled eye blazing pale yellow-white and fixed on the viewer, scaled brow ridges and a long jaw with teeth bared in a snarl, steel-blue scales edged with crackling blue-white lightning. A forked bolt of lightning splits the dark storm cloud at the right edge of the frame, and rain and wind streak past sideways. Palette: storm slate, electric blue-white, deep teal-black, with a bright yellow-white eye. Keep the left third dark and calm.
+
+**Rotting Hulk: Last breath (the Hulk dies and a Zombie crawls out)** (delivered as `breath-face.webp`, 1011x398; fires when it dies)
+Lore: Grave Tide's patient arithmetic: nothing is wasted. Match the card art (bloated grave-flesh, thick sutures, rusted hooks). To
+stay apart from the mint Grave Call and the yellow-green Rot bands, make this one bruised purple and putrid green. A face
+would be a dead one, so show the Hulk's slack, dying face with the Zombie emerging beside it.
+
+> Wide 2.5:1 extreme close-up of the Rotting Hulk's face as it dies, a huge bloated grey-green brute with a stitched-shut eye, thick ragged sutures across the brow and cheek, a rusted hook through one ear, its jaw sagging open on one last breath that escapes as a pale purple-green mist. Beside its cheek at the right edge of the frame a small pale zombie pushes its head and one hand out through a rip in the Hulk's neck, eyes wide and glowing faint green. Dark crypt gloom and drifting spores behind. Palette: bruised purple, putrid green, dirty bone, black, with a faint green glow in the Zombie's eyes. Keep the left third dark and calm.
+
+**Thornwood Brute: Whipflash (a lash of green thorn, 1 damage to a creature)** (delivered as `whip-face.webp`, 1002x394, on a dark background; the old white-background art and its multiply trick are gone)
+Lore: Brutes condense out of the Thornwood when the forest's patience fails; the lash of green that comes with one arriving is
+"the forest clearing its throat." The Brute looks like a big panda-faced bear: cream face and chest, dark eye patches and ears, thick
+brown fur, thorned vines wrapped round its arms and body (match the card art). Today's cut-in art is on a white background, so
+the game multiplies it over a green gradient band (`.blitz-ult.whip .bu-art { mix-blend-mode: multiply }`). If this redo is on a
+dark background, drop that multiply and give the `whip` band a dark green `--cut-bg` like the others. Same shared style line with
+"Wide 2.5:1 composition".
+
+> Wide 2.5:1 extreme close-up of the Thornwood Brute's face, a huge panda-faced bear with a cream face, dark eye patches and ears, thick brown fur and glaring white-lit eyes, jaw open in a snarl with bared fangs. Thorned green vines wrapped round its shoulders and arm whip forward across the right edge of the frame in a cracking lash, the thorns flashing and torn leaves and bark chips streaking past. Deep dark forest-green shadow behind it with faint tree trunks. A bright green flash where the vine cracks. Palette: forest black-green, bright thorn green, cream and dark brown fur, with a white glint in the eyes. Keep the left third dark and calm.
+
 **Pyre Adept: spell trigger (every sorcery she casts burns the opponent)** (delivered as `pyre-glare.webp`, 1014x402)
 Uses the shared style line, with "Wide 2.5:1 composition" in place of "Square composition".
 
