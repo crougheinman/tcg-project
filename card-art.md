@@ -126,8 +126,12 @@ Lore: Tadeo Kurosa, the only Shogun in nine generations to ride at the front.
 > Tadeo Kurosa, a battle-scarred Shogun in dark iron armour with a crested horned helm, charging at the front of a battle line on horseback, a huge iron-blossom banner streaming behind him, sword raised. Ashigaru spears surge behind. Dust and sparks. Palette: dark iron, crimson, warm gold.
 
 **Iaijutsu Strike** (instant, +1/+1; "The blade is sheathed before you see it move.")
+Uses Hana of the Single Breath (the Kensei Duelist card): white and crimson kimono, black hair in a bun with red pins. Iaijutsu is the
+draw-and-cut in a single motion, so show the moment AFTER it: the katana already back in its sheath, the cut still hanging in the
+air. That keeps it apart from her Kensei Duelist art (hand on the hilt before the draw) and Shuriken Volley (mid-throw). Same
+shared style line (square, her whole figure centred, head and hands inside the middle two-thirds).
 
-> A swordsman in a crouch, blade just back in its sheath, a thin white cut-line of light across the frame and a ghostly afterimage of the draw behind him. Calm face, one eye open. A dark empty courtyard with falling petals frozen mid-air. Palette: black, white, thin crimson accents.
+> Hana of the Single Breath, the Kensei Duelist, in her white and crimson kimono with her black hair in a bun held by red pins, standing perfectly still in a low half-crouch, one hand resting on the hilt of her katana as the last inch of the blade slides home into its black sheath, her thumb just clicking the guard shut. Her face is calm and unhurried, eyes lowered, one eye barely open. Across the frame behind her hangs a single thin white line of cut light, a ghostly silver afterimage of the draw, and the dark stone lantern in front of her has only now been sliced cleanly in two, its top half just beginning to slide. A cherry blossom frozen mid-air is cut in half, both halves hanging, and a few more petals drift past. A dark empty courtyard at dusk, one soft shaft of moonlight. Palette: black, white, crimson accents, steel silver, a hint of cherry-blossom pink.
 
 **Warding Stance** (instant, +0/+3; "Brace. Breathe. Let the blow break upon you.")
 

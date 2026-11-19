@@ -200,6 +200,7 @@ Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.
 
 - New Thornwood Brute Whipflash cut-in face (panda-faced brute mid-lash, dark background, 1002x394); the `whip` band loses its multiply-over-gradient trick and gets a dark green background; `card-art.md` prompt added.
 - Moment cut-ins for Iron Shogun (The Charge, on attack), Storm Drake (Thunder, on enter) and Rotting Hulk (Last breath, on death): new `charge` / `thunder` / `breath` kinds, `momentCues` diff helper with tests, parked behind the block banner for The Charge.
+- `card-art.md`: Iaijutsu Strike prompt redone around Hana (the moment after the draw: blade re-sheathed, a sliced lantern and blossom); the old generic swordsman prompt is gone. Art not delivered yet.
 - Kensei Duelist card text: rules stay "Haste. First strike."; the flavour now carries Hana's personality from `LORE.md` (calm, strict, four duels she walked away from) next to her signature line.
 - Kensei Duelist First-strike cut-in: new `strike` kind (`public/ui/strike-face.webp`, 1024x434, Hana's eyes snapping open, cold steel-silver band) on the "First Strike!" spotlight, which holds 1.7 s for her instead of 0.9 s (`FS_CUTINS`, `fsSpotMs`, `fsIntroMs`); `firstStrike.test.ts` added; `card-art.md` prompt marked delivered.
 - `card-art.md`: cut-in prompts for Iron Shogun (the Charge), Storm Drake (Thunder) and Rotting Hulk (Last breath); not wired in the game yet.
