@@ -170,6 +170,7 @@ export const CARDS: Record<string, CardDef> = {
     power: 1,
     toughness: 1,
     text: 'Token.',
+    art: '/cards/wolf_token.webp', // 420x423 WebP; other cards auto-wire to <id>.png
     flavor: 'The pack answers the call.',
   },
 
@@ -192,6 +193,7 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 2,
     keywords: ['haste'],
     text: 'Haste.',
+    art: '/cards/ronin_blade.webp', // 420x415 WebP; other cards auto-wire to <id>.png
     flavor: 'A masterless sword, restless even in the fray.',
   },
   kensei_duelist: {
@@ -203,6 +205,7 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 2,
     keywords: ['haste', 'firstStrike'],
     text: 'Haste. First strike.',
+    art: '/cards/kensei_duelist.webp', // 420x422 WebP; other cards auto-wire to <id>.png
     flavor: 'One breath, one cut. There is no second.',
   },
   iron_shogun: {
@@ -214,6 +217,7 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 4,
     keywords: ['firstStrike'],
     text: 'First strike. The charge is led from the front.',
+    art: '/cards/iron_shogun.webp', // 420x419 WebP; other cards auto-wire to <id>.png
     flavor: 'Where his banner rides, the line follows.',
   },
 
@@ -310,6 +314,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 3,
     effect: { type: 'damage', amount: 5, targets: 'any' },
     text: 'Deal 5 damage to any target.',
+    art: '/cards/scorch.webp', // 420x419 WebP; other cards auto-wire to <id>.png
     flavor: 'More of the warmth than any one person should hold.',
   },
   insight: {
@@ -410,6 +415,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 1,
     effect: { type: 'buff', power: 1, toughness: 1, targets: 'creature' },
     text: 'Instant — target creature gets +1/+1.',
+    art: '/cards/iaijutsu_strike.webp', // 420x422 WebP; other cards auto-wire to <id>.png
     flavor: 'The blade is sheathed before you see it move.',
   },
   warding_stance: {
@@ -419,6 +425,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 1,
     effect: { type: 'buff', power: 0, toughness: 3, targets: 'creature' },
     text: 'Instant — target creature gets +0/+3.',
+    art: '/cards/warding_stance.webp', // 420x421 WebP; other cards auto-wire to <id>.png
     flavor: 'Brace. Breathe. Let the blow break upon you.',
   },
   shuriken_volley: {
