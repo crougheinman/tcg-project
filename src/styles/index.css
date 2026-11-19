@@ -758,6 +758,19 @@ input {
 .actions button:hover:not(:disabled) { color: var(--vs-ink); background: var(--me); border-color: var(--vs-ink); transform: skewX(-12deg); }
 .actions button.primary { color: var(--vs-ink); background: var(--me); border-color: var(--vs-ink); box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.55), 0 0 16px rgba(var(--me-rgb), 0.45); }
 .actions button.primary:hover:not(:disabled) { background: #8cf1ff; }
+/* Your next move breathes: the glow swells and the plate grows a touch. The scale
+   restates the skew because an animated transform replaces the plate's own. Paused
+   on hover/focus so the button holds still under the pointer; reduced motion settles
+   it on the static glow above via the global rule. */
+.actions button.primary:not(:disabled) { animation: nextmove 1.5s ease-in-out 5s infinite; }
+.actions button.primary:hover:not(:disabled), .actions button.primary:focus-visible { animation-play-state: paused; }
+/* Nothing left to do this turn ("No more moves"): End Turn pulses at once. */
+.actions button.primary.urgent:not(:disabled) { animation-delay: 0s; }
+.prompt.nomoves { color: var(--vs-paper); }
+@keyframes nextmove {
+  0%, 100% { transform: skewX(-12deg) scale(1); box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.55), 0 0 10px rgba(var(--me-rgb), 0.35); }
+  50% { transform: skewX(-12deg) scale(1.06); box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.55), 0 0 30px rgba(var(--me-rgb), 0.95); }
+}
 .prompt { color: var(--vs-yellow); font: 700 17px / 1.1 'Barlow Condensed', system-ui, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
 .prompt-stack { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .prompt-hint { color: var(--me); font: 700 14px / 1 'Barlow Condensed', system-ui, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
@@ -833,25 +846,65 @@ input {
 .card.targetable {
   box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px var(--accent), 0 0 12px var(--accent);
   cursor: crosshair;
+  animation: tgtnudge 1.1s ease-in-out infinite;
 }
-/* a castable instant during the block step — pulses green to draw the eye */
-.card.green-glow { animation: greenglow 1.3s ease-in-out infinite; }
-@keyframes greenglow {
-  0%, 100% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px var(--good), 0 0 12px rgba(84, 201, 138, 0.6); }
-  50% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px #7ff0b0, 0 0 24px rgba(84, 201, 138, 0.95); }
+/* "Choose a target": every legal card breathes, with no delay (the game is waiting on
+   this click). Box-shadow only; framer owns the card's transform. */
+@keyframes tgtnudge {
+  0%, 100% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px var(--accent), 0 0 10px rgba(106, 169, 255, 0.5); }
+  50% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px #bcd8ff, 0 0 26px 4px rgba(106, 169, 255, 0.95); }
+}
+/* A hand card you can use during the block step (an instant, a counter, a flash creature):
+   an electric cyan aura. Two bright arcs race round the inside of the edge (::before, a
+   conic gradient masked to a ring; --ang is a registered property so it can animate), and
+   the outer ring flips between a cyan glow and a yellow one. Inside the card because
+   .card clips its overflow. */
+@property --ang { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+.card.green-glow { animation: zap 1s ease-in-out infinite; }
+.card.green-glow::before {
+  content: ''; position: absolute; inset: 0; z-index: 7; pointer-events: none; box-sizing: border-box;
+  border-radius: inherit; padding: 3px;
+  background:
+    conic-gradient(from var(--ang), transparent 0 58%, #22d3ee 72%, #eaffff 78%, transparent 88% 100%),
+    conic-gradient(from calc(var(--ang) + 180deg), transparent 0 58%, #22d3ee 72%, #eaffff 78%, transparent 88% 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: arcspin 0.9s linear infinite;
+}
+@keyframes arcspin { to { --ang: 360deg; } }
+@keyframes zap {
+  0%, 100% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px #22d3ee, 0 0 14px 2px rgba(34, 211, 238, 0.85), 0 0 22px 4px rgba(255, 210, 74, 0.15); }
+  50% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px #ffe27a, 0 0 18px 3px rgba(34, 211, 238, 0.6), 0 0 30px 8px rgba(255, 210, 74, 0.75); }
+}
+/* Main phase, your move: the cards you can actually play breathe a soft glow, but only
+   after 5s of nothing happening (the delay restarts whenever a card becomes playable).
+   Box-shadow only — framer owns the card's transform. Hover drops it so the normal
+   hover ring shows. */
+.board.nudge-main .player-dock .hand .card.clickable:not(.dim) { animation: handnudge 1.8s ease-in-out 5s infinite; }
+.board.nudge-main .player-dock .hand .card.clickable:not(.dim):hover { animation: none; }
+@keyframes handnudge {
+  0%, 100% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px rgba(var(--me-rgb), 0.5), 0 4px 10px rgba(0, 0, 0, 0.4), 0 0 8px rgba(var(--me-rgb), 0.4); }
+  50% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px rgba(var(--me-rgb), 1), 0 4px 10px rgba(0, 0, 0, 0.4), 0 0 28px 4px rgba(var(--me-rgb), 0.9); }
 }
 .card.dim { opacity: 0.9; filter: grayscale(0.9) brightness(0.5) contrast(0.9); }
 .card.dim.clickable:hover { filter: grayscale(0.9) brightness(0.5); } /* stay greyed on hover */
-.card.blitzed { animation: blitzglow 1.4s ease-in-out infinite; }
-@keyframes blitzglow {
-  0%, 100% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px #e8a13a, 0 0 12px rgba(232, 161, 58, 0.6); }
-  50% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px #ffd36a, 0 0 24px rgba(255, 211, 106, 0.95); }
+/* Blitz: the empowered beast crackles with yellow lightning revolving around its card (see
+   Lightning.tsx). Two bright bolts are dash windows sliding around a jagged outline; only
+   stroke-dashoffset / opacity animate, so framer's transform on the card is never touched. */
+.bolts { position: absolute; inset: -2.5%; z-index: 5; pointer-events: none; border-radius: inherit; }
+.bolts::before {
+  content: ''; position: absolute; inset: 2.5%; border-radius: inherit;
+  box-shadow: 0 0 9px 1px rgba(255, 224, 60, 0.7), inset 0 0 8px 0 rgba(255, 224, 60, 0.45);
+  animation: boltglow 0.9s ease-in-out infinite alternate;
 }
-.card.arena.blitzed { animation: blitzglowArena 1.4s ease-in-out infinite; }
-@keyframes blitzglowArena {
-  0%, 100% { box-shadow: 0 0 8px 2px rgba(232, 161, 58, 0.6); }
-  50% { box-shadow: 0 0 18px 5px rgba(255, 211, 106, 0.95); }
-}
+.bolts svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 3px #ffd84a) drop-shadow(0 0 7px rgba(255, 200, 40, 0.8)); }
+.bolts path { fill: none; stroke-linejoin: miter; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.bolt-base { stroke: rgba(255, 226, 90, 0.4); stroke-width: 1.2; animation: boltflick 0.18s steps(1) infinite; }
+.bolt { stroke: #fffbc4; stroke-width: 2.6; stroke-dasharray: 13 87; animation: boltspin 1.5s linear infinite, boltflick 0.14s steps(1) infinite; }
+.bolt.two { stroke: #ffe14d; stroke-width: 2.2; stroke-dasharray: 9 91; animation: boltspin 1.5s linear -0.75s infinite, boltflick 0.11s steps(1) infinite; }
+@keyframes boltspin { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -100; } }
+@keyframes boltflick { 0% { opacity: 1; } 50% { opacity: 0.72; } 100% { opacity: 1; } }
+@keyframes boltglow { from { opacity: 0.55; } to { opacity: 1; } }
 .card-back {
   background: repeating-linear-gradient(45deg, #3a2a16, #3a2a16 6px, #4d3a1f 6px, #4d3a1f 12px);
   box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px var(--wood), 0 4px 10px rgba(0, 0, 0, 0.4);
@@ -946,6 +999,132 @@ input {
   70% { opacity: 0.9; }
   100% { opacity: 0; transform: translate(14px, -20px) rotate(10deg) scale(1.15); }
 }
+
+/* Clicked a summoning-sick creature (the head-shake is in Board.denyTired): it sheds a
+   tired anime sweat-tear from the top-right corner that slides down the card, shrinking
+   and fading as it goes. Outer span moves, inner <i> is the drop (point up, round bottom). */
+.deny-tear {
+  position: absolute; top: 4%; right: 2%; z-index: 6; width: 15px; height: 21px; pointer-events: none;
+  animation: tearfall 1.3s cubic-bezier(0.4, 0, 0.9, 0.6) forwards;
+}
+.deny-tear i {
+  display: block; width: 100%; height: 100%;
+  background: linear-gradient(160deg, #f1fbff 0%, #8fd8ff 55%, #3aa5e6 100%);
+  border: 1px solid rgba(10, 12, 19, 0.7);
+  border-radius: 50% 50% 50% 50% / 68% 68% 32% 32%;
+  clip-path: polygon(50% 0, 88% 46%, 100% 70%, 82% 94%, 50% 100%, 18% 94%, 0 70%, 12% 46%);
+}
+@keyframes tearfall {
+  0% { opacity: 0; transform: translateY(-4px) scale(0.5); }
+  12% { opacity: 1; transform: translateY(0) scale(1); }
+  35% { opacity: 1; transform: translateY(10px) scale(1); }
+  100% { opacity: 0; transform: translateY(72px) scale(0.55); }
+}
+
+/* "Select creatures to attack": every creature that can attack bobs and glows until picked. */
+.stack.can-attack { animation: atkbob 1.1s ease-in-out infinite; }
+.stack.can-attack .card { animation: atknudge 1.1s ease-in-out infinite; }
+@keyframes atkbob {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -5px; }
+}
+@keyframes atknudge {
+  0%, 100% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px rgba(var(--foe-rgb), 0.55), 0 0 8px rgba(var(--foe-rgb), 0.4); }
+  50% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px rgba(var(--foe-rgb), 1), 0 0 26px 4px rgba(var(--foe-rgb), 0.85); }
+}
+
+/* A haste creature the turn it arrives: it can attack at once. The tag goes with the end phase. */
+.haste-tag {
+  position: absolute; left: 50%; top: -13px; z-index: 6; pointer-events: none; white-space: nowrap; overflow: hidden;
+  transform: translateX(-50%) skewX(-12deg); padding: 2px 10px;
+  font: 700 12px / 1.1 'Barlow Condensed', system-ui, sans-serif; letter-spacing: 0.1em; text-transform: uppercase;
+  color: #0a0c13; background: #ffd24a; border: 2px solid #0a0c13; box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.55);
+  animation: hastein 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.haste-tag::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.85) 50%, transparent 70%);
+  transform: translateX(-120%); animation: hasteshine 1.6s ease-in-out 0.5s infinite;
+}
+@keyframes hastein {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px) skewX(-12deg) scale(0.6); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0) skewX(-12deg) scale(1); }
+}
+@keyframes hasteshine { 0%, 55% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
+
+/* First strike finisher (FirstStrikeFx): blackout, three quick energy slashes, a flash.
+   Cyan when the first striker is yours, red when it is theirs. Whole thing is 0.62s. */
+.fs-black {
+  position: fixed; inset: 0; z-index: 96; pointer-events: none; overflow: hidden; background: #000;
+  animation: fsblack 0.62s linear both;
+}
+.fs-black.me { --c: var(--me); --c-rgb: var(--me-rgb); }
+.fs-black.foe { --c: var(--foe); --c-rgb: var(--foe-rgb); }
+@keyframes fsblack { 0% { opacity: 0; } 14% { opacity: 1; } 84% { opacity: 1; } 100% { opacity: 0; } }
+.fs-slash {
+  position: absolute; left: 50%; top: 50%; translate: -50% -50%;
+  width: min(125vw, 1150px); height: 20vmin; opacity: 0; --dir: 1;
+  filter: drop-shadow(0 0 10px var(--c)) drop-shadow(0 0 34px var(--c));
+  animation: fsslash 0.24s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.fs-slash svg { display: block; width: 100%; height: 100%; }
+.fs-body { fill: var(--c); }
+.fs-core { fill: #fff; }
+.fs-slash.s1 { --rot: -22deg; animation-delay: 0.1s; }
+.fs-slash.s2 { --rot: 17deg; --dir: -1; animation-delay: 0.2s; }
+.fs-slash.s3 { --rot: -4deg; height: 30vmin; animation-delay: 0.3s; }
+@keyframes fsslash {
+  0% { opacity: 0; transform: rotate(var(--rot)) translateX(calc(-46% * var(--dir))) scaleX(0.25); }
+  25% { opacity: 1; }
+  60% { opacity: 1; transform: rotate(var(--rot)) translateX(0) scaleX(1); }
+  100% { opacity: 0; transform: rotate(var(--rot)) translateX(calc(40% * var(--dir))) scaleX(1.35); }
+}
+.fs-flash {
+  position: absolute; inset: 0; opacity: 0;
+  background: radial-gradient(circle at 50% 50%, #fff 0, var(--c) 34%, transparent 68%);
+  animation: fsflash 0.2s ease-out 0.38s both;
+}
+@keyframes fsflash { 0% { opacity: 0; } 30% { opacity: 0.85; } 100% { opacity: 0; } }
+
+/* "Click your blocker": your creatures that can block bob with a cyan pulse; once one is
+   selected, the attackers it can take pulse yellow instead. */
+.stack.can-block { animation: atkbob 1.1s ease-in-out infinite; }
+.stack.can-block .card { animation: blknudge 1.1s ease-in-out infinite; }
+.stack.block-target { animation: atkbob 0.9s ease-in-out infinite; }
+.stack.block-target .card { animation: tgtyellow 0.9s ease-in-out infinite; }
+@keyframes blknudge {
+  0%, 100% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px rgba(var(--me-rgb), 0.55), 0 0 8px rgba(var(--me-rgb), 0.4); }
+  50% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px rgba(var(--me-rgb), 1), 0 0 26px 4px rgba(var(--me-rgb), 0.9); }
+}
+@keyframes tgtyellow {
+  0%, 100% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 4px rgba(255, 210, 74, 0.6), 0 0 8px rgba(255, 210, 74, 0.4); }
+  50% { box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px #ffd24a, 0 0 26px 4px rgba(255, 210, 74, 0.9); }
+}
+
+/* An attacking flyer: only a flyer or reach creature can block it. Centred on the card so
+   it stays on the art whether the card is upright or tapped (rotated). */
+.fly-mark {
+  position: absolute; left: 50%; top: 50%; z-index: 5; pointer-events: none; white-space: nowrap;
+  transform: translate(-50%, -50%) skewX(-12deg); padding: 2px 8px;
+  font: 700 12px / 1.1 'Barlow Condensed', system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #0a0c13; background: #22d3ee; border: 2px solid #0a0c13; box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.55);
+}
+.fly-mark.none { background: #ff4d3f; color: #0a0c13; }
+@media (max-width: 640px) { .fly-mark { font-size: 10px; padding: 1px 5px; } }
+
+/* curves from a blocker to its attacker (BlockLines): a dark under-stroke keeps them readable
+   over any card art; selected-but-unconfirmed options are thin, dashed and yellow */
+.block-lines { position: fixed; inset: 0; width: 100vw; height: 100dvh; z-index: 1; pointer-events: none; overflow: visible; }
+/* the prompt and buttons sit ABOVE the curves, so a line passing behind them never hides them */
+.center { position: relative; z-index: 2; }
+/* a flyer's mark must not be clipped by the neighbouring creature that overlaps it */
+.stack:has(.fly-mark) { z-index: 4; }
+.block-lines path { fill: none; stroke-linecap: round; }
+.bl-under { stroke: #0a0c13; stroke-width: 7; opacity: 0.75; }
+.bl-set { stroke: #22d3ee; stroke-width: 3.5; }
+.bl-dot { fill: #22d3ee; stroke: #0a0c13; stroke-width: 2; }
+.bl-cand { stroke: #ffd24a; stroke-width: 2.5; stroke-dasharray: 7 6; animation: bldash 0.7s linear infinite; }
+@keyframes bldash { to { stroke-dashoffset: -13; } }
 
 /* ---- hover preview ---- */
 .preview-overlay {
@@ -1869,7 +2048,13 @@ button, [role='button'] { touch-action: manipulation; }
   0%, 69% { background: var(--vs-yellow); }
   70%, 100% { background: var(--ring); }
 }
-.playerbar.acting .shield-avatar.targetable { animation: none; }
+/* A face you can target pulses: it swells and flashes paper/yellow. Same selector weight
+   as the acting blink above so it wins when you are both. */
+.shield-avatar.targetable, .playerbar.acting .shield-avatar.targetable { animation: tgtface 0.9s ease-in-out infinite; }
+@keyframes tgtface {
+  0%, 100% { transform: scale(1); background: var(--vs-yellow); }
+  50% { transform: scale(1.18); background: var(--vs-paper); }
+}
 
 /* Crystals OR the number, never both: the number takes over when there are too
    many lands for crystals (no .pips class) and on the phone's opponent row. */
@@ -1950,7 +2135,14 @@ button.count-chip:hover:not(:disabled) { color: var(--vs-ink); background: var(-
    so the click lives on a padded wrapper. The negative margin cancels the padding: no
    layout moves. */
 .shield-hit { display: grid; place-items: center; padding: 8px 10px; margin: -8px -10px; }
-.shield-hit.targetable { cursor: crosshair; }
+.shield-hit.targetable { cursor: crosshair; animation: tgtglow 0.9s ease-in-out infinite; }
+/* The shield is a clip-path, which clips its own shadows, so the glow lives on this
+   wrapper: a drop-shadow here follows the shield's clipped outline. In step with the
+   shield's own pulse (tgtface). */
+@keyframes tgtglow {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(255, 210, 74, 0.6)) drop-shadow(0 0 9px rgba(255, 210, 74, 0.3)); }
+  50% { filter: drop-shadow(0 0 7px rgba(255, 210, 74, 1)) drop-shadow(0 0 20px rgba(255, 210, 74, 0.9)) drop-shadow(0 0 34px rgba(255, 210, 74, 0.55)); }
+}
 .player-zone.opp .shield-hit { grid-area: avatar; }
 
 /* The Activity panel sat at the bottom-right, over the right-hand end of the hand: with a
@@ -2138,3 +2330,111 @@ button.count-chip:hover:not(:disabled) { color: var(--vs-ink); background: var(-
   box-shadow: 0 0 14px rgba(var(--me-rgb), 0.5);
 }
 .zone-flash:hover { background: #8cf1ff; }
+
+/* ---- Combat death: crack (0.3s) -> pulverize (0.2s). See ShatterFx.tsx ---- */
+.crackfx { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
+.dustfx { position: fixed; z-index: 71; pointer-events: none; }
+.sh-crack { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; animation: shhide 0s var(--crack) forwards; }
+.sh-crack path { fill: none; stroke-linecap: square; stroke-linejoin: miter; stroke-dasharray: 1; stroke-dashoffset: 1; animation: shdraw 165ms cubic-bezier(.2, .8, .3, 1) forwards; }
+.sh-line-dark { stroke: #120a05; stroke-width: 2.6; }
+.sh-line-dark.thin { stroke-width: 1.6; animation-delay: 0.08s; }
+.sh-line-lite { stroke: #fff6dc; stroke-width: 0.9; }
+@keyframes shdraw { to { stroke-dashoffset: 0; } }
+@keyframes shhide { to { opacity: 0; visibility: hidden; } }
+.sh-flash { position: absolute; inset: 0; border-radius: 8px; background: #fff; opacity: 0; mix-blend-mode: screen; animation: shflash 0.12s ease-out; }
+@keyframes shflash { 0% { opacity: 0.75; } 100% { opacity: 0; } }
+.sh-tile {
+  position: absolute; display: block; background-color: #2a1d12; will-change: transform, opacity;
+  animation: shdust var(--dust) cubic-bezier(.15, .7, .3, 1) forwards;
+}
+@keyframes shdust {
+  0%   { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+  60%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--spin)) scale(0.3); }
+}
+
+/* Attack phase banner still playing: cards ignore clicks (Board.tsx guards the handlers too, for the
+   keyboard), and the pointer says so. Hover previews keep working. */
+.board.cards-locked .card, .board.cards-locked .stack { cursor: default; }
+.board.cards-locked .stack.can-attack .card, .board.cards-locked .stack.can-attack { animation: none; translate: none; }
+
+/* ---- Beast Blitz "ultimate" cut-in (BlitzUltimate.tsx): a slanted band across the middle of the screen
+   showing the fierce-eyes art, speed lines and a flash; behind the floating card, click-through ---- */
+.blitz-ult {
+  --h: min(34vh, 300px);
+  --cut-hi: rgba(255, 214, 90, 0.95); --cut-lo: rgba(255, 80, 40, 0.9); --cut-glow: rgba(255, 90, 40, 0.9);
+  --cut-l1: rgba(255, 235, 180, 0.5); --cut-l2: rgba(255, 120, 60, 0.4); --cut-bg: #140806;
+  position: absolute; left: 0; right: 0; top: calc(48% - var(--h) / 2); height: var(--h);
+  pointer-events: none; z-index: -1; /* behind the floating card */
+}
+.blitz-ult .bu-band {
+  position: absolute; inset: 0; overflow: hidden; background: var(--cut-bg);
+  clip-path: polygon(0 10%, 100% 0, 100% 90%, 0 100%);
+  animation: bushake 0.42s ease-out;
+}
+.blitz-ult .bu-art {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 52%;
+  animation: buzoom 2.4s cubic-bezier(.15, .6, .3, 1) forwards;
+}
+@keyframes buzoom { from { scale: 1.22; translate: -2% 0; } to { scale: 1; translate: 1.5% 0; } }
+@keyframes bushake {
+  0% { translate: 0 0; } 15% { translate: -9px 5px; } 30% { translate: 8px -6px; } 45% { translate: -6px 3px; }
+  60% { translate: 4px -2px; } 100% { translate: 0 0; }
+}
+/* Grave Call: the same band in necrotic green */
+.blitz-ult.grave {
+  --cut-hi: rgba(190, 255, 200, 0.95); --cut-lo: rgba(40, 200, 100, 0.9); --cut-glow: rgba(60, 230, 120, 0.9);
+  --cut-l1: rgba(200, 255, 215, 0.5); --cut-l2: rgba(60, 220, 120, 0.4); --cut-bg: #06140c;
+}
+/* Pyre Adept: molten orange */
+.blitz-ult.pyre {
+  --cut-hi: rgba(255, 240, 170, 0.98); --cut-lo: rgba(255, 120, 20, 0.95); --cut-glow: rgba(255, 130, 30, 0.95);
+  --cut-l1: rgba(255, 245, 190, 0.55); --cut-l2: rgba(255, 130, 30, 0.45); --cut-bg: #1a0a02;
+}
+/* the face (or eyes) sits right of centre so the floating card does not cover it */
+.blitz-ult.blitz .bu-art, .blitz-ult.grave .bu-art, .blitz-ult.pyre .bu-art {
+  left: auto; right: 0; width: 56%; object-position: 50% 40%;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 24%);
+  mask-image: linear-gradient(to right, transparent 0, #000 24%);
+}
+/* red-gold edge lines on the slanted top and bottom of the band, pulsing */
+.blitz-ult .bu-edge {
+  position: absolute; inset: 0; clip-path: polygon(0 10%, 100% 0, 100% 90%, 0 100%);
+  background:
+    linear-gradient(to bottom, var(--cut-hi) 0, var(--cut-lo) 6px, transparent 7px) top / 100% 100% no-repeat,
+    linear-gradient(to top, var(--cut-hi) 0, var(--cut-lo) 6px, transparent 7px) bottom / 100% 100% no-repeat;
+  filter: drop-shadow(0 0 12px var(--cut-glow));
+  animation: buedge 0.5s ease-in-out infinite alternate;
+}
+@keyframes buedge { from { opacity: 0.65; } to { opacity: 1; } }
+/* horizontal speed lines racing across the art */
+.blitz-ult .bu-lines {
+  position: absolute; inset: 0; mix-blend-mode: screen; opacity: 0;
+  background:
+    repeating-linear-gradient(to bottom, transparent 0 7px, var(--cut-l1) 7px 8px, transparent 8px 19px, var(--cut-l2) 19px 20px, transparent 20px 31px);
+  -webkit-mask-image: linear-gradient(to right, #000 0, transparent 22%, transparent 78%, #000 100%);
+  mask-image: linear-gradient(to right, #000 0, transparent 22%, transparent 78%, #000 100%);
+  animation: bulines 0.28s linear 3 forwards;
+}
+@keyframes bulines { 0% { opacity: 0.9; background-position: 0 0; } 100% { opacity: 0.9; background-position: 90px 0; } }
+.blitz-ult .bu-flash {
+  position: absolute; inset: 0; background: #fff; opacity: 0; mix-blend-mode: screen; animation: buflash 0.5s ease-out;
+}
+@keyframes buflash { 0% { opacity: 0.95; } 100% { opacity: 0; } }
+@media (max-width: 640px) { .blitz-ult { --h: min(24vh, 190px); } }
+@media (orientation: landscape) and (max-height: 500px) { .blitz-ult { --h: 52vh; } }
+.bu-dim { position: absolute; inset: 0; z-index: -2; pointer-events: none; background: rgba(0, 0, 0, 0.5); } /* behind the art (-1) and the card */
+.pb-dim { position: absolute; inset: 0; pointer-events: none; background: rgba(0, 0, 0, 0.55); } /* under the banner slab; the wrap is click-through */
+
+/* ---- Drag a ready creature onto the enemy board to attack ---- */
+.card.arena.can-drag { cursor: grab; }
+.row.creatures .stack.dragging { z-index: 60; } /* above its neighbours and the enemy zone while it is carried */
+.board .battlefield.attack-drop {
+  background: rgba(var(--foe-rgb), 0.16);
+  box-shadow: inset 0 0 0 3px var(--foe);
+  animation: atkdropglow 0.9s steps(1) infinite;
+}
+@keyframes atkdropglow {
+  0%, 100% { box-shadow: inset 0 0 0 3px var(--foe); }
+  50% { box-shadow: inset 0 0 0 3px var(--vs-yellow); }
+}

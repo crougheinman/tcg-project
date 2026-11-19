@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { combatImpactDelays, combatJustResolved } from './firstStrike';
+import { DEATH_CRACK_MS, DEATH_DUST_MS } from './fxTiming';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { getDef } from '../cards/cards';
 import { actorOf, availableMana, canAttack, canBlock, hasKeyword, isCreature, isLand } from '../engine/rules';
-import type { CardInstance, PlayerId } from '../engine/types';
+import type { CardInstance, GameState, PlayerId } from '../engine/types';
 import { needsTarget, opponentOf } from '../engine/types';
 import { CardView } from './CardView';
-import { prune, tapAttacker, tapBlocker } from './blockSelection';
+import { liveAttackers, prune, tapAttacker, tapBlocker } from './blockSelection';
+import { BlockLines, type BlockLine } from './BlockLines';
 import { CardPreview } from './CardPreview';
 import { HoverCtx } from './hover';
 import { PhaseBar } from './PhaseBar';
@@ -26,7 +29,20 @@ import { ChatDock } from './ChatDock';
 import { humanize } from './boardLog';
 
 export function Board() {
-  const game = useGame((s) => s.game)!;
+  const live = useGame((s) => s.game)!;
+  // A phase change plays its banner first: the board keeps showing the state from BEFORE the change
+  // (nothing draws, untaps or slides) and the cards are locked until the banner has left, then it
+  // catches up with `live`. A combat clash is never held: its fx need the real state at once.
+  const [hold, setHold] = useState<GameState | null>(null);
+  const holdKey = live.phase === 'mulligan' ? null : `${live.turn}:${live.active}:${live.phase}`;
+  const [seenHoldKey, setSeenHoldKey] = useState(holdKey);
+  const shownGame = useRef(live); // what the last render drew
+  const prevLive = useRef(live); // the live state before this one
+  if (holdKey !== seenHoldKey) {
+    setSeenHoldKey(holdKey);
+    if (holdKey !== null && !hold && !live.winner && !combatJustResolved(prevLive.current, live)) setHold(shownGame.current);
+  }
+  const game = hold && !live.winner ? hold : live;
   const mode = useGame((s) => s.mode);
   const myId = useGame((s) => s.myId);
   const dispatch = useGame((s) => s.dispatch);
@@ -50,9 +66,69 @@ export function Board() {
   const [hushed, setHushed] = useState<Set<string>>(new Set()); // per-session dismissed tips
   const [sorceryIid, setSorceryIid] = useState<string | null>(null);
   const [attackers, setAttackers] = useState<Set<string>>(new Set());
+  const autoAttack = useRef<string | null>(null); // dragged to the enemy board in Main: pick it once combat starts
+  const [atkDrag, setAtkDrag] = useState<string | null>(null); // the creature being dragged toward the enemy
   const [blocks, setBlocks] = useState<Record<string, string>>({});
   const [pendingBlocker, setPendingBlocker] = useState<string | null>(null);
   const [hovered, setHovered] = useState<CardInstance | null>(null);
+  // Cards can't be clicked while a phase banner is on its way in, up, and out (PhaseBanner).
+  const [cardsLocked, setCardsLocked] = useState(false);
+  const lock = useCallback((v: boolean) => {
+    setCardsLocked(v);
+    if (!v) setHold(null);
+  }, []);
+  useEffect(() => {
+    if (!hold) return;
+    const t = setTimeout(() => lock(false), 15000); // failsafe: a banner that never reports back
+    return () => clearTimeout(t);
+  }, [hold, lock]);
+  useEffect(() => {
+    shownGame.current = game;
+    prevLive.current = live;
+  });
+  // A click on a summoning-sick creature: it shakes its head and sheds a tear (n re-keys the tear
+  // so a second click replays it).
+  const [denied, setDenied] = useState<{ iid: string; n: number } | null>(null);
+  // Haste creatures that entered THIS turn wear a "Can Attack" tag until the end phase.
+  const [hasteIids, setHasteIids] = useState<Set<string>>(new Set());
+  const seenIids = useRef<Set<string> | null>(null); // null until the first look, so the opening board isn't tagged
+  const hasteTurn = useRef(game.turn);
+  useEffect(() => {
+    const now = new Set<string>();
+    const fresh: string[] = [];
+    for (const pid of ['A', 'B'] as PlayerId[])
+      for (const c of game.players[pid].battlefield) {
+        if (!isCreature(c)) continue;
+        now.add(c.iid);
+        if (seenIids.current && !seenIids.current.has(c.iid) && hasKeyword(c, 'haste')) fresh.push(c.iid);
+      }
+    seenIids.current = now;
+    const newTurn = hasteTurn.current !== game.turn;
+    hasteTurn.current = game.turn;
+    setHasteIids((prev) => {
+      if (game.phase === 'end' || newTurn) return prev.size ? new Set() : prev; // the effect ends with the turn's last phase
+      const next = new Set([...prev].filter((i) => now.has(i)));
+      for (const i of fresh) next.add(i);
+      return next.size === prev.size && [...next].every((i) => prev.has(i)) ? prev : next;
+    });
+  }, [game]);
+
+  const denyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(denyTimer.current), []);
+
+  function denyTired(iid: string) {
+    setDenied((d) => ({ iid, n: (d?.n ?? 0) + 1 }));
+    clearTimeout(denyTimer.current);
+    denyTimer.current = setTimeout(() => setDenied(null), 1500);
+    // Horizontal head-shake on the stack (imperative: framer owns the card's transform).
+    const stack = document.querySelector(`[data-iid="${iid}"]`)?.closest('.stack') as HTMLElement | null;
+    if (stack && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      stack.animate(
+        [0, -8, 8, -6, 6, -3, 3, 0].map((x) => ({ transform: `translateX(${x}px)` })),
+        { duration: 440, easing: 'ease-out' },
+      );
+    }
+  }
 
   // Lock page scroll to this screen only — the board owns the viewport, while
   // menus / deck-select / rulebook keep their normal scrolling.
@@ -64,7 +140,14 @@ export function Board() {
   // Clear transient selection whenever the situation changes.
   useEffect(() => {
     setSorceryIid(null);
-    setAttackers(new Set());
+    // A creature dragged onto the enemy's board (dropAttack) arrives in the Attack phase already picked.
+    const auto = autoAttack.current;
+    autoAttack.current = null;
+    const picked =
+      auto !== null &&
+      game.phase === 'combat_attack' &&
+      game.players[game.active].battlefield.some((c) => c.iid === auto && isCreature(c) && canAttack(c));
+    setAttackers(picked ? new Set([auto]) : new Set());
     setBlocks({});
     setPendingBlocker(null);
     setHovered(null); // hovered card may have left play
@@ -101,7 +184,7 @@ export function Board() {
   const myFieldRef = useRef<HTMLDivElement>(null);
   function dropPlay(inst: CardInstance, point: { x: number; y: number }) {
     const field = myFieldRef.current;
-    if (!field) return;
+    if (!field || cardsLocked) return;
     const r = field.getBoundingClientRect();
     const inside = point.x >= r.left && point.x <= r.right && point.y >= r.top && point.y <= r.bottom;
     if (!inside) return;
@@ -109,6 +192,31 @@ export function Board() {
     if (def.type === 'land') dispatch({ type: 'playLand', iid: inst.iid });
     else if (def.type === 'creature') dispatch({ type: 'castCreature', iid: inst.iid });
     // sorceries need a target — keep using click/targeting for those
+  }
+
+  // Drag one of your ready creatures from your board onto the enemy's board: go to combat with it already
+  // picked as the attacker. Only creatures that can attack right now are draggable (not tapped, not
+  // summoning sick), and only in your Main phase.
+  function attackDraggable(c: CardInstance, side: PlayerId): boolean {
+    return (
+      side === localId &&
+      game.phase === 'main1' &&
+      myTurnToAct &&
+      !cardsLocked &&
+      !game.pending &&
+      !sorceryIid &&
+      isCreature(c) &&
+      canAttack(c)
+    );
+  }
+  function dropAttack(c: CardInstance, point: { x: number; y: number }) {
+    const zone = document.querySelector('.player-zone.opp');
+    if (!zone || !attackDraggable(c, localId)) return;
+    const r = zone.getBoundingClientRect();
+    if (point.x < r.left || point.x > r.right || point.y < r.top || point.y > r.bottom) return;
+    autoAttack.current = c.iid;
+    dispatch({ type: 'advance' }); // main1 -> combat_attack
+    if (useGame.getState().game?.phase !== 'combat_attack') autoAttack.current = null; // refused
   }
 
   // Announce each new log entry as a transient center banner.
@@ -204,13 +312,17 @@ export function Board() {
   // Announce when an attack gets blocked — easy to miss otherwise, especially for
   // the attacker (the engine resolves the block silently). Runs after the
   // log-announce effect so the block banner wins for that frame.
-  const prevForBlock = useRef(game);
+  const prevForBlock = useRef(live);
+  // A creature killed in combat stays on the board until its strike lands (then fades under the death
+  // fx): the exit below waits for its entry here. Read during render, while the ref still holds the
+  // previous state, so it is ready by the render that removes the card.
+  const impactDelays = useMemo(() => combatImpactDelays(prevForBlock.current, live), [live]);
   useEffect(() => {
     const before = prevForBlock.current;
-    prevForBlock.current = game;
-    if (before === game) return;
-    if (before.phase !== 'combat_block' || game.phase !== 'end') return;
-    const n = Object.keys(game.lastCombat?.blocks ?? {}).length; // resolved blocks
+    prevForBlock.current = live;
+    if (before === live) return;
+    if (before.phase !== 'combat_block' || live.phase !== 'end') return;
+    const n = Object.keys(live.lastCombat?.blocks ?? {}).length; // resolved blocks
     if (n === 0) return; // nothing was blocked
     const suffix = n > 1 ? `${n} attackers` : 'the attack';
     const text =
@@ -220,10 +332,11 @@ export function Board() {
           ? `🛡 Your attack was blocked!`
           : `🛡 You blocked ${suffix}!`;
     setAnnounce({ id: announceId.current++, text, ms: 2400 });
-  }, [game, myId, mode]);
+  }, [live, myId, mode]);
 
   const actor: PlayerId = actorOf(game); // never re-inline the combat_block ternary
   const localId: PlayerId = mode === 'hotseat' ? actor : myId;
+  const liveLocal: PlayerId = mode === 'hotseat' ? actorOf(live) : myId;
   const oppId = opponentOf(localId);
   const canAct = !game.winner && (mode === 'hotseat' || actor === myId);
   const myTurnToAct = canAct && actor === localId;
@@ -237,6 +350,10 @@ export function Board() {
   const canAnyBlock = game.players[opponentOf(game.active)].battlefield.some(
     (c) => isCreature(c) && !c.tapped,
   );
+
+  // Block step, you defending: the live attackers drive the "who can block what" cues.
+  const inBlock = game.phase === 'combat_block' && myTurnToAct && !game.winner;
+  const liveAtk = inBlock ? liveAttackers(game) : [];
 
   // Guided mode: pick the ONE tip that matches the current situation (priority order).
   // Teaches core MTG-style flow: lands -> mana -> creatures -> attack -> block.
@@ -385,7 +502,7 @@ export function Board() {
   }
 
   function handHclick(c: CardInstance) {
-    if (!canPlay(c)) return; // greyed/unplayable cards are fully disabled
+    if (cardsLocked || !canPlay(c)) return; // greyed/unplayable cards are fully disabled
     const def = getDef(c.def);
     if (def.type === 'land') dispatch({ type: 'playLand', iid: c.iid });
     else if (def.type === 'creature') dispatch({ type: 'castCreature', iid: c.iid });
@@ -396,6 +513,7 @@ export function Board() {
   }
 
   function creatureClick(c: CardInstance, side: PlayerId) {
+    if (cardsLocked) return; // the Attack phase banner is still playing
     // Resolving a pending Whipflash takes priority.
     if (game.pending?.kind === 'enter' && myTurnToAct) {
       if (c.iid !== game.pending.source) dispatch({ type: 'resolveTrigger', target: c.iid });
@@ -409,6 +527,12 @@ export function Board() {
       return;
     }
     if (!myTurnToAct) return;
+
+    // Your own creature that cannot attack yet: refuse with the tired shake + tear.
+    if (side === localId && c.summoningSick && (game.phase === 'main1' || game.phase === 'combat_attack')) {
+      denyTired(c.iid);
+      return;
+    }
 
     if (game.phase === 'combat_attack' && side === localId) {
       if (!canAttack(c)) return;
@@ -443,6 +567,55 @@ export function Board() {
     ? (game.players[localId].battlefield.find((x) => x.iid === pendingBlocker) ?? null)
     : null;
 
+  const blockedNow = new Set(Object.values(blocks));
+
+  // Which "your move" cue a battlefield creature gets (CSS class on its stack):
+  //   can-attack   attack step: your creatures that may attack, until picked
+  //   can-block    block step: your untapped creatures that can block something, until used
+  //   block-target block step, a blocker selected: the attackers it can legally take
+  function stackNudge(c: CardInstance, side: PlayerId): string {
+    if (!myTurnToAct) return '';
+    if (game.phase === 'combat_attack') {
+      return side === localId && !attackers.has(c.iid) && canAttack(c) ? ' can-attack' : '';
+    }
+    if (!inBlock) return '';
+    if (side === localId) {
+      return !pendingBlocker && !blocks[c.iid] && !c.tapped && liveAtk.some((a) => canBlock(c, a))
+        ? ' can-block'
+        : '';
+    }
+    return pendingBlockerCard &&
+      liveAtk.some((a) => a.iid === c.iid) &&
+      !blockedNow.has(c.iid) &&
+      canBlock(pendingBlockerCard, c)
+      ? ' block-target'
+      : '';
+  }
+
+  // Curves: confirmed blocks, plus every attacker the selected blocker could still take.
+  const blockLines: BlockLine[] = inBlock
+    ? [
+        ...Object.entries(blocks).map(([b, a]) => ({ from: b, to: a, kind: 'set' as const })),
+        ...(pendingBlockerCard
+          ? liveAtk
+              .filter((a) => !blockedNow.has(a.iid) && canBlock(pendingBlockerCard, a))
+              .map((a) => ({ from: pendingBlockerCard.iid, to: a.iid, kind: 'candidate' as const }))
+          : []),
+      ]
+    : [];
+
+  // A flyer can only be blocked by a flyer or a reach creature: say so on the card, and
+  // say "unblockable" when nothing of yours can take it.
+  function flyMark(c: CardInstance) {
+    if (!inBlock || !attackingIids.has(c.iid) || !hasKeyword(c, 'flying')) return null;
+    const takeable = me.battlefield.some((b) => isCreature(b) && !b.tapped && canBlock(b, c));
+    return (
+      <span className={'fly-mark' + (takeable ? '' : ' none')}>
+        ✈ {takeable ? 'Reach only' : 'Unblockable'}
+      </span>
+    );
+  }
+
   function permanents(pid: PlayerId, side: PlayerId, mine = false) {
     const p = game.players[pid];
     const lands = p.battlefield.filter(isLand);
@@ -451,17 +624,33 @@ export function Board() {
       Object.entries(blocks).find(([, a]) => a === atkIid)?.[0];
     return (
       <div
-        className={'battlefield' + (mine && dragActive ? ' drop-active' : '')}
+        className={'battlefield' + (mine && dragActive ? ' drop-active' : '') + (!mine && atkDrag ? ' attack-drop' : '')}
         ref={mine ? myFieldRef : undefined}
       >
         <div className="row creatures" data-focus-zone tabIndex={-1}>
-          <AnimatePresence>
+          <AnimatePresence custom={impactDelays}>
             {creatures.map((c) => (
               <motion.div
                 key={c.iid}
-                className="stack"
+                className={'stack' + stackNudge(c, side) + (atkDrag === c.iid ? ' dragging' : '')}
                 initial={false}
-                exit={{ opacity: 0, scale: 0.85, transition: { duration: 1.8, ease: 'easeIn' } }}
+                custom={impactDelays}
+                variants={{
+                  out: (delays: Record<string, number>) => ({
+                    opacity: 0,
+                    scale: delays[c.iid] ? 0.94 : 0.85,
+                    transition: {
+                      // Killed in combat: impact -> crack (DEATH_CRACK_MS) -> pulverize (DEATH_DUST_MS) ->
+                      // gone. The card is held whole through the hit and the cracking, and only disappears
+                      // across the pulverize, finishing exactly when the pieces do (ShatterFx). Anything
+                      // else fades slowly as before.
+                      duration: delays[c.iid] ? DEATH_DUST_MS / 1000 : 1.8,
+                      ease: delays[c.iid] ? 'linear' : 'easeIn',
+                      delay: delays[c.iid] ? (delays[c.iid] + DEATH_CRACK_MS) / 1000 : 0,
+                    },
+                  }),
+                }}
+                exit="out"
               >
                 <CardView
                   inst={c}
@@ -475,8 +664,18 @@ export function Board() {
                   // block (e.g. a flyer vs a ground creature) so that is clear BEFORE the tap.
                   dim={!!pendingBlockerCard && attackingIids.has(c.iid) && !canBlock(pendingBlockerCard, c)}
                   onClick={() => creatureClick(c, side)}
+                  draggable={attackDraggable(c, side)}
+                  onDragChange={(on) => setAtkDrag(on ? c.iid : null)}
+                  onDrop={(point) => dropAttack(c, point)}
                 />
+                {denied?.iid === c.iid && (
+                  <span key={denied.n} className="deny-tear" aria-hidden>
+                    <i />
+                  </span>
+                )}
+                {hasteIids.has(c.iid) && !attackingIids.has(c.iid) && <span className="haste-tag">Can Attack</span>}
                 {attackingIids.has(c.iid) && <span className="combat-tag atk">ATK</span>}
+                {side !== localId && flyMark(c)}
                 {blockerOf(c.iid) && <span className="combat-tag blk">blocked</span>}
                 <div className="attack-overlay">
                   <AnimatePresence>
@@ -601,9 +800,13 @@ export function Board() {
         };
         // No creature can attack → combat is pointless; offer only End Turn.
         if (!canAnyAttack) {
+          // Nothing castable, no flashback, nothing to attack with: say so, and make
+          // End Turn pulse straight away (no 5s wait) — it is the only thing left to do.
+          const noMovesLeft = !me.hand.some(canPlay) && !me.graveyard.some(canFlashback);
           return (
             <div className="actions">
-              <button className="primary" onClick={endTurn}>
+              {noMovesLeft && <span className="prompt nomoves">No more moves</span>}
+              <button className={'primary' + (noMovesLeft ? ' urgent' : '')} onClick={endTurn}>
                 End Turn
               </button>
             </div>
@@ -643,7 +846,7 @@ export function Board() {
         );
       case 'combat_block': {
         const instantHint = instantInHand && (
-          <span className="prompt-hint">✨ …or cast a glowing card</span>
+          <span className="prompt-hint">…or cast a glowing card</span>
         );
         // No creature can block. Still let them cast an instant (or pass) if they have one;
         // otherwise the auto-resolve effect lets damage through.
@@ -708,12 +911,23 @@ export function Board() {
   return (
     <HoverCtx.Provider value={setHovered}>
       <LayoutGroup>
-        <div className={'board' + (depth ? ' depth-3d' : '')}>
+        {/* nudge-main: your main phase with nothing pending — CSS pulses the playable
+            hand cards (after a delay) so the next move is easy to spot */}
+        <div
+          className={
+            'board' +
+            (depth ? ' depth-3d' : '') +
+            (cardsLocked ? ' cards-locked' : '') +
+            (myTurnToAct && game.phase === 'main1' && !sorceryIid && !game.pending && !game.winner
+              ? ' nudge-main'
+              : '')
+          }
+        >
           <header className="topbar">
             <button className="menu-btn" onClick={() => setMenuOpen(true)} aria-label="Menu" title="Menu">
               ☰
             </button>
-            <PhaseBar game={game} myId={localId} />
+            <PhaseBar game={live} myId={liveLocal} />
             <div className="topbar-right">
               {mode === 'pvp' && <span className="role">You are {myId}</span>}
               <Rulebook label={false} />
@@ -756,9 +970,9 @@ export function Board() {
                       key={c.iid}
                       inst={c}
                       onClick={() => handHclick(c)}
-                      dim={!canPlay(c)}
+                      dim={cardsLocked || !canPlay(c)}
                       greenGlow={game.phase === 'combat_block' && (getDef(c.def).type === 'instant' || hasKeyword(c, 'flash')) && canPlay(c)}
-                      draggable={canPlay(c) && getDef(c.def).type !== 'sorcery' && getDef(c.def).type !== 'instant'}
+                      draggable={!cardsLocked && canPlay(c) && getDef(c.def).type !== 'sorcery' && getDef(c.def).type !== 'instant'}
                       onDragChange={setDragActive}
                       onDrop={(point) => dropPlay(c, point)}
                     />
@@ -807,10 +1021,11 @@ export function Board() {
         (this is what misplaced the charge-up orb). Rendering these as siblings
         of `.board`, not children, keeps them truly viewport-fixed regardless of
         what `.board` is doing. */}
-        <BoardFx game={game} />
+        <BoardFx game={live} />
+        <BlockLines lines={blockLines} />
         <CastSpotlight />
         {!game.winner && <div className={'turn-glow ' + (game.active === localId ? 'me' : 'foe')} aria-hidden />}
-        <PhaseBanner game={game} localId={localId} guided={guided} />
+        <PhaseBanner game={live} localId={liveLocal} guided={guided} onLock={lock} />
 
         <AnimatePresence>
           {hovered && !sorceryIid && !game.pending && (

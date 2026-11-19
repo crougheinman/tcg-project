@@ -5,6 +5,7 @@ import { power, toughness } from '../engine/rules';
 import type { CardInstance } from '../engine/types';
 import { useSetHover } from './hover';
 import { artFallback } from './artFallback';
+import { Lightning } from './Lightning';
 
 const LONG_PRESS_MS = 320;
 
@@ -41,7 +42,7 @@ interface Props {
   greenGlow?: boolean; // castable instant during the block step — pulses green
   dim?: boolean;
   arena?: boolean; // battlefield creature: image-only + floating P/T
-  draggable?: boolean; // hand card can be dragged onto the battlefield to play it
+  draggable?: boolean; // hand card: drag onto the battlefield to play it; ready creature: drag onto the enemy board to attack
   onDrop?: (point: { x: number; y: number }) => void;
   onDragChange?: (active: boolean) => void;
   onClick?: () => void;
@@ -158,6 +159,7 @@ export function CardView({
     greenGlow ? 'green-glow' : '',
     dim ? 'dim' : '',
     onClick ? 'clickable' : '',
+    draggable ? 'can-drag' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -222,7 +224,14 @@ export function CardView({
         arenaToken ? { opacity: 0, scale: 1.55, y: -30 } : { opacity: 0, scale: 0.7, x: 48 }
       }
       animate={{ opacity: 1, scale: 1, x: 0, y: 0, rotate: inst.tapped ? 90 : 0 }}
-      exit={{ opacity: 0, scale: 0.5 }}
+      // A creature killed in combat (Board hands the AnimatePresence its impact delays as `custom`) keeps
+      // its face until the stack around it fades it out after the hit -> crack -> pulverize; every other
+      // card shrinks away at once.
+      variants={{
+        out: (delays?: Record<string, number>) =>
+          delays?.[inst.iid] ? { opacity: 1, transition: { duration: 0 } } : { opacity: 0, scale: 0.5 },
+      }}
+      exit="out"
       whileHover={onClick && !draggable ? { y: -6 } : undefined}
       drag={draggable}
       dragSnapToOrigin
@@ -231,7 +240,7 @@ export function CardView({
       onDragStart={() => {
         didDrag.current = true;
         clearTimeout(pressTimer.current);
-        setHover(inst);
+        if (!arena) setHover(inst); // a battlefield creature is dragged at the enemy: the preview would cover the target
         onDragChange?.(true);
       }}
       onDragEnd={(_e, info) => {
@@ -253,7 +262,7 @@ export function CardView({
           {def.art && (
             <img className="arena-art" src={def.art} alt="" draggable={false} onError={artFallback} />
           )}
-          {(inst.buffP > 0 || inst.buffT > 0 || (inst.tempP ?? 0) > 0 || (inst.tempT ?? 0) > 0 || inst.blitz) && (
+          {(inst.buffP > 0 || inst.buffT > 0 || (inst.tempP ?? 0) > 0 || (inst.tempT ?? 0) > 0) && (
             <motion.div
               className="buff-crown"
               title="Buffed"
@@ -267,6 +276,7 @@ export function CardView({
               <span className="buff-eye" aria-hidden />
             </motion.div>
           )}
+          {inst.blitz && <Lightning />}
           <div className={'arena-pt' + (inst.damage > 0 ? ' damaged' : '')}>
             <span>
               {pwr}/{tuf - inst.damage}
@@ -291,6 +301,7 @@ export function CardView({
             <img className="card-art" src={def.art} alt="" draggable={false} onError={artFallback} />
           )}
           {def.text && <div className="card-text">{def.text}</div>}
+          {inst.blitz && isCreature && <Lightning />}
           <div className="card-bottom">
             {isCreature && (
               <span className={'card-pt' + (inst.damage > 0 ? ' damaged' : '')}>

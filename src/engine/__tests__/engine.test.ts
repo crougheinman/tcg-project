@@ -186,10 +186,58 @@ describe('spells and win conditions', () => {
 });
 
 describe('Beast Blitz aura (Kunoichi)', () => {
+  it('Thornwood Brute and Dread Maw are beasts too', () => {
+    const s = fresh();
+    const brute = inst('thornwood_brute');
+    const maw = inst('dread_maw');
+    s.players.A.battlefield = [inst('aether_well'), inst('aether_well'), brute, maw];
+    s.players.A.hand = [inst('kunoichi')];
+    const g = applyAction(s, { type: 'castCreature', iid: s.players.A.hand[0].iid });
+    for (const b of [brute, maw]) {
+      const c = g.players.A.battlefield.find((x) => x.iid === b.iid)!;
+      expect(c.blitz).toBe(true);
+      expect(power(c)).toBe(power(inst(b.def)) + 1);
+    }
+  });
+
+  it('only announces Beast Blitz when Kunoichi and a beast meet', () => {
+    const lone = fresh();
+    lone.players.A.battlefield = [inst('aether_well'), inst('aether_well')];
+    lone.players.A.hand = [inst('kunoichi')];
+    const g1 = applyAction(lone, { type: 'castCreature', iid: lone.players.A.hand[0].iid });
+    expect(g1.log.some((l) => /Beast Blitz/.test(l))).toBe(false); // no beast: a plain 2/1
+
+    const withBeast = fresh();
+    withBeast.players.A.battlefield = [inst('aether_well'), inst('aether_well'), inst('stoneback_cub')];
+    withBeast.players.A.hand = [inst('kunoichi')];
+    const g2 = applyAction(withBeast, { type: 'castCreature', iid: withBeast.players.A.hand[0].iid });
+    expect(g2.log).toContain('✦ Beast Blitz activated!');
+
+    const beastLater = fresh();
+    beastLater.players.A.battlefield = [...Array.from({ length: 6 }, () => inst('aether_well')), inst('kunoichi')];
+    beastLater.players.A.hand = [inst('dread_maw')];
+    const g3 = applyAction(beastLater, { type: 'castCreature', iid: beastLater.players.A.hand[0].iid });
+    expect(g3.log).toContain('✦ Beast Blitz activated!');
+
+    const notBeast = fresh();
+    notBeast.players.A.battlefield = [inst('aether_well'), inst('aether_well'), inst('kunoichi')];
+    notBeast.players.A.hand = [inst('ember_sprite')];
+    const g4 = applyAction(notBeast, { type: 'castCreature', iid: notBeast.players.A.hand[0].iid });
+    expect(g4.log.some((l) => /Beast Blitz/.test(l))).toBe(false);
+  });
+
+  it('Call Wolves next to Kunoichi announces Beast Blitz', () => {
+    const s = fresh();
+    s.players.A.battlefield = [inst('aether_well'), inst('aether_well'), inst('aether_well'), inst('kunoichi')];
+    s.players.A.hand = [inst('call_wolves')];
+    const g = applyAction(s, { type: 'castSorcery', iid: s.players.A.hand[0].iid });
+    expect(g.log).toContain('✦ Beast Blitz activated!');
+  });
+
   it('summoning Kunoichi gives allied targets +1/+1, not others or enemies', () => {
     const s = fresh();
     const myCub = inst('stoneback_cub');
-    const myBrute = inst('thornwood_brute'); // not a target
+    const myBrute = inst('ember_sprite'); // not a beast, not a target
     const enemyCub = inst('stoneback_cub', { owner: 'B' });
     s.players.A.battlefield = [inst('aether_well'), inst('aether_well'), myCub, myBrute];
     s.players.B.battlefield = [enemyCub];
@@ -200,7 +248,8 @@ describe('Beast Blitz aura (Kunoichi)', () => {
     expect([power(cub), toughness(cub)]).toEqual([3, 3]);
     expect(cub.blitz).toBe(true);
     const brute = g.players.A.battlefield.find((c) => c.iid === myBrute.iid)!;
-    expect([power(brute), toughness(brute)]).toEqual([3, 3]); // unaffected
+    expect(brute.blitz).toBe(false); // unaffected
+    expect([power(brute), toughness(brute)]).toEqual([power(inst('ember_sprite')), toughness(inst('ember_sprite'))]);
     const eCub = g.players.B.battlefield.find((c) => c.iid === enemyCub.iid)!;
     expect([power(eCub), toughness(eCub)]).toEqual([2, 2]); // enemy unaffected
   });

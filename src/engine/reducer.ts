@@ -1,4 +1,4 @@
-import { getDef, isToken } from '../cards/cards';
+import { BLITZ_BEASTS, getDef, isToken } from '../cards/cards';
 import type { Action, CardInstance, Effect, GameState, PlayerId, PlayerState, Target } from './types';
 import { needsCreatureChoice, opponentOf } from './types';
 import { nextRandom, shuffle } from './rng';
@@ -6,6 +6,7 @@ import { OPENING_HAND } from './state';
 import {
   actorOf,
   availableMana,
+  blitzCue,
   findCreature,
   hasKeyword,
   isCreature,
@@ -45,6 +46,7 @@ export function applyAction(state: GameState, action: Action): GameState {
       const c = takeFromHand(caster, action.iid);
       const def = getDef(c.def);
       payMana(caster, def.cost);
+      const blitz = blitzCue(caster, c); // Kunoichi + a beast together because of this cast (read before it enters)
       c.tapped = false;
       c.damage = 0;
       c.summoningSick = !hasKeyword(c, 'haste');
@@ -63,9 +65,11 @@ export function applyAction(state: GameState, action: Action): GameState {
           s.log.push(`✦ ${skill}`);
           applyEffect(s, casterId, def.onEnter, { kind: 'player', player: opponentOf(casterId) });
         }
-      } else if (def.skill) {
-        s.log.push(`✦ ${def.skill} activated!`); // a static skill (Beast Blitz): it simply switches on
+      } else if (def.skill && def.skill !== 'Beast Blitz') {
+        s.log.push(`✦ ${def.skill} activated!`); // a static skill: it simply switches on
       }
+      // Beast Blitz announces itself only when Kunoichi and a beast meet, whichever arrives second.
+      if (blitz) s.log.push('✦ Beast Blitz activated!');
       break;
     }
     case 'keepHand': {
@@ -121,7 +125,9 @@ export function applyAction(state: GameState, action: Action): GameState {
       if (fromGrave) (caster.exile ??= []).push(c);
       else caster.graveyard.push(c);
       s.log.push(`${casterId} casts ${def.name}${fromGrave ? ' (flashback)' : ''}`);
+      const blitz = blitzCue(caster, c); // a token spell (Call Wolves) making beasts next to Kunoichi
       applyEffect(s, casterId, def.effect!, action.target);
+      if (blitz) s.log.push('✦ Beast Blitz activated!');
       // Creatures that trigger when their controller casts a spell. By default they
       // fire only on sorceries (e.g. Pyre Adept, Plague Priest); a creature flagged
       // `spellTriggerInstant` (e.g. Grave Necromancer) also fires on instants.
@@ -184,8 +190,8 @@ function allCreatures(s: GameState) {
   return [...s.players.A.battlefield, ...s.players.B.battlefield].filter(isCreature);
 }
 
-// Beast Blitz: while a player controls Kunoichi, their listed creatures get +1/+1.
-const BLITZ_TARGETS = ['swift_lancer', 'sky_talon', 'stoneback_cub', 'wolf_token'];
+// Beast Blitz: while a player controls Kunoichi, their beasts (BLITZ_BEASTS) get +1/+1.
+const BLITZ_TARGETS = BLITZ_BEASTS;
 
 function recomputeAura(s: GameState): void {
   for (const pid of ['A', 'B'] as PlayerId[]) {

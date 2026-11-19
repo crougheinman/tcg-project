@@ -114,7 +114,7 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 1,
     skill: 'Beast Blitz',
     art: '/cards/kunoichi.webp', // 420x560 WebP; other cards auto-wire to <id>.png
-    text: 'Beast Blitz — your Swift Lancer, Sky Talon, Stoneback Cub, and Wolves get +1/+1.',
+    text: 'Beast Blitz — your Swift Lancer, Sky Talon, Stoneback Cub, Thornwood Brute, Dread Maw, and Wolves get +1/+1.',
     flavor: 'One whistle, and the wild answers.',
   },
 
@@ -122,6 +122,7 @@ export const CARDS: Record<string, CardDef> = {
     id: 'pyre_adept',
     name: 'Pyre Adept',
     type: 'creature',
+    art: '/cards/pyre_adept.webp', // 420px WebP; other cards auto-wire to <id>.png
     cost: 2,
     power: 1,
     toughness: 2,
@@ -244,6 +245,7 @@ export const CARDS: Record<string, CardDef> = {
     id: 'grave_necromancer',
     name: 'Grave Necromancer',
     type: 'creature',
+    art: '/cards/grave_necromancer.webp', // 420x422 WebP; other cards auto-wire to <id>.png
     cost: 3,
     power: 1,
     toughness: 3,
@@ -470,3 +472,13 @@ export const TOKEN_IDS: ReadonlySet<string> = new Set(
 export function isToken(defId: string): boolean {
   return TOKEN_IDS.has(defId);
 }
+
+/** The beasts Kunoichi's Beast Blitz lifts (+1/+1 each) while she is on the battlefield. */
+export const BLITZ_BEASTS: readonly string[] = [
+  'swift_lancer',
+  'sky_talon',
+  'stoneback_cub',
+  'wolf_token',
+  'thornwood_brute',
+  'dread_maw',
+];

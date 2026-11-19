@@ -2,23 +2,27 @@ import { create } from 'zustand';
 import { createInitialState } from '../engine/state';
 import { applyAction } from '../engine/reducer';
 import type { Action, CardInstance, GameState, PlayerId, Target } from '../engine/types';
-import { actorOf } from '../engine/rules';
+import { actorOf, blitzCue } from '../engine/rules';
 import { cuesFor } from '../audio/cues';
 import { isMuted, playCues, setMuted as persistMuted } from '../audio/sfx';
 import { deckById, randomDeck } from '../cards/decks';
 import { resolveDeck } from '../cards/customDecks';
 import { readDepth, saveDepth } from '../ui/depth';
+import { combatHoldMs } from '../ui/firstStrike';
 import { getDef } from '../cards/cards';
 import { aiShouldAct, pickAction } from '../ai/ai';
 import {
   CAST_MS,
   CHARGE_MS,
   CHARGE_SPELLS,
+  CUTIN_MS,
+  CUTINS,
+  type CutInKind,
   HEAL_MS,
   HEAL_SPELLS,
   PHASE_PAUSE_MS,
   SKILL_CREATURES,
-  SKILL_MS,
+  skillMs,
   SMOKE_MS,
   SMOKE_SPELLS,
 } from '../ui/fxTiming';
@@ -103,6 +107,8 @@ export interface Spotlight {
   ownerId: PlayerId;
   label: string;
   ms: number;
+  /** This cast is an ultimate: its face cuts in across the screen (CutIn). */
+  cutIn?: CutInKind;
 }
 
 /** A card the player can cast right now by id: from the hand, or from the graveyard (flashback). */
@@ -120,9 +126,13 @@ export const useGame = create<Store>((set, get) => {
     const casterId = actorOf(g);
     const card = castableCard(g.players[casterId], action.iid);
     if (!card) return null;
+    const blitz = blitzCue(g.players[casterId], card);
     if (action.type === 'castCreature') {
-      // only creatures whose skill fires the moment they are cast get a window
-      return SKILL_CREATURES[card.def] ? { casterId, def: card.def, kind: 'cast', ms: SKILL_MS } : null;
+      // Beast Blitz: only when Kunoichi and a beast meet (she enters with a beast out, or a beast enters
+      // with her out); on her own she is a plain creature. Other skills fire the moment they are cast.
+      if (blitz) return { casterId, def: card.def, kind: 'cast', ms: CUTIN_MS };
+      const skill = SKILL_CREATURES[card.def];
+      return skill && skill !== 'Beast Blitz' ? { casterId, def: card.def, kind: 'cast', ms: skillMs(skill) } : null;
     }
     if (CHARGE_SPELLS.has(card.def) && getDef(card.def).effect?.type === 'damage')
       return { casterId, def: card.def, kind: 'charge', ms: CHARGE_MS };
@@ -131,7 +141,7 @@ export const useGame = create<Store>((set, get) => {
     if (HEAL_SPELLS.has(card.def))
       return { casterId, def: card.def, kind: 'heal', ms: HEAL_MS[card.def] ?? 2000 };
     // every other sorcery/instant: a plain spotlight window, no extra effect
-    return { casterId, def: card.def, kind: 'cast', ms: CAST_MS };
+    return { casterId, def: card.def, kind: 'cast', ms: blitz ? CUTIN_MS : CAST_MS };
   }
 
   // The card to float in the spotlight for this action, read BEFORE the action is applied
@@ -141,11 +151,22 @@ export const useGame = create<Store>((set, get) => {
     const casterId = actorOf(g);
     const card = castableCard(g.players[casterId], action.iid);
     if (!card) return null;
+    const blitz = blitzCue(g.players[casterId], card);
     if (action.type === 'castCreature') {
+      // Beast Blitz features Kunoichi (the one entering, or the one already out when a beast arrives)
+      if (blitz) return { card: blitz.show, ownerId: casterId, label: '✦ Beast Blitz', ms: Math.max(ms, CUTIN_MS), cutIn: 'blitz' };
       const skill = SKILL_CREATURES[card.def];
-      return skill ? { card, ownerId: casterId, label: `✦ ${skill}`, ms } : null;
+      return skill && skill !== 'Beast Blitz'
+        ? { card, ownerId: casterId, label: `✦ ${skill}`, ms: Math.max(ms, skillMs(skill)), ...(CUTINS[skill] ? { cutIn: CUTINS[skill] } : {}) }
+        : null;
     }
-    return { card, ownerId: casterId, label: getDef(card.def).type === 'instant' ? 'Instant' : 'Casting', ms };
+    return {
+      card,
+      ownerId: casterId,
+      label: getDef(card.def).type === 'instant' ? 'Instant' : 'Casting',
+      ms: blitz ? Math.max(ms, CUTIN_MS) : ms,
+      ...(blitz ? { cutIn: 'blitz' as const } : {}),
+    };
   }
 
   let spotSeq = 0;
@@ -176,6 +197,7 @@ export const useGame = create<Store>((set, get) => {
             const next = applyAction(cur.game, action);
             sfx(action, cur.game, next);
             if (next.phase !== cur.game.phase || next.active !== cur.game.active) pause = PHASE_PAUSE_MS;
+            pause += combatHoldMs(cur.game, next); // let the clash and its banner play out
             set({ game: next, charging: null });
           } catch (e) {
             set({ error: `AI error: ${(e as Error).message}`, charging: null });
@@ -373,7 +395,11 @@ export const useGame = create<Store>((set, get) => {
         set({ game: next, error: null, charging: null });
         if (next.winner) clearMatch(); // finished — nothing left to reconnect to
         if (cur.mode === 'pvp' && cur.net) cur.net.sendAction(action);
-        if (cur.mode === 'ai') scheduleAi(next.phase !== cur.game.phase || next.active !== cur.game.active ? PHASE_PAUSE_MS : 0);
+        if (cur.mode === 'ai')
+          scheduleAi(
+            (next.phase !== cur.game.phase || next.active !== cur.game.active ? PHASE_PAUSE_MS : 0) +
+              combatHoldMs(cur.game, next),
+          );
       };
       if (tel) {
         // Telegraph first (charge orb at caster, or smoke at the target — the target

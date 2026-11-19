@@ -1,8 +1,10 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { getDef } from '../cards/cards';
 import { isCreature, isLand, power, toughness } from '../engine/rules';
 import type { GameState, PlayerId } from '../engine/types';
+import { findFirstStrikeClash } from './firstStrike';
 import { opponentOf } from '../engine/types';
 import { useGame } from '../store/gameStore';
 import { DestroyFx } from './DestroyFx';
@@ -22,16 +24,26 @@ import { ProjectileFx, type Projectile } from './Projectile';
 import {
   CHARGE_MS,
   HEAL_SPELLS,
+  ATTACK_MS,
+  DEATH_CRACK_MS,
+  DEATH_DUST_MS,
+  FS_INTRO_MS,
+  FS_SLASH_MS,
+  FS_SPOT_MS,
   IMPACT_MS,
-  LUNGE_MS,
+  WINDUP_MS,
   PROJECTILE_TRAVEL_MS,
   SLAM_DUST_MS,
   SMOKE_SPELLS,
   STRIKE_STAGGER_MS,
   TRIGGER_CHARGE_MS,
+  TRIGGER_CUTIN_MS,
+  TRIGGER_CUTINS,
   TRIGGER_SPOT_MS,
   travelMsFor,
 } from './fxTiming';
+import { FirstStrikeFx } from './FirstStrikeFx';
+import { CrackFx, DustFx } from './ShatterFx';
 import { useTimers } from './useTimers';
 import type { Burst } from './Vfx';
 
@@ -50,6 +62,7 @@ const TRIGGER_THEME: SpellTheme = { core: '#fff2cf', glow: '#ff8a33', ring: '#ff
 export function BoardFx({ game }: { game: GameState }) {
   const [bursts, setBursts] = useState<Burst[]>([]);
   const [faceFlash, setFaceFlash] = useState(0);
+  const [fsFx, setFsFx] = useState<{ id: number; side: 'me' | 'foe' } | null>(null);
   const [dmgNums, setDmgNums] = useState<{ id: number; x: number; y: number; amt: number }[]>([]);
   const [statFloats, setStatFloats] = useState<
     { id: number; x: number; y: number; text: string; up: boolean }[]
@@ -61,6 +74,12 @@ export function BoardFx({ game }: { game: GameState }) {
   const [projectiles, setProjectiles] = useState<Projectile[]>([]);
   const [destroys, setDestroys] = useState<
     { id: number; x: number; y: number; style: 'fire' | 'debris' | 'wither' }[]
+  >([]);
+  // A creature killed in combat: cracks ride inside its card (portalled into `el`), then the card
+  // bursts into pieces (`crumbles`) fixed over where it stood. See ShatterFx.
+  const [cracks, setCracks] = useState<{ id: number; el: Element }[]>([]);
+  const [crumbles, setCrumbles] = useState<
+    { id: number; x: number; y: number; w: number; h: number; art?: string; rot: number }[]
   >([]);
   const [smokes, setSmokes] = useState<
     { id: number; x: number; y: number; color: string; ms: number }[]
@@ -209,7 +228,13 @@ export function BoardFx({ game }: { game: GameState }) {
     const combatHit = before.phase === 'combat_block' && game.phase === 'end' && !!resolved;
     const blockerByAtk: Record<string, string> = {};
     if (resolved) for (const [blk, atk] of Object.entries(resolved.blocks)) blockerByAtk[atk] = blk;
-    const strikeDelay = (i: number) => i * STRIKE_STAGGER_MS + IMPACT_MS;
+    // A first striker clashing with a blocker/attacker gets a cinematic first: its card floats
+    // under "First Strike!", then a blackout and three slashes. Combat's strikes wait for it
+    // (fsShift). Skipped for reduced motion, which would otherwise just black the screen out.
+    const reduced = !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const fsClash = reduced ? null : findFirstStrikeClash(before, game);
+    const fsShift = fsClash ? FS_INTRO_MS : 0;
+    const strikeDelay = (i: number) => fsShift + i * STRIKE_STAGGER_MS + IMPACT_MS;
     const firstUnblocked = resolved
       ? resolved.attackers.findIndex((a) => !blockerByAtk[a])
       : -1;
@@ -239,7 +264,7 @@ export function BoardFx({ game }: { game: GameState }) {
         if (!el) continue;
         const r = el.getBoundingClientRect();
         const f = { id: dmgId.current++, x: r.left + r.width / 2, y: r.top, text: `+${gain}`, up: true };
-        later(() => setStatFloats((sf) => [...sf, f]), IMPACT_MS + STRIKE_STAGGER_MS);
+        later(() => setStatFloats((sf) => [...sf, f]), fsShift + IMPACT_MS + STRIKE_STAGGER_MS);
       }
     }
     const beforeDmg = new Map<string, number>();
@@ -259,7 +284,7 @@ export function BoardFx({ game }: { game: GameState }) {
       if (add.length) setBursts((b) => [...b, ...add]);
       if (newDmgNums.length) setDmgNums((n) => [...n, ...newDmgNums]);
     };
-    if (combatHit && faceDmgDelay) later(flushDamage, faceDmgDelay);
+    if (combatHit && (faceDmgDelay || fsShift)) later(flushDamage, faceDmgDelay || fsShift + IMPACT_MS);
     else if (spellDamage) later(flushDamage, boltMs);
     else if (triggerShot) later(flushDamage, TRIGGER_CHARGE_MS + PROJECTILE_TRAVEL_MS);
     else flushDamage();
@@ -388,7 +413,9 @@ export function BoardFx({ game }: { game: GameState }) {
             card: cr,
             ownerId: sp.owner,
             label: `✦ ${crDef.name} triggers`,
-            ms: TRIGGER_SPOT_MS,
+            ...(TRIGGER_CUTINS[cr.def]
+              ? { ms: TRIGGER_CUTIN_MS, cutIn: TRIGGER_CUTINS[cr.def] }
+              : { ms: TRIGGER_SPOT_MS }),
           });
         }
         if (crDef.spellTrigger.type !== 'damage') continue;
@@ -469,8 +496,16 @@ export function BoardFx({ game }: { game: GameState }) {
     // Combat strike choreography: each attacker strikes in turn (STRIKE_STAGGER_MS
     // apart); its slash / shield-pop / shake land at the lunge's impact moment.
     // (lastCombat, not combat — blocks never persist during combat_block.)
+    if (fsClash) {
+      const st = useGame.getState();
+      const mineId = st.mode === 'hotseat' ? before.active : st.myId;
+      st.pushSpotlight({ card: fsClash.card, ownerId: fsClash.owner, label: 'First Strike!', ms: FS_SPOT_MS });
+      const fx = { id: dmgId.current++, side: fsClash.owner === mineId ? ('me' as const) : ('foe' as const) };
+      later(() => setFsFx(fx), FS_SPOT_MS);
+      later(() => setFsFx((cur) => (cur?.id === fx.id ? null : cur)), FS_SPOT_MS + FS_SLASH_MS);
+    }
     if (combatHit && resolved) {
-      const defenderShield = document.querySelector(`[data-player="${opponentOf(before.active)}"]`);
+      const defenderShield =document.querySelector(`[data-player="${opponentOf(before.active)}"]`);
       const spawnSlash = (el: Element | null) => {
         if (!el) return;
         const r = el.getBoundingClientRect();
@@ -516,7 +551,7 @@ export function BoardFx({ game }: { game: GameState }) {
               setFaceFlash((f) => f + 1);
             }, IMPACT_MS);
           }
-        }, i * STRIKE_STAGGER_MS);
+        }, fsShift + i * STRIKE_STAGGER_MS);
       });
     }
 
@@ -555,6 +590,37 @@ export function BoardFx({ game }: { game: GameState }) {
     for (const pid of ['A', 'B'] as PlayerId[]) {
       for (const c of before.players[pid].battlefield) {
         if (isCreature(c) && !aliveNow.has(c.iid)) {
+          // Killed in combat: strike lands -> cracks (DEATH_CRACK_MS) -> pulverized (DEATH_DUST_MS).
+          // The card itself is held on the board until the pieces appear (Board's exit delay).
+          if (combatHit && resolved && (resolved.attackers.includes(c.iid) || c.iid in resolved.blocks)) {
+            const impactAt = deathDelay(c.iid);
+            const cid = dmgId.current++;
+            later(() => {
+              const el = stackEl(c.iid);
+              if (!el) return;
+              setCracks((k) => [...k, { id: cid, el }]);
+              later(() => setCracks((k) => k.filter((x) => x.id !== cid)), DEATH_CRACK_MS + 60);
+            }, impactAt);
+            later(() => {
+              const card = document.querySelector<HTMLElement>(`[data-iid="${c.iid}"]`);
+              if (!card) return;
+              const b = card.getBoundingClientRect(); // live: an attacker may have lunged
+              setCrumbles((d) => [
+                ...d,
+                {
+                  id: cid,
+                  x: b.left + b.width / 2,
+                  y: b.top + b.height / 2,
+                  w: card.offsetWidth,
+                  h: card.offsetHeight,
+                  art: getDef(c.def).art,
+                  rot: c.tapped ? 90 : 0,
+                },
+              ]);
+              later(() => setCrumbles((d) => d.filter((x) => x.id !== cid)), DEATH_DUST_MS + 100);
+            }, impactAt + DEATH_CRACK_MS);
+            continue;
+          }
           const r = creatureRects.current[c.iid];
           if (!r) continue;
           const fx = { id: dmgId.current++, x: r.x, y: r.y, style: deathStyle };
@@ -622,6 +688,8 @@ export function BoardFx({ game }: { game: GameState }) {
 
       {faceFlash > 0 && <div key={faceFlash} className="face-flash" />}
 
+      {fsFx && <FirstStrikeFx key={fsFx.id} side={fsFx.side} />}
+
       {charges.map((c) => (
         <ChargeFx key={c.id} x={c.x} y={c.y} theme={c.theme} ms={c.ms} />
       ))}
@@ -659,6 +727,11 @@ export function BoardFx({ game }: { game: GameState }) {
           <DestroyFx key={d.id} x={d.x} y={d.y} onDone={() => removeDestroy(d.id)} />
         ),
       )}
+
+      {cracks.map((k) => createPortal(<CrackFx key={k.id} />, k.el))}
+      {crumbles.map((d) => (
+        <DustFx key={d.id} x={d.x} y={d.y} w={d.w} h={d.h} art={d.art} rot={d.rot} />
+      ))}
 
       {smokes.map((s) => (
         <SmokeFx key={s.id} x={s.x} y={s.y} color={s.color} ms={s.ms} />
@@ -747,14 +820,27 @@ function lungeTo(from: HTMLElement | null, to: Element | null) {
   const b = to.getBoundingClientRect();
   const dx = b.left + b.width / 2 - (a.left + a.width / 2);
   const dy = b.top + b.height / 2 - (a.top + a.height / 2);
-  from.animate(
+  // Wind-up: float up and rock BACK (away from the target), hold for a beat to build
+  // momentum, then strike forward. Impact lands at IMPACT_MS (see fxTiming).
+  const dist = Math.hypot(dx, dy) || 1;
+  const back = Math.min(30, dist * 0.16);
+  const bx = (-dx / dist) * back;
+  const by = (-dy / dist) * back - 10; // -10: the float
+  const prevZ = from.style.zIndex;
+  from.style.zIndex = '30'; // above its neighbours while it moves
+  const move = from.animate(
     [
-      { transform: 'translate(0,0)' },
-      { transform: `translate(${dx * 0.45}px, ${dy * 0.45}px)`, offset: 0.4 },
-      { transform: 'translate(0,0)' },
+      { transform: 'translate(0,0) scale(1)', offset: 0 },
+      { transform: `translate(${bx}px, ${by}px) scale(1.08)`, offset: 0.33, easing: 'ease-in-out' },
+      { transform: `translate(${bx * 1.15}px, ${by - 2}px) scale(1.1)`, offset: 0.45, easing: 'cubic-bezier(.55,0,.9,.45)' },
+      { transform: `translate(${dx * 0.45}px, ${dy * 0.45}px) scale(1.04)`, offset: WINDUP_MS / ATTACK_MS + 150 / ATTACK_MS },
+      { transform: 'translate(0,0) scale(1)', offset: 1 },
     ],
-    { duration: LUNGE_MS, easing: 'cubic-bezier(.3,.85,.3,1)' },
+    { duration: ATTACK_MS, easing: 'cubic-bezier(.3,.85,.3,1)' },
   );
+  move.onfinish = move.oncancel = () => {
+    from.style.zIndex = prevZ;
+  };
 }
 function shakeEl(el: HTMLElement | null) {
   if (!el) return;
