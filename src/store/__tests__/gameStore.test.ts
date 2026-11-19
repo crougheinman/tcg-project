@@ -7,6 +7,7 @@ import { actorOf } from '../../engine/rules';
 import { loadMatch } from '../../net/resume';
 import type { Action, GameState } from '../../engine/types';
 import type { MatchConnection } from '../../net/match';
+import { IAIJUTSU_MS } from '../../ui/fxTiming';
 
 // These tests exist because the store could not previously be imported at all
 // under the node-only vitest config — it reads localStorage at module scope. The
@@ -396,6 +397,36 @@ describe('cast spotlight', () => {
       expect(useGame.getState().spotlights[0]?.cutIn).toBeUndefined();
     });
 
+    it('Iaijutsu Strike on Hana plays the blackout film for 5 s before it resolves; on anyone else it is an ordinary cast', () => {
+      const iid = park(['iaijutsu_strike']);
+      const g = structuredClone(useGame.getState().game!);
+      g.players.A.battlefield.push(card('kensei_duelist', 'A'));
+      const hana = g.players.A.battlefield[g.players.A.battlefield.length - 1];
+      useGame.setState({ game: g });
+      useGame.getState().dispatch({ type: 'castSorcery', iid, target: { kind: 'creature', iid: hana.iid } });
+      const s = useGame.getState();
+      expect(s.charging?.kind).toBe('cast');
+      expect(s.charging?.ms).toBe(IAIJUTSU_MS);
+      expect(s.spotlights).toHaveLength(1);
+      expect(s.spotlights[0].cinematic).toBe('iaijutsu');
+      expect(s.spotlights[0].ms).toBe(IAIJUTSU_MS);
+      vi.advanceTimersByTime(IAIJUTSU_MS - 1);
+      expect(inHand('iaijutsu_strike')).toBe(true); // the film is still playing
+      vi.advanceTimersByTime(1);
+      expect(inHand('iaijutsu_strike')).toBe(false);
+      expect(useGame.getState().spotlights).toEqual([]);
+
+      const iid2 = park(['iaijutsu_strike']);
+      const g2 = structuredClone(useGame.getState().game!);
+      g2.players.A.battlefield.push(card('ashigaru', 'A'));
+      useGame.setState({ game: g2 });
+      useGame.getState().dispatch({
+        type: 'castSorcery', iid: iid2, target: { kind: 'creature', iid: g2.players.A.battlefield[g2.players.A.battlefield.length - 1].iid },
+      });
+      expect(useGame.getState().spotlights[0].cinematic).toBeUndefined();
+      expect(useGame.getState().charging?.ms).toBeLessThan(IAIJUTSU_MS);
+    });
+
     it('still ignores input while the card is on show', () => {
       const iid = park(['insight']);
       useGame.getState().dispatch({ type: 'castSorcery', iid });
@@ -427,6 +458,21 @@ describe('cast spotlight', () => {
       expect(inHand('insight')).toBe(false); // applied immediately
       expect(conn.sent).toHaveLength(1); // and sent to the peer straight away
       expect(useGame.getState().spotlights.map((s) => s.card.def)).toEqual(['insight']);
+    });
+
+    it('Iaijutsu Strike on Hana never delays the action online: it applies at once and the film plays alongside', () => {
+      const conn = fakeConn();
+      useGame.getState().startPvp(conn);
+      const iid = park(['iaijutsu_strike']);
+      const g = structuredClone(useGame.getState().game!);
+      g.players.A.battlefield.push(card('kensei_duelist', 'A'));
+      const hana = g.players.A.battlefield[g.players.A.battlefield.length - 1];
+      useGame.setState({ game: g });
+      useGame.getState().dispatch({ type: 'castSorcery', iid, target: { kind: 'creature', iid: hana.iid } });
+      expect(useGame.getState().charging).toBeNull();
+      expect(inHand('iaijutsu_strike')).toBe(false);
+      expect(conn.sent).toHaveLength(1);
+      expect(useGame.getState().spotlights[0].cinematic).toBe('iaijutsu');
     });
 
     it("shows the opponent's cast when it arrives", () => {

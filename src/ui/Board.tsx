@@ -17,6 +17,7 @@ import { Rulebook } from './Rulebook';
 import { ZoneViewer } from './ZoneViewer';
 import { BoardFx } from './BoardFx';
 import { CastSpotlight } from './CastSpotlight';
+import { warmIaijutsuClip } from './cinematics';
 import { PhaseBanner } from './PhaseBanner';
 import { CombatTallyChip } from './CombatTallyChip';
 import { attackTally, blockTally } from './combatTally';
@@ -82,6 +83,9 @@ export function Board() {
     const t = setTimeout(() => lock(false), 15000); // failsafe: a banner that never reports back
     return () => clearTimeout(t);
   }, [hold, lock]);
+  useEffect(() => {
+    warmIaijutsuClip(live); // the Iaijutsu film's clip is fetched once, as soon as a deck holds the card
+  }, [live]);
   useEffect(() => {
     shownGame.current = game;
     prevLive.current = live;

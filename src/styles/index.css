@@ -2498,3 +2498,75 @@ button.count-chip:hover:not(:disabled) { color: var(--vs-ink); background: var(-
   0%, 100% { box-shadow: inset 0 0 0 3px var(--foe); }
   50% { box-shadow: inset 0 0 0 3px var(--vs-yellow); }
 }
+
+/* ---- Iaijutsu on Hana: the blackout film (IaijutsuCinematic) ----
+   One fixed overlay above the phase banners and the first-strike layer, below modals. Every animation below is a share of
+   --iai-ms (IAIJUTSU_MS = 5 s): 0-7% fade to black, 9% the clip starts (3 s, plays once), 70% title, 86% the cut of light, 87-100% back to the table. */
+.iai { position: fixed; inset: 0; z-index: 98; pointer-events: none; overflow: hidden; animation: iai-life var(--iai-ms) linear both; }
+.iai-shade { position: absolute; inset: 0; background: #020203; opacity: 0.97; }
+.iai-frame {
+  position: absolute; left: 50%; top: 50%; width: min(94vw, calc(72vh * 16 / 9), 900px); aspect-ratio: 16 / 9;
+  transform: translate(-50%, -50%); overflow: hidden; background: #000;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 0 60px 10px rgba(0, 0, 0, 0.9);
+  animation: iai-push var(--iai-ms) cubic-bezier(0.3, 0, 0.6, 1) both, iai-flicker 0.17s steps(2) infinite;
+}
+.iai-video { width: 100%; height: 100%; object-fit: cover; display: block; filter: grayscale(0.35) contrast(1.12) saturate(0.8) sepia(0.12); animation: iai-reveal var(--iai-ms) linear both; }
+/* film grain: a tiny inline noise tile jumping around so it never sits still */
+.iai-grain {
+  position: absolute; inset: -20%; opacity: 0.2; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1.4 -0.2'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  animation: iai-grain 0.4s steps(5) infinite;
+}
+/* the odd vertical scratch of an old print */
+.iai-scratches {
+  position: absolute; inset: 0; opacity: 0.5; mix-blend-mode: screen;
+  background:
+    linear-gradient(90deg, transparent 17%, rgba(255, 255, 255, 0.35) 17.2%, transparent 17.5%),
+    linear-gradient(90deg, transparent 63%, rgba(255, 255, 255, 0.25) 63.1%, transparent 63.4%),
+    linear-gradient(90deg, transparent 88%, rgba(255, 255, 255, 0.3) 88.1%, transparent 88.3%);
+  animation: iai-scratch 0.9s steps(1) infinite;
+}
+.iai-vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 42%, rgba(0, 0, 0, 0.85) 100%); }
+/* letterbox bars close in at the start, like a cinema screen */
+.iai-bars {
+  position: absolute; inset: 0;
+  background: linear-gradient(#000, #000) top / 100% 11vh no-repeat, linear-gradient(#000, #000) bottom / 100% 11vh no-repeat;
+  animation: iai-bars var(--iai-ms) cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.iai-petals { position: absolute; inset: 0; }
+.iai-petals i {
+  position: absolute; top: -6vh; left: calc(var(--i) * 7.2% + 2%); width: 9px; height: 13px; border-radius: 80% 0 80% 0;
+  background: #f4c6d2; box-shadow: 0 0 6px rgba(244, 198, 210, 0.5); opacity: 0;
+  animation: iai-petal 2.6s linear both; animation-delay: calc(2.2s + var(--i) * 0.11s);
+}
+.iai-title {
+  position: absolute; right: 7vw; top: 50%; transform: translateY(-50%); display: flex; flex-direction: row; align-items: center; gap: 16px;
+  animation: iai-title var(--iai-ms) ease-out both;
+}
+/* the two characters are stacked blocks (not vertical writing mode), so they can never overlap whatever font the device falls back to */
+.iai-kanji { display: flex; flex-direction: column; align-items: center; }
+.iai-kanji b {
+  display: block; font: 400 clamp(54px, 14vh, 130px) / 1.12 'Noto Serif JP', 'Yu Mincho', 'Hiragino Mincho ProN', 'Noto Serif CJK JP', serif; color: #f2ede4;
+  text-shadow: 0 0 22px rgba(255, 255, 255, 0.35), 0 0 2px #fff;
+}
+.iai-cap { font: italic 400 clamp(11px, 2.2vh, 18px) / 1 'Anton', sans-serif; letter-spacing: 0.4em; text-transform: uppercase; color: #cfc8bb; writing-mode: vertical-rl; }
+/* one diagonal cut of white light, then the table returns */
+.iai-cut {
+  position: absolute; inset: -10%; opacity: 0; background: linear-gradient(112deg, transparent 47%, #fff 49.5%, #fff 50.5%, transparent 53%);
+  animation: iai-cut var(--iai-ms) linear both;
+}
+@keyframes iai-life { 0% { opacity: 0; } 7% { opacity: 1; } 87% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes iai-reveal { 0%, 6% { opacity: 0; } 12%, 100% { opacity: 1; } }
+@keyframes iai-push { from { scale: 1; } to { scale: 1.07; } }
+@keyframes iai-flicker { 0% { opacity: 1; } 50% { opacity: 0.93; } 100% { opacity: 0.98; } }
+@keyframes iai-grain { 0% { translate: 0 0; } 20% { translate: -6% 4%; } 40% { translate: 5% -7%; } 60% { translate: -3% -5%; } 80% { translate: 7% 6%; } 100% { translate: 0 0; } }
+@keyframes iai-scratch { 0% { translate: 0 0; opacity: 0.5; } 33% { translate: 31% 0; opacity: 0.25; } 66% { translate: -22% 0; opacity: 0.55; } }
+@keyframes iai-bars { from { clip-path: inset(50% 0); } 14%, 100% { clip-path: inset(0); } }
+@keyframes iai-petal {
+  0% { transform: translate(0, 0) rotate(0); opacity: 0; } 12% { opacity: 0.9; }
+  100% { transform: translate(calc(var(--i) * -6px + 40px), 112vh) rotate(540deg); opacity: 0; }
+}
+@keyframes iai-title { 0%, 68% { opacity: 0; translate: 14px 0; } 76%, 100% { opacity: 1; translate: 0 0; } }
+@keyframes iai-cut { 0%, 85% { opacity: 0; } 86.5% { opacity: 1; } 89% { opacity: 0; } 100% { opacity: 0; } }
+@media (max-width: 640px) { .iai-title { right: 3vw; } .iai-kanji b { font-size: clamp(40px, 10vh, 80px); } }
+@media (prefers-reduced-motion: reduce) { .iai { display: none; } }

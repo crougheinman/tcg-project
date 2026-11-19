@@ -3,6 +3,7 @@ import { getDef } from '../cards/cards';
 import { useGame } from '../store/gameStore';
 import { PCard } from './CardPreview';
 import { CutIn } from './CutIn';
+import { IaijutsuCinematic } from './IaijutsuCinematic';
 
 // While a sorcery, instant or creature skill is being cast, its card floats up in the middle
 // of the table and glows, so the player can see WHAT is being cast and WHO is casting it.
@@ -13,10 +14,13 @@ const spring = { type: 'spring' as const, stiffness: 260, damping: 24 };
 export function CastSpotlight() {
   const spots = useGame((s) => s.spotlights);
   const myId = useGame((s) => s.myId);
+  const cards = spots.filter((sp) => !sp.cinematic); // a film replaces the floating card
   return (
+    <>
+    {spots.filter((sp) => sp.cinematic === 'iaijutsu').map((sp) => <IaijutsuCinematic key={sp.id} />)}
     <div className="cast-stage" aria-hidden>
       <AnimatePresence>
-        {spots.map((sp) => {
+        {cards.map((sp) => {
           const type = getDef(sp.card.def).type;
           const tone = sp.label.startsWith('✦') ? 'skill' : type === 'instant' ? 'instant' : 'spell';
           return (
@@ -45,7 +49,7 @@ export function CastSpotlight() {
       </AnimatePresence>
       {/* An ultimate (Beast Blitz, Grave Call): its face cuts in across the middle for the whole window */}
       <AnimatePresence>
-        {spots
+        {cards
           .filter((sp, i, all) => sp.cutIn && all.findIndex((o) => o.cutIn === sp.cutIn) === i) // one band per kind
           .flatMap((sp) => [
             // a dim backdrop so the skill is the only thing to look at
@@ -61,5 +65,6 @@ export function CastSpotlight() {
           ])}
       </AnimatePresence>
     </div>
+    </>
   );
 }

@@ -9,6 +9,7 @@ import { deckById, randomDeck } from '../cards/decks';
 import { resolveDeck } from '../cards/customDecks';
 import { readDepth, saveDepth } from '../ui/depth';
 import { combatHoldMs } from '../ui/firstStrike';
+import { isIaijutsuOnHana } from '../ui/cinematics';
 import { getDef } from '../cards/cards';
 import { aiShouldAct, pickAction } from '../ai/ai';
 import {
@@ -26,6 +27,7 @@ import {
   skillMs,
   SMOKE_MS,
   SMOKE_SPELLS,
+  IAIJUTSU_MS,
 } from '../ui/fxTiming';
 import type { MatchConnection } from '../net/match';
 import { rejoinMatch } from '../net/match';
@@ -110,6 +112,8 @@ export interface Spotlight {
   ms: number;
   /** This cast is an ultimate: its face cuts in across the screen (CutIn). */
   cutIn?: CutInKind;
+  /** A full-screen film instead of the floating card (Iaijutsu Strike on Hana). */
+  cinematic?: 'iaijutsu';
 }
 
 /** A card the player can cast right now by id: from the hand, or from the graveyard (flashback). */
@@ -142,6 +146,8 @@ export const useGame = create<Store>((set, get) => {
       return { casterId, def: card.def, kind: 'smoke', ms: SMOKE_MS, target: action.target };
     if (HEAL_SPELLS.has(card.def))
       return { casterId, def: card.def, kind: 'heal', ms: HEAL_MS[card.def] ?? 2000 };
+    // Iaijutsu Strike on Hana: the blackout film plays first, then the spell resolves
+    if (isIaijutsuOnHana(g, action, card)) return { casterId, def: card.def, kind: 'cast', ms: IAIJUTSU_MS };
     // every other sorcery/instant: a plain spotlight window, no extra effect
     return { casterId, def: card.def, kind: 'cast', ms: blitz ? CUTIN_MS : CAST_MS };
   }
@@ -163,6 +169,9 @@ export const useGame = create<Store>((set, get) => {
       return skill && skill !== 'Beast Blitz'
         ? { card, ownerId: casterId, label: `✦ ${skill}`, ms: Math.max(ms, skillMs(skill)), ...(CUTINS[skill] ? { cutIn: CUTINS[skill] } : {}) }
         : null;
+    }
+    if (isIaijutsuOnHana(g, action, card)) {
+      return { card, ownerId: casterId, label: 'Iaijutsu', ms: IAIJUTSU_MS, cinematic: 'iaijutsu' };
     }
     return {
       card,

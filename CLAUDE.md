@@ -76,6 +76,7 @@ the change (below). Playwright is not a project dependency; it must exist where 
   holds it longer (`FS_CUTIN_SPOT_MS` 1.7 s vs `FS_SPOT_MS` 0.9 s); `combatHoldMs` / `combatImpactDelays` (`firstStrike.ts`) use the
   per-card `fsIntroMs`, so strikes and the next banner wait for it. Plays alongside the action, so online play is untouched. To add
   one: art in `public/ui/`, a `CutIn.tsx` `ART` entry, an `FS_CUTINS` entry, a colour block in `index.css`.
+- **Iaijutsu blackout film** (`IaijutsuCinematic.tsx`, `cinematics.ts`, `.iai*` in `index.css`): Iaijutsu Strike cast on a Kensei Duelist (`isIaijutsuOnHana`; off under reduced motion) replaces the floating card with a 5 s full-screen film (`IAIJUTSU_MS`, constants in `fxTiming.ts`): fade to black, letterbox bars, film grain / scratches / flicker, the clip (`public/ui/iaijutsu.mp4`, 640x360, 3 s, poster `iaijutsu-poster.webp`) played ONCE after 450 ms by a `<video>` with no loop (it holds its last frame, so it never repeats like the GIF it came from), slow push-in, falling petals, vertical 居合 title, one diagonal cut of light, then the table returns. The store marks the spotlight `cinematic: 'iaijutsu'` and gives the cast a 5 s `charging` window vs AI / hotseat (the effect waits); online it plays alongside and never delays the action. `CastSpotlight` renders it outside `.cast-stage` (z 98, above banners) and keeps it out of the card/cut-in lists. Board prefetches the clip once when a deck holds the card (`warmIaijutsuClip`). Every `.iai*` keyframe is a share of `--iai-ms`, so changing `IAIJUTSU_MS` retimes it; the title characters are stacked blocks, not vertical writing mode (that overlapped).
 - **Moment cut-ins** (`momentCues.ts`, `BoardFx.tsx`): creatures whose signature *moment* cuts in without delaying the action: Iron Shogun's The Charge (`charge`, when declared as an attacker), Storm Drake's Thunder (`thunder`, when it enters), Rotting Hulk's Last breath (`breath`, when it dies). `momentCues(before, after)` is a pure diff of two game states (unit-tested), table `MOMENT_CUTINS`; `BoardFx` pushes the spotlight, so it plays alongside the action in PvP too. The Charge is parked until the block-step phase banner has left (`locked` from `Board`, failsafe `PARKED_CUE_FAILSAFE_MS`). Note: `src/ui/__tests__` runs in the jsdom project, which needs `jsdom` installed.
 - **Beast Blitz** (engine + store): Kunoichi gives `BLITZ_BEASTS` (+1/+1: Swift Lancer, Sky Talon, Stoneback
   Cub, Wolf, Thornwood Brute, Dread Maw). `blitzCue(player, card)` decides when it *announces* (log line,
@@ -170,7 +171,7 @@ rotting_hulk, carrion_colossus, raise_horde, wolf_token, ronin_blade, kensei_due
 warding_stance, scorch, ashigaru, cinderbolt, shuriken_volley, topple, take_counter, grasp_from_grave, soul_siphon, wild_growth, aether_well, withering_touch (every card now has new art).
 The design guide (house style, shared prompt line, composition rules, and a prompt per card) is `card-art.md`: use it when
 asking for new art, and add a prompt there for any card whose art is replaced.
-Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.webp`, `pyre-glare.webp`, `whip-face.webp`, `flash-guard.webp`, `rot-face.webp`, `charge-face.webp`, `thunder-face.webp`, `breath-face.webp`, `strike-face.webp`).
+Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.webp`, `pyre-glare.webp`, `whip-face.webp`, `flash-guard.webp`, `rot-face.webp`, `charge-face.webp`, `thunder-face.webp`, `breath-face.webp`, `strike-face.webp`). The Iaijutsu film's clip and poster are `iaijutsu.mp4` / `iaijutsu-poster.webp` there too.
 
 ## Workflow rules from the owner
 
@@ -198,6 +199,7 @@ Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.
 
 ## Change log (newest first; add a line per change)
 
+- Iaijutsu Strike on Hana plays a 5 s blackout film (Japanese-cinema style: bars, grain, the supplied clip once through as a non-looping video, petals, 居合 title, cut of light); store `cinematic` spotlight + `isIaijutsuOnHana`, tests for AI (5 s hold), PvP (no delay) and reduced motion.
 - New Thornwood Brute Whipflash cut-in face (panda-faced brute mid-lash, dark background, 1002x394); the `whip` band loses its multiply-over-gradient trick and gets a dark green background; `card-art.md` prompt added.
 - Moment cut-ins for Iron Shogun (The Charge, on attack), Storm Drake (Thunder, on enter) and Rotting Hulk (Last breath, on death): new `charge` / `thunder` / `breath` kinds, `momentCues` diff helper with tests, parked behind the block banner for The Charge.
 - `card-art.md`: Iaijutsu Strike prompt redone around Hana (the moment after the draw: blade re-sheathed, a sliced lantern and blossom); the old generic swordsman prompt is gone. Art not delivered yet.

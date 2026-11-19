@@ -51,6 +51,16 @@ export const SKILL_CREATURES: Record<string, string> = Object.fromEntries(
 // A creature's spell-trigger (Pyre Adept): its card is spotlighted for the charge-up plus a beat.
 export const TRIGGER_SPOT_MS = 1000;
 
+// ---- the Iaijutsu cinematic ----
+// Iaijutsu Strike cast on Hana (the Kensei Duelist) blacks the screen out and plays a short film (IaijutsuCinematic):
+// fade to black, the clip once through (it never loops), a held frame with falling petals and a title, one cut of light,
+// then back to the table. The spell's effect waits for the whole thing (vs AI / hotseat); online play plays it alongside.
+export const IAIJUTSU = { card: 'iaijutsu_strike', target: 'kensei_duelist' } as const;
+export const IAIJUTSU_MS = 5000; // the whole sequence; every offset below is inside it
+export const IAIJUTSU_CLIP_START_MS = 450; // the clip begins once the screen is dark
+export const IAIJUTSU_CLIP_MS = 3000; // the clip's own length (30 frames at 10 fps)
+export const IAIJUTSU_CLIP_URL = '/ui/iaijutsu.mp4';
+
 // ---- phase banner ----
 
 export const PHASE_BANNER_MS = 3000; // how long the centred "ATTACK PHASE" banner holds
