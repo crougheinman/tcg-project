@@ -11,6 +11,7 @@ export const CARDS: Record<string, CardDef> = {
     type: 'land',
     cost: 0,
     text: 'Tap: add one mana.',
+    art: '/cards/aether_well.webp', // 420x421 WebP; other cards auto-wire to <id>.png
     flavor: 'It hums with borrowed light.',
   },
 
@@ -182,6 +183,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 1,
     power: 2,
     toughness: 1,
+    art: '/cards/ashigaru.webp', // 420x418 WebP; other cards auto-wire to <id>.png
     flavor: 'A footman of the clan — spear steady, honor steadier.',
   },
   ronin_blade: {
@@ -261,7 +263,7 @@ export const CARDS: Record<string, CardDef> = {
     id: 'grave_necromancer',
     name: 'Grave Necromancer',
     type: 'creature',
-    art: '/cards/grave_necromancer.webp', // 420x422 WebP; other cards auto-wire to <id>.png
+    art: '/cards/grave_necromancer.webp', // 420x417 WebP; other cards auto-wire to <id>.png
     cost: 3,
     power: 1,
     toughness: 3,
@@ -305,6 +307,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 1,
     effect: { type: 'damage', amount: 3, targets: 'any' },
     text: 'Deal 3 damage to any target.',
+    art: '/cards/cinderbolt.webp', // 420x422 WebP; other cards auto-wire to <id>.png
     flavor: 'A handful of the old warmth, spent all at once.',
   },
   scorch: {
@@ -334,6 +337,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 1,
     effect: { type: 'buff', power: 2, toughness: 2, targets: 'creature' },
     text: 'Target creature gets +2/+2.',
+    art: '/cards/wild_growth.webp', // 420x418 WebP; other cards auto-wire to <id>.png
     flavor: 'It never wears off. The forest is not in the habit of taking back.',
   },
   pyroblast: {
@@ -394,6 +398,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 2,
     effect: { type: 'tapAll', maxToughness: 2 },
     text: 'Instant — Tap all opponent creatures with toughness 2 or less.',
+    art: '/cards/topple.webp', // 420x419 WebP; other cards auto-wire to <id>.png
     flavor: 'The small ones never see the ground rise to meet them.',
   },
   take_counter: {
@@ -404,6 +409,7 @@ export const CARDS: Record<string, CardDef> = {
     effect: { type: 'destroy', targets: 'creature' },
     blockOnly: true,
     text: 'Instant — cast only while blocking. Destroy target tapped creature.',
+    art: '/cards/take_counter.webp', // 420x419 WebP; other cards auto-wire to <id>.png
     flavor: 'Strike when its guard is down.',
   },
 
@@ -435,6 +441,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 2,
     effect: { type: 'damage', amount: 3, targets: 'any' },
     text: 'Instant — deal 3 damage to any target.',
+    art: '/cards/shuriken_volley.webp', // 420x422 WebP; other cards auto-wire to <id>.png
     flavor: 'Steel falls like rain, and just as quietly.',
   },
 
@@ -446,6 +453,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 2,
     effect: { type: 'damage', amount: 3, targets: 'any' },
     text: 'Instant — deal 3 damage to any target.',
+    art: '/cards/withering_touch.webp', // 420x426 WebP; other cards auto-wire to <id>.png
     flavor: 'Flesh sloughs from bone at the lightest caress.',
   },
   soul_siphon: {
@@ -455,6 +463,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 2,
     effect: { type: 'heal', amount: 5 },
     text: 'Instant — drain vitality; gain 5 life.',
+    art: '/cards/soul_siphon.webp', // 420x419 WebP; other cards auto-wire to <id>.png
     flavor: 'Their last breath becomes your first.',
   },
   grasp_from_grave: {
@@ -465,6 +474,7 @@ export const CARDS: Record<string, CardDef> = {
     effect: { type: 'destroy', targets: 'creature' },
     blockOnly: true,
     text: 'Instant — cast only while blocking. Destroy target tapped creature.',
+    art: '/cards/grasp_from_grave.webp', // 420x417 WebP; other cards auto-wire to <id>.png
     flavor: 'Cold hands close around its ankles.',
   },
 };
