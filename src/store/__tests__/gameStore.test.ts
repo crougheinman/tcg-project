@@ -325,13 +325,33 @@ describe('cast spotlight', () => {
       expect(useGame.getState().spotlights[0]?.ms).toBe(useGame.getState().charging!.ms);
     });
 
-    it('gives a creature skill (Kunoichi, Beast Blitz) a window; a plain creature gets none', () => {
+    it('gives Kunoichi (Beast Blitz) a window only when a beast is out; a plain creature gets none', () => {
       const k = park(['kunoichi', 'ember_sprite']);
       useGame.getState().dispatch({ type: 'castCreature', iid: k });
+      expect(useGame.getState().charging).toBeNull(); // no beast: a plain creature, no cut-in
+      expect(useGame.getState().spotlights).toEqual([]);
+      expect(inHand('kunoichi')).toBe(false);
+
+      const k2 = park(['kunoichi']);
+      const g = structuredClone(useGame.getState().game!);
+      g.players.A.battlefield.push(card('stoneback_cub', 'A'));
+      useGame.setState({ game: g });
+      useGame.getState().dispatch({ type: 'castCreature', iid: k2 });
       expect(useGame.getState().charging?.kind).toBe('cast');
       expect(useGame.getState().spotlights[0].label).toBe('✦ Beast Blitz');
-      vi.advanceTimersByTime(1300);
+      expect(useGame.getState().spotlights[0].blitz).toBe(true);
+      vi.advanceTimersByTime(2400);
       expect(inHand('kunoichi')).toBe(false);
+
+      // a beast entering next to Kunoichi sets it off too, featuring her
+      const cub = park(['stoneback_cub']);
+      const g2 = structuredClone(useGame.getState().game!);
+      g2.players.A.battlefield.push(card('kunoichi', 'A'));
+      useGame.setState({ game: g2 });
+      useGame.getState().dispatch({ type: 'castCreature', iid: cub });
+      expect(useGame.getState().spotlights[0].blitz).toBe(true);
+      expect(useGame.getState().spotlights[0].card.def).toBe('kunoichi');
+      vi.advanceTimersByTime(2400);
 
       const plain = park(['ember_sprite']);
       useGame.getState().dispatch({ type: 'castCreature', iid: plain });

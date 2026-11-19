@@ -5,7 +5,7 @@ import { power, toughness } from '../engine/rules';
 import type { CardInstance } from '../engine/types';
 import { useSetHover } from './hover';
 import { artFallback } from './artFallback';
-import { Fangs } from './Fangs';
+import { Lightning } from './Lightning';
 
 const LONG_PRESS_MS = 320;
 
@@ -276,7 +276,7 @@ export function CardView({
               <span className="buff-eye" aria-hidden />
             </motion.div>
           )}
-          {inst.blitz && <Fangs />}
+          {inst.blitz && <Lightning />}
           <div className={'arena-pt' + (inst.damage > 0 ? ' damaged' : '')}>
             <span>
               {pwr}/{tuf - inst.damage}
@@ -301,7 +301,7 @@ export function CardView({
             <img className="card-art" src={def.art} alt="" draggable={false} onError={artFallback} />
           )}
           {def.text && <div className="card-text">{def.text}</div>}
-          {inst.blitz && isCreature && <Fangs />}
+          {inst.blitz && isCreature && <Lightning />}
           <div className="card-bottom">
             {isCreature && (
               <span className={'card-pt' + (inst.damage > 0 ? ' damaged' : '')}>

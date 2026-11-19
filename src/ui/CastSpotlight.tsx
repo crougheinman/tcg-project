@@ -43,10 +43,10 @@ export function CastSpotlight() {
           );
         })}
       </AnimatePresence>
-      {/* Beast Blitz is an ultimate: the art cuts in at the bottom right for the whole window */}
+      {/* Beast Blitz is an ultimate: the art cuts in across the middle for the whole window */}
       <AnimatePresence>
         {spots
-          .filter((sp) => sp.label === '✦ Beast Blitz')
+          .filter((sp) => sp.blitz)
           .flatMap((sp) => [
             // a dim backdrop so the skill is the only thing to look at
             <motion.div

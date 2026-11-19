@@ -1,4 +1,4 @@
-import { getDef } from '../cards/cards';
+import { BLITZ_BEASTS, getDef } from '../cards/cards';
 import type {
   Action,
   CardInstance,
@@ -24,6 +24,21 @@ export function hasKeyword(c: CardInstance, kw: Keyword): boolean {
 }
 export function isCreature(c: CardInstance): boolean {
   return getDef(c.def).type === 'creature';
+}
+/**
+ * Does casting `card` set Beast Blitz off? Only when Kunoichi and a beast end up on the battlefield
+ * together because of it: Kunoichi cast with a beast already there, a beast cast (or made, by a token
+ * spell like Call Wolves) with Kunoichi there. Read it BEFORE the card enters. `show` is the card the
+ * announcement features: Kunoichi herself, or the spell that made the beasts.
+ */
+export function blitzCue(p: PlayerState, card: CardInstance): { show: CardInstance } | null {
+  const kunoichi = p.battlefield.find((c) => c.def === 'kunoichi');
+  const def = getDef(card.def);
+  if (card.def === 'kunoichi') return p.battlefield.some((c) => BLITZ_BEASTS.includes(c.def)) ? { show: card } : null;
+  if (!kunoichi) return null;
+  if (def.type === 'creature') return BLITZ_BEASTS.includes(card.def) ? { show: kunoichi } : null;
+  if (def.effect?.type === 'token' && BLITZ_BEASTS.includes(def.effect.token)) return { show: card };
+  return null;
 }
 export function isLand(c: CardInstance): boolean {
   return getDef(c.def).type === 'land';

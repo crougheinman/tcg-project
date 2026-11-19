@@ -112,7 +112,7 @@ export const CARDS: Record<string, CardDef> = {
     power: 2,
     toughness: 1,
     skill: 'Beast Blitz',
-    text: 'Beast Blitz — your Swift Lancer, Sky Talon, Stoneback Cub, and Wolves get +1/+1.',
+    text: 'Beast Blitz — your Swift Lancer, Sky Talon, Stoneback Cub, Thornwood Brute, Dread Maw, and Wolves get +1/+1.',
     flavor: 'One whistle, and the wild answers.',
   },
 
@@ -468,3 +468,13 @@ export const TOKEN_IDS: ReadonlySet<string> = new Set(
 export function isToken(defId: string): boolean {
   return TOKEN_IDS.has(defId);
 }
+
+/** The beasts Kunoichi's Beast Blitz lifts (+1/+1 each) while she is on the battlefield. */
+export const BLITZ_BEASTS: readonly string[] = [
+  'swift_lancer',
+  'sky_talon',
+  'stoneback_cub',
+  'wolf_token',
+  'thornwood_brute',
+  'dread_maw',
+];
