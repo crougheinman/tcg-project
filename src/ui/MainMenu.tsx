@@ -1,9 +1,12 @@
-import { useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { hasSupabase } from '../net/supabase';
 import { loadMatch } from '../net/resume';
-import { randomDeck } from '../cards/decks';
+import { DECK_LIST, randomDeck } from '../cards/decks';
+import { CARDS } from '../cards/cards';
+import type { CardDef } from '../engine/types';
+import { artFallback } from './artFallback';
 import { Rulebook } from './Rulebook';
 import { DeckSelect } from './DeckSelect';
 import { CardGallery } from './CardGallery';
@@ -40,6 +43,48 @@ const PATCH_NOTES: { deck: string; kind: 'buff' | 'nerf'; change: string; why: s
   },
 ];
 
+// The two duellists on the home page: random creatures from the eight decks, swapped on a slow timer
+// (the sides take turns, never showing the same card twice at once). Cosmetic only, so Math.random is fine.
+const DUELIST_MS = 9000;
+const DUELIST_POOL = (() => {
+  const seen = new Set<string>();
+  const out: { def: CardDef; deck: string }[] = [];
+  for (const d of DECK_LIST) {
+    for (const id of d.cards) {
+      const def = CARDS[id];
+      if (def.type !== 'creature' || seen.has(id)) continue;
+      seen.add(id);
+      out.push({ def, deck: d.name });
+    }
+  }
+  return out;
+})();
+
+const pickDuelist = (not: (CardDef | undefined)[]) => {
+  const pool = DUELIST_POOL.filter((p) => !not.includes(p.def));
+  return pool[Math.floor(Math.random() * pool.length)];
+};
+
+function useDuelists() {
+  const [pair, setPair] = useState(() => {
+    const l = pickDuelist([]);
+    return { l, r: pickDuelist([l.def]) };
+  });
+  useEffect(() => {
+    const swap = (side: 'l' | 'r') => () =>
+      setPair((p) => ({ ...p, [side]: pickDuelist([p.l.def, p.r.def]) }));
+    const a = setInterval(swap('l'), DUELIST_MS);
+    let b = 0;
+    const t = setTimeout(() => (b = window.setInterval(swap('r'), DUELIST_MS)), DUELIST_MS / 2);
+    return () => {
+      clearInterval(a);
+      clearTimeout(t);
+      clearInterval(b);
+    };
+  }, []);
+  return pair;
+}
+
 // Arrow keys walk the home menu like a game menu. Only the row buttons count —
 // the rulebook's own overlay buttons live inside the list too, and must be left alone.
 const ROW_BUTTONS = ':scope > li > button:not(:disabled)';
@@ -73,6 +118,7 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
   const [aiDeck, setAiDeck] = useState<string | null>(null); // vs AI: opponent deck, pre-picked for the face-off
   const [showGallery, setShowGallery] = useState(false); // browse every card in the game
   const [showBuilder, setShowBuilder] = useState(false);
+  const duel = useDuelists();
 
   const cancel = () => {
     setPicking(null);
@@ -130,15 +176,17 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
     content = (
       <div className="vs-home">
         <div className="vs-side vs-left" aria-hidden>
-          <img src="/cards/iron_shogun.png" alt="" />
-          <div className="vs-tag">
-            Iron Shogun<small>IRON BLOSSOM</small>
+          <img key={duel.l.def.id} src={duel.l.def.art} alt="" draggable={false} onError={artFallback} />
+          <div className="vs-tag" key={'t' + duel.l.def.id}>
+            {duel.l.def.name}
+            <small>{duel.l.deck.toUpperCase()}</small>
           </div>
         </div>
         <div className="vs-side vs-right" aria-hidden>
-          <img src="/cards/storm_drake.png" alt="" />
-          <div className="vs-tag">
-            Storm Drake<small>SKYWARD</small>
+          <img key={duel.r.def.id} src={duel.r.def.art} alt="" draggable={false} onError={artFallback} />
+          <div className="vs-tag" key={'t' + duel.r.def.id}>
+            {duel.r.def.name}
+            <small>{duel.r.deck.toUpperCase()}</small>
           </div>
         </div>
         <div className="vs-seam" aria-hidden />
