@@ -24,6 +24,7 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 1,
     keywords: ['haste'],
     text: 'Haste.',
+    art: '/cards/ember_sprite.webp', // 420x418 WebP; other cards auto-wire to <id>.png
     flavor:
       'Born from the first sparks of a campfire, these mischievous sprites love a quick race before they fizzle out.',
   },
@@ -46,6 +47,7 @@ export const CARDS: Record<string, CardDef> = {
     cost: 2,
     power: 2,
     toughness: 2,
+    art: '/cards/stoneback_cub.webp', // 420x404 WebP; other cards auto-wire to <id>.png
     flavor: 'Its hide remembers every mountain it has slept against.',
   },
   sky_talon: {
@@ -57,6 +59,7 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 1,
     keywords: ['flying', 'vigilance'],
     text: 'Flying. Vigilance.',
+    art: '/cards/sky_talon.webp', // 420x420 WebP; other cards auto-wire to <id>.png
     flavor: 'It hunts the wind itself.',
   },
   thornwood_brute: {
@@ -69,6 +72,7 @@ export const CARDS: Record<string, CardDef> = {
     skill: 'Whipflash',
     onEnter: { type: 'damage', amount: 1, targets: 'creature' },
     text: 'Whipflash — when it enters, deal 1 damage to a creature.',
+    art: '/cards/thornwood_brute.webp', // 420x412 WebP; other cards auto-wire to <id>.png
     flavor: 'The forest walks when the forest is angry.',
   },
   granite_sentinel: {
@@ -80,6 +84,7 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 5,
     keywords: ['reach'],
     text: 'Reach.',
+    art: '/cards/granite_sentinel.webp', // 420x418 WebP; other cards auto-wire to <id>.png
     flavor: 'Patient as the mountain, immovable as its roots.',
   },
   storm_drake: {
@@ -91,6 +96,7 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 4,
     keywords: ['flying', 'vigilance'],
     text: 'Flying. Vigilance.',
+    art: '/cards/storm_drake.webp', // 420x422 WebP; other cards auto-wire to <id>.png
     flavor: 'Thunder is merely the sound of its wings.',
   },
   dread_maw: {
@@ -102,6 +108,7 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 4,
     keywords: ['trample'],
     text: 'Trample.',
+    art: '/cards/dread_maw.webp', // 480x279 WebP; other cards auto-wire to <id>.png
     flavor: 'It does not hunt. It simply arrives, and the hunting is done.',
   },
 
