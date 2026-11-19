@@ -8,7 +8,7 @@ mechanics, tooling, conventions, known issues). See "Keeping this file current" 
 
 **Entity Duel (Arcanum TCG)**: a small Magic-inspired card game. React + Vite + TypeScript, a pure
 deterministic engine, an in-browser heuristic AI, online PvP over Supabase Realtime (lockstep), Zustand
-for UI state, Capacitor for mobile. Hosted on Vercel. CI (`.github/workflows/ci.yml`) runs tsc, tests and build on PRs and pushes. Deeper docs: `README.md` (setup),
+for UI state, Capacitor for mobile. Hosted on Vercel. CI (`.github/workflows/ci.yml`) runs tsc, tests and build on PRs and pushes. Deeper docs: `card-art.md` (card art style guide and prompts), `README.md` (setup),
 `ARCHITECTURE.md` (how it works and why, with a "what changed and what it found" log), `LORE.md` (the world,
 the 8 decks, card flavour), `docs/MECHANICS_PLAN.md` (the mechanics roadmap, Phases 0-3 all done),
 `tools/qa/README.md` (the QA harness).
@@ -157,7 +157,10 @@ captions), size it for its use (landscape 4:3 art window in the hover preview, p
 `object-fit: cover`), export **WebP** (about 400-480 px, target under 45 KB), delete the old PNG, set
 `art: '/cards/<id>.webp'` on the card in `cards.ts`, and check it in the game at desktop and phone.
 Replaced so far: insight, kunoichi, swift_lancer, pyre_adept, grave_necromancer, ember_sprite, stoneback_cub,
-sky_talon, thornwood_brute, granite_sentinel, storm_drake, dread_maw.
+sky_talon, thornwood_brute, granite_sentinel, storm_drake, dread_maw, soothe, pyroblast, ancient_treant, call_wolves, overgrowth, bulwark, zombie_token, shambling_ghoul, plague_priest,
+rotting_hulk, carrion_colossus, raise_horde.
+The design guide (house style, shared prompt line, composition rules, and a prompt per card) is `card-art.md`: use it when
+asking for new art, and add a prompt there for any card whose art is replaced.
 Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.webp`, `pyre-glare.webp`, `whip-face.webp`).
 
 ## Workflow rules from the owner
@@ -186,6 +189,16 @@ Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.
 
 ## Change log (newest first; add a line per change)
 
+- New Kunoichi card art (Kasei crouched on a ledge with wolf and hawk spirits), 420px WebP.
+- `card-art.md`: added the Kunoichi card art prompt (matches the new Beast Blitz cut-in face).
+- New Beast Blitz cut-in face (`public/ui/blitz-face.webp`, 1015x405): Kasei mid-battle-cry with wolf and hawk spirits behind her.
+- `card-art.md`: added the Kunoichi (Beast Blitz) cut-in prompt.
+- New Pyre Adept cut-in face (`public/ui/pyre-glare.webp`, 1014x402): snarling adept with blazing eyes, matching the new card art.
+- New Pyre Adept card art (two flames, snarling adept); `card-art.md` gained a skill cut-in art section with specs and the Pyre Adept cut-in prompt.
+- `card-art.md`: added the Pyre Adept prompt (matches the current art; Sorae, kept distinct from the Pyroblast mage).
+- New 420px WebP art (~34-42 KB) for the Zombie token, Shambling Ghoul, Plague Priest, Rotting Hulk, Carrion Colossus and Raise Horde; old PNGs deleted; `card-art.md` status updated.
+- Added `card-art.md`: card art design guide (house style, composition rules, palettes, delivery checklist) with the prompt for each card.
+- New WebP art (420-520px, ~35-40 KB) for Pyroblast, Ancient Treant, Call Wolves, Overgrowth and Bulwark; old PNGs deleted.
 - Skill cut-in for Thornwood Brute's Whipflash (snarling badger on a thorn-green band); new `whip` cut-in kind.
 - Card Codex detail card tilts in 3D: follows the mouse on desktop, the gyroscope on phones; parallax art, floating panel, glare.
 - Card Codex detail view: the art fills the whole modal; details sit in a translucent frosted panel over it.
