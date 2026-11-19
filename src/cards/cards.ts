@@ -208,7 +208,8 @@ export const CARDS: Record<string, CardDef> = {
     keywords: ['haste', 'firstStrike'],
     text: 'Haste. First strike.',
     art: '/cards/kensei_duelist.webp', // 420x422 WebP; other cards auto-wire to <id>.png
-    flavor: 'One breath, one cut. There is no second.',
+    flavor:
+      "\"One breath, one cut. There is no second.\" Calm as still water and strict as the creed, Hana of the Single Breath has walked away from four duels she could have finished. All four still wish she hadn't.",
   },
   iron_shogun: {
     id: 'iron_shogun',
