@@ -35,6 +35,7 @@ export const CARDS: Record<string, CardDef> = {
     power: 2,
     toughness: 1,
     keywords: ['haste', 'vigilance'],
+    art: '/cards/swift_lancer.webp', // WebP; other cards auto-wire to <id>.png
     text: 'Haste. Vigilance.',
     flavor: 'First to the charge, and gone before the dust settles.',
   },
@@ -112,6 +113,7 @@ export const CARDS: Record<string, CardDef> = {
     power: 2,
     toughness: 1,
     skill: 'Beast Blitz',
+    art: '/cards/kunoichi.webp', // 420x560 WebP; other cards auto-wire to <id>.png
     text: 'Beast Blitz — your Swift Lancer, Sky Talon, Stoneback Cub, Thornwood Brute, Dread Maw, and Wolves get +1/+1.',
     flavor: 'One whistle, and the wild answers.',
   },
