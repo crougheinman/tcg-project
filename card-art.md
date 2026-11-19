@@ -50,12 +50,12 @@ painterly textured background. One clear subject, a readable silhouette, an expr
 
 Kunoichi, Swift Lancer, Pyre Adept, Grave Necromancer, Insight, Ember Sprite, Stoneback Cub, Sky Talon, Thornwood
 Brute, Granite Sentinel, Storm Drake, Dread Maw, Soothe, Pyroblast, Ancient Treant, Call Wolves, Overgrowth, Bulwark,
-Zombie token, Shambling Ghoul, Plague Priest, Rotting Hulk, Carrion Colossus, Raise Horde.
+Zombie token, Shambling Ghoul, Plague Priest, Rotting Hulk, Carrion Colossus, Raise Horde, Wolf token, Ronin Blade,
+Kensei Duelist, Iron Shogun, Iaijutsu Strike, Warding Stance, Scorch.
 
 ## To do (still on the original art)
 
-Wolf token, Ronin Blade, Kensei Duelist, Iron Shogun, Scorch, Iaijutsu Strike, Warding Stance (prompts below). Also still original and
-without a prompt yet: Ashigaru, Aether Well, Cinderbolt, Grasp from the Grave, Shuriken Volley, Soul Siphon,
+Still original and without a prompt yet: Ashigaru, Aether Well, Cinderbolt, Grasp from the Grave, Shuriken Volley, Soul Siphon,
 Take Counter, Topple, Wild Growth, Withering Touch.
 
 ---
@@ -146,6 +146,14 @@ Specs:
 - Delivered as WebP (target under 60 KB). Wired in `CutIn.tsx` (`ART`), `fxTiming.ts` (the kind) and a colour block in
   `index.css`; today's: `blitz` (Kunoichi, battle cry), `grave` (Grave Necromancer, grin), `pyre` (Pyre Adept, burning
   glare), `whip` (Thornwood Brute, snarl; white background, so it is multiplied over a green band).
+
+**Bulwark: Flash (Castellan Marrek snaps the line shut in the instant it is needed)**
+Wired (`flash-guard.webp`, 1009x401): the `flash` cut-in plays only when Bulwark is cast at instant speed (the attack or block
+step), not when it is cast in your main phase. Lore: Castellan
+Marrek, who has held the middle pass for thirty-one years: "we are not here to win, we are here to still be here." Match
+the card art (dented steel plate, round shield, golden barrier). Same shared style line with "Wide 2.5:1 composition".
+
+> Wide 2.5:1 extreme close-up of Castellan Marrek's face, a grim veteran with a weathered, scarred face and a short grey beard, wearing a dented steel helmet with a nose guard, eyes hard and unblinking, jaw set. A large round steel shield edge cuts across the lower foreground, and a translucent golden dome of light flashes outward around him, blasting dust and small stones past the frame in streaks. Behind him a dim stone mountain pass. A sudden bright flash of gold light at the shield's rim. Palette: steel grey, warm gold, dusty tan, deep blue-grey shadow. Keep the left third dark and calm.
 
 **Pyre Adept: spell trigger (every sorcery she casts burns the opponent)** (delivered as `pyre-glare.webp`, 1014x402)
 Uses the shared style line, with "Wide 2.5:1 composition" in place of "Square composition".

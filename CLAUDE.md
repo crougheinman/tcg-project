@@ -66,7 +66,8 @@ the change (below). Playwright is not a project dependency; it must exist where 
 - **Skill cut-ins** (`CutIn.tsx`, `CastSpotlight.tsx`): a slanted band across the middle with the caster's face
   right of centre (so the floating spotlight card never covers it), speed lines, flash, dim backdrop. Kinds in
   `fxTiming.ts`: `CUTINS` (cast-time skills: Beast Blitz `blitz`, Grave Call `grave`, Thornwood Brute's Whipflash `whip`, 2.4 s) and
-  `TRIGGER_CUTINS` (spell triggers: Pyre Adept `pyre`, 1.8 s). Colours are CSS vars on `.blitz-ult.<kind>`.
+  `TRIGGER_CUTINS` (spell triggers: Pyre Adept `pyre`, 1.8 s). `FLASH_CUTINS` (keyed by card id: Bulwark `flash`, 2.4 s) plays only for a Flash cast, i.e. `isFlashCast` in `rules.ts`: a flash
+  creature cast outside `main1` (attack or block step); cast in the main phase it is an ordinary creature. Colours are CSS vars on `.blitz-ult.<kind>`.
   One band per kind at a time. To add one: art in `public/ui/`, entry in `CutIn.tsx` `ART`, a table entry, a
   colour block in `index.css`. The `whip` art is on white, so its `.bu-art` uses `mix-blend-mode: multiply` over a green gradient band (`--cut-bg`
   can be a gradient).
@@ -158,10 +159,11 @@ captions), size it for its use (landscape 4:3 art window in the hover preview, p
 `art: '/cards/<id>.webp'` on the card in `cards.ts`, and check it in the game at desktop and phone.
 Replaced so far: insight, kunoichi, swift_lancer, pyre_adept, grave_necromancer, ember_sprite, stoneback_cub,
 sky_talon, thornwood_brute, granite_sentinel, storm_drake, dread_maw, soothe, pyroblast, ancient_treant, call_wolves, overgrowth, bulwark, zombie_token, shambling_ghoul, plague_priest,
-rotting_hulk, carrion_colossus, raise_horde.
+rotting_hulk, carrion_colossus, raise_horde, wolf_token, ronin_blade, kensei_duelist, iron_shogun, iaijutsu_strike,
+warding_stance, scorch.
 The design guide (house style, shared prompt line, composition rules, and a prompt per card) is `card-art.md`: use it when
 asking for new art, and add a prompt there for any card whose art is replaced.
-Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.webp`, `pyre-glare.webp`, `whip-face.webp`).
+Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.webp`, `pyre-glare.webp`, `whip-face.webp`, `flash-guard.webp`).
 
 ## Workflow rules from the owner
 
@@ -189,6 +191,9 @@ Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.
 
 ## Change log (newest first; add a line per change)
 
+- Bulwark Flash cut-in: new `flash` kind with Marrek's face (`public/ui/flash-guard.webp`), played only when a flash creature is cast at instant speed (`isFlashCast`); tests added.
+- New 420px WebP art (~33-44 KB) for the Wolf token, Ronin Blade, Kensei Duelist, Iron Shogun, Iaijutsu Strike, Warding Stance and Scorch; old PNGs deleted; `card-art.md` status updated.
+- `card-art.md`: added the Bulwark Flash cut-in prompt (art only; no `flash` cut-in exists in the game yet).
 - New Kunoichi card art (Kasei crouched on a ledge with wolf and hawk spirits), 420px WebP.
 - `card-art.md`: added the Kunoichi card art prompt (matches the new Beast Blitz cut-in face).
 - New Beast Blitz cut-in face (`public/ui/blitz-face.webp`, 1015x405): Kasei mid-battle-cry with wolf and hawk spirits behind her.
