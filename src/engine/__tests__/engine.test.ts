@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialState, MAX_DECK_SIZE } from '../state';
 import { applyAction } from '../reducer';
-import { isLand, isCreature, canAttack, canBlock, blockError, availableMana, power, toughness, actorOf, findCreature } from '../rules';
+import { isLand, isCreature, canAttack, canBlock, blockError, availableMana, power, toughness, actorOf, findCreature, isFlashCast } from '../rules';
 import type { Action, CardInstance, GameState } from '../types';
 import { DECK_EMBERWOOD, DECK_SKYWARD, DECK_LIST, DECK_IRONBLOSSOM, DECK_GRAVETIDE } from '../../cards/decks';
 import { getDef } from '../../cards/cards';
@@ -182,6 +182,20 @@ describe('spells and win conditions', () => {
     const buffed = g.players.A.battlefield.find((c) => c.iid === cub.iid)!;
     expect(buffed.buffP).toBe(2);
     expect(buffed.buffT).toBe(2);
+  });
+});
+
+describe('flash cast detection (Bulwark cut-in)', () => {
+  it('a flash creature is a Flash cast outside the main phase, and an ordinary cast in it', () => {
+    const s = fresh();
+    const bulwark = inst('bulwark');
+    expect(isFlashCast({ ...s, phase: 'main1' }, bulwark)).toBe(false); // sorcery-speed: nothing special
+    expect(isFlashCast({ ...s, phase: 'combat_attack' }, bulwark)).toBe(true);
+    expect(isFlashCast({ ...s, phase: 'combat_block' }, bulwark)).toBe(true); // surprise blocker
+  });
+  it('a creature without flash never counts, whatever the phase', () => {
+    const s = fresh();
+    expect(isFlashCast({ ...s, phase: 'combat_block' }, inst('swift_lancer'))).toBe(false);
   });
 });
 

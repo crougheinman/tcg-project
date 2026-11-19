@@ -380,6 +380,12 @@ describe('cast spotlight', () => {
       expect(inHand('thornwood_brute')).toBe(false);
     });
 
+    it('Bulwark gets the flash cut-in only when it is cast at instant speed', () => {
+      const n = park(['bulwark']);
+      useGame.getState().dispatch({ type: 'castCreature', iid: n }); // main phase: an ordinary cast
+      expect(useGame.getState().spotlights[0]?.cutIn).toBeUndefined();
+    });
+
     it('still ignores input while the card is on show', () => {
       const iid = park(['insight']);
       useGame.getState().dispatch({ type: 'castSorcery', iid });

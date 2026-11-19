@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { createInitialState } from '../engine/state';
 import { applyAction } from '../engine/reducer';
 import type { Action, CardInstance, GameState, PlayerId, Target } from '../engine/types';
-import { actorOf, blitzCue } from '../engine/rules';
+import { actorOf, blitzCue, isFlashCast } from '../engine/rules';
 import { cuesFor } from '../audio/cues';
 import { isMuted, playCues, setMuted as persistMuted } from '../audio/sfx';
 import { deckById, randomDeck } from '../cards/decks';
@@ -17,6 +17,7 @@ import {
   CHARGE_SPELLS,
   CUTIN_MS,
   CUTINS,
+  FLASH_CUTINS,
   type CutInKind,
   HEAL_MS,
   HEAL_SPELLS,
@@ -131,6 +132,7 @@ export const useGame = create<Store>((set, get) => {
       // Beast Blitz: only when Kunoichi and a beast meet (she enters with a beast out, or a beast enters
       // with her out); on her own she is a plain creature. Other skills fire the moment they are cast.
       if (blitz) return { casterId, def: card.def, kind: 'cast', ms: CUTIN_MS };
+      if (isFlashCast(g, card) && FLASH_CUTINS[card.def]) return { casterId, def: card.def, kind: 'cast', ms: CUTIN_MS };
       const skill = SKILL_CREATURES[card.def];
       return skill && skill !== 'Beast Blitz' ? { casterId, def: card.def, kind: 'cast', ms: skillMs(skill) } : null;
     }
@@ -155,6 +157,8 @@ export const useGame = create<Store>((set, get) => {
     if (action.type === 'castCreature') {
       // Beast Blitz features Kunoichi (the one entering, or the one already out when a beast arrives)
       if (blitz) return { card: blitz.show, ownerId: casterId, label: '✦ Beast Blitz', ms: Math.max(ms, CUTIN_MS), cutIn: 'blitz' };
+      if (isFlashCast(g, card) && FLASH_CUTINS[card.def])
+        return { card, ownerId: casterId, label: '✦ Flash', ms: Math.max(ms, CUTIN_MS), cutIn: FLASH_CUTINS[card.def] };
       const skill = SKILL_CREATURES[card.def];
       return skill && skill !== 'Beast Blitz'
         ? { card, ownerId: casterId, label: `✦ ${skill}`, ms: Math.max(ms, skillMs(skill)), ...(CUTINS[skill] ? { cutIn: CUTINS[skill] } : {}) }

@@ -40,6 +40,13 @@ export function blitzCue(p: PlayerState, card: CardInstance): { show: CardInstan
   if (def.effect?.type === 'token' && BLITZ_BEASTS.includes(def.effect.token)) return { show: card };
   return null;
 }
+/**
+ * Is this cast a Flash cast: a flash creature put out at instant speed (the attack or block step) rather than in
+ * its owner's main phase, where it is an ordinary creature? Only these casts get the flash cut-in. Read BEFORE the card enters.
+ */
+export function isFlashCast(state: GameState, card: CardInstance): boolean {
+  return hasKeyword(card, 'flash') && state.phase !== 'main1';
+}
 export function isLand(c: CardInstance): boolean {
   return getDef(c.def).type === 'land';
 }

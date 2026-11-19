@@ -2415,8 +2415,13 @@ button.count-chip:hover:not(:disabled) { color: var(--vs-ink); background: var(-
   --cut-bg: linear-gradient(100deg, #174d1a, #5fb02f 45%, #c9ec62);
 }
 .blitz-ult.whip .bu-art { mix-blend-mode: multiply; }
+/* Bulwark: Flash. Steel and gold, the barrier snapping shut. */
+.blitz-ult.flash {
+  --cut-hi: rgba(255, 240, 180, 0.98); --cut-lo: rgba(214, 168, 60, 0.95); --cut-glow: rgba(255, 214, 100, 0.95);
+  --cut-l1: rgba(255, 246, 205, 0.55); --cut-l2: rgba(190, 196, 215, 0.45); --cut-bg: #0b0d13;
+}
 /* the face (or eyes) sits right of centre so the floating card does not cover it */
-.blitz-ult.blitz .bu-art, .blitz-ult.grave .bu-art, .blitz-ult.pyre .bu-art, .blitz-ult.whip .bu-art {
+.blitz-ult.blitz .bu-art, .blitz-ult.grave .bu-art, .blitz-ult.pyre .bu-art, .blitz-ult.whip .bu-art, .blitz-ult.flash .bu-art {
   left: auto; right: 0; width: 56%; object-position: 50% 40%;
   -webkit-mask-image: linear-gradient(to right, transparent 0, #000 24%);
   mask-image: linear-gradient(to right, transparent 0, #000 24%);
