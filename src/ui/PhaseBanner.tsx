@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import type { GameState, PlayerId } from '../engine/types';
 import { PHASE_BANNER_MS, PHASE_GAP_MS } from './fxTiming';
 import { combatHoldMs } from './firstStrike';
-import { phaseBannerInfo, type PhaseBannerInfo } from './phaseInfo';
+import { blockStepIsEmpty, phaseBannerInfo, type PhaseBannerInfo } from './phaseInfo';
 
 // A banner in the middle of the screen every time the phase (or the turn) changes:
 // whose turn it is in small letters on top, the phase in big letters under it.
@@ -34,6 +34,7 @@ export function PhaseBanner({
   const showT = useRef<ReturnType<typeof setTimeout>>();
   const hideT = useRef<ReturnType<typeof setTimeout>>();
   const freeAt = useRef(0); // when the next banner may start (previous one's end + the gap)
+  const showPending = useRef(false); // a banner is waiting for its slot
   const guidedRef = useRef(guided);
   guidedRef.current = guided;
   const over = !!game.winner;
@@ -50,6 +51,12 @@ export function PhaseBanner({
     if (info.key === lastKey.current) return;
     lastKey.current = info.key;
     const now = Date.now();
+    // A block step with nothing to decide (no creature can block, no instant to cast) gets no banner at all: the
+    // board is released at once (unless an earlier banner is still up or waiting, which releases it as it leaves).
+    if (blockStepIsEmpty(game)) {
+      if (!showPending.current && now >= freeAt.current) onLockRef.current?.(false);
+      return;
+    }
     // From the moment the phase changes until its banner (which may wait for the gap before it) has
     // played and left, the cards are locked and the board holds still (Board.tsx).
     clearTimeout(lockT.current);
@@ -65,6 +72,7 @@ export function PhaseBanner({
     // PHASE_GAP_MS). If a newer phase arrives while this one is still waiting, it takes the slot.
     const startAt = Math.max(now + hold, freeAt.current);
     const show = () => {
+      showPending.current = false;
       const dur = PHASE_BANNER_MS * (guidedRef.current ? 1.4 : 1);
       freeAt.current = Date.now() + dur + EXIT_MS + PHASE_GAP_MS; // the gap is counted from the banner leaving
       clearTimeout(hideT.current);
@@ -73,8 +81,10 @@ export function PhaseBanner({
       lockT.current = setTimeout(() => onLockRef.current?.(false), dur + EXIT_MS);
     };
     clearTimeout(showT.current);
-    if (startAt > now) showT.current = setTimeout(show, startAt - now);
-    else show();
+    if (startAt > now) {
+      showPending.current = true;
+      showT.current = setTimeout(show, startAt - now);
+    } else show();
     // `info` is rebuilt every render; its key is what identifies a phase change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [info.key, over]);

@@ -60,6 +60,11 @@ the change (below). Playwright is not a project dependency; it must exist where 
   state from *before* the phase change (`hold`) and locks all cards (`cardsLocked`); both release when the
   banner leaves. A combat resolution is never held (`combatJustResolved`), and `BoardFx`, the block announce
   and `impactDelays` read the live game. AI waits `PHASE_PAUSE_MS` after a phase change.
+  **An empty block step gets no banner** (`blockStepIsEmpty` in `phaseInfo.ts`): when the defender has no creature that can block any
+  attacker (none untapped, or every attacker flies and they have no flyer/reach) and no instant or flash card they can afford,
+  `PhaseBanner` skips the "Block phase" banner (no dim, no lock; it releases the board at once unless an earlier banner is still
+  up), the Board auto-resolves the block for a human defender (same helper), and the store skips the AI's `PHASE_PAUSE_MS`
+  (`phasePauseMs`) so the damage lands in about half a second instead of waiting out a banner that never came.
 - **Combat clash timing** (`firstStrike.ts`, `fxTiming.ts`): `combatHoldMs` delays the next banner until the
   clash is over (+1.3 s). Kills play impact → crack (0.3 s, `ShatterFx`) → pulverize (0.2 s) → gone; the dying
   card stays until then via `CardView` variants.
@@ -199,6 +204,7 @@ Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.
 
 ## Change log (newest first; add a line per change)
 
+- No block-phase banner when nothing can block (no able creature for any attacker, no affordable instant): `blockStepIsEmpty` (tests), Board auto-resolve now uses it (flyers vs ground blockers count), AI pause skipped. Smoke batch not run.
 - Rot's discarded card is shown face up and rots away (purple light, greys and fades); Grave Call shows a green bloom first, then the returned creature fades in. New `zoneCues` diff helper (tests), `ZoneFx`, `cutInRemainingMs`; spotlights gained an `at` timestamp. Smoke batch skipped at the owner's request.
 - Iaijutsu Strike on Hana plays a 5 s blackout film (Japanese-cinema style: bars, grain, the supplied clip once through as a non-looping video, petals, 居合 title, cut of light); store `cinematic` spotlight + `isIaijutsuOnHana`, tests for AI (5 s hold), PvP (no delay) and reduced motion.
 - New Thornwood Brute Whipflash cut-in face (panda-faced brute mid-lash, dark background, 1002x394); the `whip` band loses its multiply-over-gradient trick and gets a dark green background; `card-art.md` prompt added.

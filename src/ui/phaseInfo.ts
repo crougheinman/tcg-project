@@ -1,5 +1,6 @@
 import type { GameState, PlayerId } from '../engine/types';
-import { actorOf } from '../engine/rules';
+import { actorOf, availableMana, canBlock, hasKeyword, isCreature } from '../engine/rules';
+import { getDef } from '../cards/cards';
 
 // What the phase banner says, as a pure function of the game state so it can be tested without a
 // browser. `mine` is whose TURN it is from the local player's seat (the banner's colour: cyan for
@@ -55,4 +56,18 @@ export function phaseBannerInfo(game: GameState, localId: PlayerId): PhaseBanner
     title,
     hint,
   };
+}
+
+/**
+ * The block step with nothing to decide: the defender has no creature that can block any attacker (none untapped, or
+ * every attacker flies and they have no flyer or reach) AND no instant or flash card they could afford to cast.
+ * The block banner is skipped then, and the Board lets the damage through (it used to wait for a click). Pure.
+ */
+export function blockStepIsEmpty(game: GameState): boolean {
+  if (game.phase !== 'combat_block') return false;
+  const defender = game.players[game.active === 'A' ? 'B' : 'A'];
+  const attackers = game.players[game.active].battlefield.filter((c) => game.combat?.attackers.includes(c.iid));
+  if (defender.battlefield.some((b) => isCreature(b) && attackers.some((a) => canBlock(b, a)))) return false;
+  const mana = availableMana(defender);
+  return !defender.hand.some((c) => (getDef(c.def).type === 'instant' || hasKeyword(c, 'flash')) && getDef(c.def).cost <= mana);
 }

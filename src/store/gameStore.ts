@@ -10,6 +10,7 @@ import { resolveDeck } from '../cards/customDecks';
 import { readDepth, saveDepth } from '../ui/depth';
 import { combatHoldMs } from '../ui/firstStrike';
 import { isIaijutsuOnHana } from '../ui/cinematics';
+import { blockStepIsEmpty } from '../ui/phaseInfo';
 import { getDef } from '../cards/cards';
 import { aiShouldAct, pickAction } from '../ai/ai';
 import {
@@ -184,6 +185,12 @@ export const useGame = create<Store>((set, get) => {
     };
   }
 
+  /** How long the AI waits after a phase or turn change so its banner can be read: none when no banner is shown (an empty block step). */
+  function phasePauseMs(prev: GameState, next: GameState): number {
+    if (next.phase === prev.phase && next.active === prev.active) return 0;
+    return blockStepIsEmpty(next) ? 0 : PHASE_PAUSE_MS;
+  }
+
   let spotSeq = 0;
   function pushSpotlight(sp: Omit<Spotlight, 'id' | 'at'>) {
     const id = ++spotSeq;
@@ -211,7 +218,7 @@ export const useGame = create<Store>((set, get) => {
           try {
             const next = applyAction(cur.game, action);
             sfx(action, cur.game, next);
-            if (next.phase !== cur.game.phase || next.active !== cur.game.active) pause = PHASE_PAUSE_MS;
+            pause = phasePauseMs(cur.game, next);
             pause += combatHoldMs(cur.game, next); // let the clash and its banner play out
             set({ game: next, charging: null });
           } catch (e) {
@@ -412,8 +419,7 @@ export const useGame = create<Store>((set, get) => {
         if (cur.mode === 'pvp' && cur.net) cur.net.sendAction(action);
         if (cur.mode === 'ai')
           scheduleAi(
-            (next.phase !== cur.game.phase || next.active !== cur.game.active ? PHASE_PAUSE_MS : 0) +
-              combatHoldMs(cur.game, next),
+            phasePauseMs(cur.game, next) + combatHoldMs(cur.game, next),
           );
       };
       if (tel) {

@@ -19,6 +19,7 @@ import { BoardFx } from './BoardFx';
 import { CastSpotlight } from './CastSpotlight';
 import { warmIaijutsuClip } from './cinematics';
 import { PhaseBanner } from './PhaseBanner';
+import { blockStepIsEmpty } from './phaseInfo';
 import { CombatTallyChip } from './CombatTallyChip';
 import { attackTally, blockTally } from './combatTally';
 import { MAX_MULLIGANS, OPENING_HAND } from '../engine/state';
@@ -294,11 +295,9 @@ export function Board() {
     const defender = opponentOf(game.active);
     const myTurn = !game.winner && (mode === 'hotseat' || defender === myId);
     if (game.phase !== 'combat_block' || !myTurn || game.pending) return;
-    const dp = game.players[defender];
-    if (dp.battlefield.some((c) => isCreature(c) && !c.tapped)) return; // can block
-    // Don't rush the pass if they hold an affordable instant they might want to cast.
-    const dpMana = availableMana(dp);
-    if (dp.hand.some((c) => (getDef(c.def).type === 'instant' || hasKeyword(c, 'flash')) && getDef(c.def).cost <= dpMana)) return;
+    // Nothing to decide: no creature can block any attacker (a flyer with no flyer or reach to meet it counts) and no
+    // affordable instant they might want to cast. The block banner is skipped for the same reason (blockStepIsEmpty).
+    if (!blockStepIsEmpty(game)) return;
     const key = `${game.turn}-${defender}`;
     if (autoBlockRef.current === key) return;
     autoBlockRef.current = key;
