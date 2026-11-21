@@ -15,7 +15,11 @@ const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
 
 /** One-shot spell impact: core flash + double shockwave + 8 radial shards + afterglow. */
-export function SpellImpactFx({ x, y, theme }: { x: number; y: number; theme: SpellTheme }) {
+export function SpellImpactFx({ x, y, theme, big = false }: { x: number; y: number; theme: SpellTheme; big?: boolean }) {
+  // `big` (a Pyre Adept's punch): everything larger, a third shockwave, and a longer ray fan.
+  const k = big ? 1.9 : 1;
+  const rings = big ? [0, 0.1, 0.22] : [0, 0.12];
+  const rays = big ? 14 : 8;
   return (
     <motion.div
       className="fx-point"
@@ -27,7 +31,7 @@ export function SpellImpactFx({ x, y, theme }: { x: number; y: number; theme: Sp
       <motion.div
         className="fx-circle"
         style={{
-          ...circle(90),
+          ...circle(90 * k),
           background: `radial-gradient(circle, ${theme.core} 0%, ${theme.glow} 45%, transparent 70%)`,
           filter: `drop-shadow(0 0 26px ${theme.glow})`,
         }}
@@ -36,24 +40,24 @@ export function SpellImpactFx({ x, y, theme }: { x: number; y: number; theme: Sp
         transition={{ duration: 0.55, times: [0, 0.4, 1], ease: EASE_OUT }}
       />
       {/* double shockwave */}
-      {[0, 0.12].map((delay, i) => (
+      {rings.map((delay, i) => (
         <motion.div
           key={i}
           className="fx-circle"
-          style={{ ...circle(90), border: `3px solid ${theme.ring}` }}
+          style={{ ...circle(90 * k), border: `${big ? 5 : 3}px solid ${theme.ring}` }}
           initial={{ scale: 0.2, opacity: 0.9 }}
-          animate={{ scale: 2.4, opacity: 0 }}
+          animate={{ scale: big ? 3 : 2.4, opacity: 0 }}
           transition={{ duration: 0.7, delay, ease: EASE_OUT }}
         />
       ))}
       {/* radial shards */}
-      {Array.from({ length: 8 }, (_, i) => (
-        <div key={i} className="fx-ray" style={{ transform: `rotate(${i * 45}deg)` }}>
+      {Array.from({ length: rays }, (_, i) => (
+        <div key={i} className="fx-ray" style={{ transform: `rotate(${i * (360 / rays)}deg)` }}>
           <motion.div
             className="fx-shard"
             style={{ background: `linear-gradient(90deg, ${theme.core}, ${theme.glow}, transparent)` }}
             initial={{ x: 6, opacity: 1, scaleX: 1 }}
-            animate={{ x: 74, opacity: 0, scaleX: 0.3 }}
+            animate={{ x: 74 * k, opacity: 0, scaleX: 0.3 }}
             transition={{ duration: 0.55, ease: EASE_OUT }}
           />
         </div>
@@ -62,7 +66,7 @@ export function SpellImpactFx({ x, y, theme }: { x: number; y: number; theme: Sp
       <motion.div
         className="fx-circle"
         style={{
-          ...circle(130),
+          ...circle(130 * k),
           background: `radial-gradient(circle, ${theme.glow}55 0%, transparent 65%)`,
           filter: 'blur(6px)',
         }}

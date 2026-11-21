@@ -32,7 +32,9 @@ import {
   IMPACT_MS,
   WINDUP_MS,
   PARKED_CUE_FAILSAFE_MS,
+  FIST_TRAVEL_MS,
   PROJECTILE_TRAVEL_MS,
+  PUNCH_MS,
   SLAM_DUST_MS,
   SMOKE_SPELLS,
   STRIKE_STAGGER_MS,
@@ -99,7 +101,7 @@ export function BoardFx({ game, locked = false }: { game: GameState; locked?: bo
     { id: number; kind: 'discard' | 'raise'; card: CardInstance; side: 'me' | 'foe'; ms: number }[]
   >([]);
   const [spellFx, setSpellFx] = useState<
-    { id: number; theme: SpellTheme; x: number; y: number } | null
+    { id: number; theme: SpellTheme; x: number; y: number; big?: boolean } | null
   >(null);
   const [charges, setCharges] = useState<
     { id: number; x: number; y: number; theme: SpellTheme; ms: number }[]
@@ -318,7 +320,7 @@ export function BoardFx({ game, locked = false }: { game: GameState; locked?: bo
     };
     if (combatHit && (faceDmgDelay || fsShift)) later(flushDamage, faceDmgDelay || fsShift + IMPACT_MS);
     else if (spellDamage) later(flushDamage, boltMs);
-    else if (triggerShot) later(flushDamage, TRIGGER_CHARGE_MS + PROJECTILE_TRAVEL_MS);
+    else if (triggerShot) later(flushDamage, TRIGGER_CHARGE_MS + FIST_TRAVEL_MS);
     else flushDamage();
 
     // Creature stat changes -> a floating number at the creature (green up / red down),
@@ -465,6 +467,8 @@ export function BoardFx({ game, locked = false }: { game: GameState; locked?: bo
         ]);
         later(() => {
           setCharges((c) => c.filter((x) => x.id !== chId));
+          // The Adept jabs toward the target as the flaming fist leaves its card.
+          punchTo(stackEl(cr.iid), oppAv);
           setProjectiles((p) => [
             ...p,
             {
@@ -475,6 +479,7 @@ export function BoardFx({ game, locked = false }: { game: GameState; locked?: bo
               toY,
               targetSel: `[data-player="${oppId}"]`,
               theme: TRIGGER_THEME,
+              kind: 'fist',
             },
           ]);
         }, TRIGGER_CHARGE_MS);
@@ -739,6 +744,13 @@ export function BoardFx({ game, locked = false }: { game: GameState; locked?: bo
       later(() => setSlashes((s) => s.filter((n) => n.id !== id)), 600);
       return;
     }
+    if (p.kind === 'fist') {
+      // A punch lands big: ember burst, oversized shockwaves, and the whole board takes the blow.
+      setBursts((b) => [...b, { id: burstId.current++, x: p.toX, y: p.toY, color: '#ff8a33', n: 60 }]);
+      setSpellFx({ id: dmgId.current++, theme: p.theme, x: p.toX, y: p.toY, big: true });
+      impactShake(document.querySelector('.board'));
+      return;
+    }
     setSpellFx({ id: dmgId.current++, theme: p.theme, x: p.toX, y: p.toY });
   }, [later]);
 
@@ -817,7 +829,7 @@ export function BoardFx({ game, locked = false }: { game: GameState; locked?: bo
 
       <AnimatePresence>
         {spellFx && (
-          <SpellImpactFx key={spellFx.id} x={spellFx.x} y={spellFx.y} theme={spellFx.theme} />
+          <SpellImpactFx key={spellFx.id} x={spellFx.x} y={spellFx.y} theme={spellFx.theme} big={spellFx.big} />
         )}
       </AnimatePresence>
 
@@ -907,6 +919,47 @@ function lungeTo(from: HTMLElement | null, to: Element | null) {
   move.onfinish = move.oncancel = () => {
     from.style.zIndex = prevZ;
   };
+}
+// The Adept's card jabs at its target: rock back, snap forward most of the way, hold a beat, settle.
+// WAAPI on the `.stack` wrapper (framer owns the card's own transform), lifted above its neighbours while it moves.
+function punchTo(from: HTMLElement | null, to: Element | null) {
+  if (!from || !to) return;
+  const a = from.getBoundingClientRect();
+  const b = to.getBoundingClientRect();
+  const dx = b.left + b.width / 2 - (a.left + a.width / 2);
+  const dy = b.top + b.height / 2 - (a.top + a.height / 2);
+  const dist = Math.hypot(dx, dy) || 1;
+  const back = Math.min(16, dist * 0.08);
+  const prevZ = from.style.zIndex;
+  from.style.zIndex = '30';
+  const move = from.animate(
+    [
+      { transform: 'translate(0,0) scale(1)', offset: 0 },
+      { transform: `translate(${(-dx / dist) * back}px, ${(-dy / dist) * back}px) scale(0.95)`, offset: 0.2, easing: 'cubic-bezier(.5,0,.9,.4)' },
+      { transform: `translate(${dx * 0.4}px, ${dy * 0.4}px) scale(1.14)`, offset: 0.42 },
+      { transform: `translate(${dx * 0.36}px, ${dy * 0.36}px) scale(1.12)`, offset: 0.55 },
+      { transform: 'translate(0,0) scale(1)', offset: 1 },
+    ],
+    { duration: PUNCH_MS, easing: 'ease-out' },
+  );
+  move.onfinish = move.oncancel = () => {
+    from.style.zIndex = prevZ;
+  };
+}
+// The whole board takes a hard hit: a few big decaying jolts (the fist's impact).
+function impactShake(el: Element | null) {
+  el?.animate(
+    [
+      { transform: 'translate(0,0)' },
+      { transform: 'translate(-11px, 6px)', offset: 0.12 },
+      { transform: 'translate(10px, -7px)', offset: 0.28 },
+      { transform: 'translate(-7px, 4px)', offset: 0.46 },
+      { transform: 'translate(5px, -2px)', offset: 0.64 },
+      { transform: 'translate(-2px, 1px)', offset: 0.82 },
+      { transform: 'translate(0,0)' },
+    ],
+    { duration: 460, easing: 'ease-out' },
+  );
 }
 function shakeEl(el: HTMLElement | null) {
   if (!el) return;

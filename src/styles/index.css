@@ -1543,6 +1543,22 @@ input {
   background: radial-gradient(circle at 35% 30%, #fff2c4, #ff9a3c 50%, #e0392b);
   box-shadow: 0 0 16px 6px rgba(255, 138, 60, 0.9);
 }
+/* Pyre Adept's punch: a flaming fist (drawn pointing along +x, turned to the target by .ff-turn) with a flame tail.
+   The outer element is driven by WAAPI (translate + scale); the turn is on the inner one so it cannot rotate the flight. */
+.fire-fist {
+  position: fixed; z-index: 68; pointer-events: none; width: 0; height: 0;
+  filter: drop-shadow(0 0 10px rgba(255, 138, 60, 0.95)) drop-shadow(0 0 22px rgba(255, 90, 30, 0.7));
+}
+.ff-turn { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.ff-hand { position: absolute; left: -22px; top: -17px; width: 44px; height: 34px; display: block; }
+.ff-tail {
+  position: absolute; right: 18px; top: -11px; width: 96px; height: 22px;
+  background: linear-gradient(to left, rgba(255, 214, 110, 0.95), rgba(255, 110, 30, 0.6) 45%, rgba(214, 50, 29, 0));
+  clip-path: polygon(100% 20%, 100% 80%, 0 100%, 12% 50%, 0 0);
+  filter: blur(1.5px); transform-origin: right center;
+  animation: ff-flicker 0.09s linear infinite alternate;
+}
+@keyframes ff-flicker { from { scale: 1 0.8; opacity: 0.85; } to { scale: 1.12 1.15; opacity: 1; } }
 /* Shuriken Volley: a spinning steel star (WAAPI drives the flight + spin) */
 .shuriken-proj {
   position: fixed; z-index: 67; pointer-events: none;
