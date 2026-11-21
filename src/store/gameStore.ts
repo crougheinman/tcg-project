@@ -84,7 +84,7 @@ interface Store {
   // Cards currently floating in the cast spotlight (a spell or creature skill being cast).
   // Purely visual; in PvP they play WITHOUT delaying the effect (lockstep timing).
   spotlights: Spotlight[];
-  pushSpotlight: (s: Omit<Spotlight, 'id'>) => void;
+  pushSpotlight: (s: Omit<Spotlight, 'id' | 'at'>) => void;
 
   startAI: (deckId: string, oppDeckId?: string) => void; // oppDeckId: pre-picked (face-off shows it)
   startHotseat: (deckA: string, deckB: string) => void;
@@ -114,6 +114,8 @@ export interface Spotlight {
   cutIn?: CutInKind;
   /** A full-screen film instead of the floating card (Iaijutsu Strike on Hana). */
   cinematic?: 'iaijutsu';
+  /** When it went up (Date.now()), so a later effect can wait out what is left of it. Set by pushSpotlight. */
+  at: number;
 }
 
 /** A card the player can cast right now by id: from the hand, or from the graveyard (flashback). */
@@ -154,7 +156,7 @@ export const useGame = create<Store>((set, get) => {
 
   // The card to float in the spotlight for this action, read BEFORE the action is applied
   // (the card leaves the hand). Null for actions that have no cast moment.
-  function spotlightFor(g: GameState, action: Action, ms: number): Omit<Spotlight, 'id'> | null {
+  function spotlightFor(g: GameState, action: Action, ms: number): Omit<Spotlight, 'id' | 'at'> | null {
     if (action.type !== 'castSorcery' && action.type !== 'castCreature') return null;
     const casterId = actorOf(g);
     const card = castableCard(g.players[casterId], action.iid);
@@ -183,9 +185,9 @@ export const useGame = create<Store>((set, get) => {
   }
 
   let spotSeq = 0;
-  function pushSpotlight(sp: Omit<Spotlight, 'id'>) {
+  function pushSpotlight(sp: Omit<Spotlight, 'id' | 'at'>) {
     const id = ++spotSeq;
-    set((st) => ({ spotlights: [...st.spotlights, { ...sp, id }] }));
+    set((st) => ({ spotlights: [...st.spotlights, { ...sp, id, at: Date.now() }] }));
     setTimeout(() => set((st) => ({ spotlights: st.spotlights.filter((x) => x.id !== id) })), sp.ms);
   }
 

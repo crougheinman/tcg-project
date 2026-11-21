@@ -2570,3 +2570,66 @@ button.count-chip:hover:not(:disabled) { color: var(--vs-ink); background: var(-
 @keyframes iai-cut { 0%, 85% { opacity: 0; } 86.5% { opacity: 1; } 89% { opacity: 0; } 100% { opacity: 0; } }
 @media (max-width: 640px) { .iai-title { right: 3vw; } .iai-kanji b { font-size: clamp(40px, 10vh, 80px); } }
 @media (prefers-reduced-motion: reduce) { .iai { display: none; } }
+
+/* ---- zone shows (ZoneFx): Rot's discarded card, Grave Call's raised card ----
+   Above the cast stage (62) and the phase banners (68), below the Iaijutsu film (98). Every keyframe is a share of --zfx-ms.
+   --from / --to are the vertical offsets toward the card owner's side of the table (bottom for you, top for the enemy). */
+.zfx {
+  --k: 0.66; --cast-h: 540px; --glow: 150, 80, 200; --zfx-ms: 3000ms; --from: -24vh; --to: -30vh;
+  position: fixed; inset: 0; z-index: 70; pointer-events: none; display: grid; place-items: center; overflow: hidden;
+}
+.zfx.me { --from: 24vh; --to: 30vh; }
+.zfx.raise { --glow: 70, 235, 110; }
+.zfx > * { grid-area: 1 / 1; }
+.zfx-dim { width: 100%; height: 100%; background: radial-gradient(ellipse at center, rgba(4, 8, 6, 0.72), rgba(2, 3, 4, 0.55) 70%); opacity: 0; animation: zfx-dim var(--zfx-ms) ease-in-out both; }
+.zfx-body { display: flex; flex-direction: column; align-items: center; gap: 12px; position: relative; }
+.zfx-label {
+  font: italic 400 18px / 1 'Anton', sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: rgb(var(--glow));
+  text-shadow: 0 0 12px rgba(var(--glow), 0.8); padding: 5px 18px 7px; background: var(--vs-ink, #0a0c13);
+  border-bottom: 3px solid rgb(var(--glow)); clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+.zfx-motes i {
+  position: absolute; left: calc(36% + var(--i) * 2.4%); top: 62%; width: 7px; height: 7px; border-radius: 50%; opacity: 0;
+  background: rgb(var(--glow)); box-shadow: 0 0 10px 3px rgba(var(--glow), 0.85);
+  animation: zfx-mote 1.9s ease-out infinite; animation-delay: calc(0.35s + var(--i) * 0.16s);
+}
+/* the glow behind the card; for a raise it is the green light that comes FIRST */
+.zfx-light, .zfx-beam { opacity: 0; width: min(120vw, 900px); aspect-ratio: 1; border-radius: 50%; justify-self: center; align-self: center; }
+.zfx-light { background: radial-gradient(closest-side, rgba(var(--glow), 0.85), rgba(var(--glow), 0.32) 45%, transparent 72%); }
+.zfx-beam { width: 22vmin; height: 140vh; border-radius: 0; background: linear-gradient(90deg, transparent, rgba(var(--glow), 0.55), transparent); filter: blur(6px); }
+.zfx.raise .zfx-light { animation: zfx-bloom var(--zfx-ms) ease-out both; }
+.zfx.raise .zfx-beam { animation: zfx-beam var(--zfx-ms) ease-out both; }
+.zfx.discard .zfx-light { width: min(90vw, 640px); animation: zfx-halo var(--zfx-ms) ease-in-out both; }
+.zfx.discard .zfx-beam { display: none; }
+.zfx.discard .zfx-body { animation: zfx-discard var(--zfx-ms) ease-out both; }
+.zfx.raise .zfx-body { animation: zfx-raise var(--zfx-ms) ease-in-out both; }
+.zfx.raise .zfx-label { animation: zfx-late var(--zfx-ms) linear both; }
+.zfx.discard .zfx-motes i { background: #9a6bd1; box-shadow: 0 0 10px 3px rgba(150, 80, 200, 0.7); }
+.zfx.raise .zfx-motes i { animation-delay: calc(0.1s + var(--i) * 0.2s); }
+@keyframes zfx-dim { 0% { opacity: 0; } 12%, 80% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes zfx-discard {
+  0% { opacity: 0; translate: 0 var(--from); scale: 0.45; filter: none; }
+  14% { opacity: 1; translate: 0 calc(var(--from) * 0.25); scale: 0.97; }
+  22%, 46% { opacity: 1; translate: 0 0; scale: 1; filter: none; animation-timing-function: ease-in; } /* the hold, then the rot sets in slowly */
+  100% { opacity: 0; translate: 0 -5vh; scale: 1.07; filter: grayscale(1) blur(11px) brightness(0.35); }
+}
+@keyframes zfx-raise {
+  0%, 20% { opacity: 0; scale: 0.9; filter: blur(16px) brightness(2.6) saturate(0.4); translate: 0 0; }
+  46% { opacity: 0.55; scale: 0.96; filter: blur(7px) brightness(1.8) saturate(0.8); }
+  62% { opacity: 1; scale: 1; filter: none; translate: 0 0; }
+  84% { opacity: 1; scale: 1; filter: none; translate: 0 0; }
+  100% { opacity: 0; scale: 0.4; filter: brightness(1.4); translate: 0 var(--to); }
+}
+@keyframes zfx-late { 0%, 50% { opacity: 0; } 64%, 100% { opacity: 1; } }
+@keyframes zfx-bloom { 0% { opacity: 0; scale: 0.15; } 22% { opacity: 1; scale: 1; } 70% { opacity: 0.75; scale: 1.12; } 100% { opacity: 0; scale: 1.35; } }
+@keyframes zfx-beam { 0% { opacity: 0; scale: 0.2 1; } 14% { opacity: 1; scale: 1 1; } 40% { opacity: 0.5; scale: 1.6 1; } 60%, 100% { opacity: 0; scale: 2.2 1; } }
+@keyframes zfx-halo { 0% { opacity: 0; scale: 0.5; } 18% { opacity: 0.9; scale: 1; } 52% { opacity: 0.8; } 100% { opacity: 0; scale: 1.2; } }
+@keyframes zfx-mote { 0% { transform: translateY(0) scale(1); opacity: 0; } 15% { opacity: 1; } 100% { transform: translateY(-34vh) scale(0.3); opacity: 0; } }
+@media (max-width: 640px) { .zfx { --k: 0.5; } .zfx-label { font-size: 14px; } }
+@media (orientation: landscape) and (max-height: 500px) { .zfx { --k: 0.34; } .zfx-label { font-size: 12px; } }
+/* reduced motion: no travelling, blur or rising motes; the card simply appears and fades */
+@media (prefers-reduced-motion: reduce) {
+  .zfx-motes, .zfx-beam, .zfx-light { display: none; }
+  .zfx.discard .zfx-body, .zfx.raise .zfx-body { animation-name: zfx-plain; }
+}
+@keyframes zfx-plain { 0% { opacity: 0; } 15%, 80% { opacity: 1; } 100% { opacity: 0; } }

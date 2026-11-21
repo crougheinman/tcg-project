@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { getDef } from '../cards/cards';
 import { isCreature, isLand, power, toughness } from '../engine/rules';
-import type { GameState, PlayerId } from '../engine/types';
+import type { CardInstance, GameState, PlayerId } from '../engine/types';
 import { findFirstStrikeClash } from './firstStrike';
 import { opponentOf } from '../engine/types';
 import { useGame } from '../store/gameStore';
@@ -38,6 +38,8 @@ import {
   STRIKE_STAGGER_MS,
   TRIGGER_CHARGE_MS,
   TRIGGER_CUTIN_MS,
+  DISCARD_FX_MS,
+  RAISE_FX_MS,
   TRIGGER_CUTINS,
   TRIGGER_SPOT_MS,
   travelMsFor,
@@ -48,6 +50,8 @@ import { FirstStrikeFx } from './FirstStrikeFx';
 import { CrackFx, DustFx } from './ShatterFx';
 import { useTimers } from './useTimers';
 import { momentCues, type MomentCue } from './momentCues';
+import { cutInRemainingMs, zoneCues } from './zoneCues';
+import { ZoneFx } from './ZoneFx';
 import type { Burst } from './Vfx';
 
 // three.js is heavy — split it into its own chunk, loaded only in-game.
@@ -90,6 +94,10 @@ export function BoardFx({ game, locked = false }: { game: GameState; locked?: bo
     { id: number; x: number; y: number; color: string; ms: number }[]
   >([]);
   const [siphons, setSiphons] = useState<{ id: number; x: number; y: number; ms: number }[]>([]);
+  // A card discarded by Rot / raised by Grave Call, shown mid-table (ZoneFx).
+  const [zoneFx, setZoneFx] = useState<
+    { id: number; kind: 'discard' | 'raise'; card: CardInstance; side: 'me' | 'foe'; ms: number }[]
+  >([]);
   const [spellFx, setSpellFx] = useState<
     { id: number; theme: SpellTheme; x: number; y: number } | null
   >(null);
@@ -484,6 +492,18 @@ export function BoardFx({ game, locked = false }: { game: GameState; locked?: bo
       } else showCue(cue);
     }
 
+    // A card changed zone because of a skill: Rot discards one, Grave Call returns one. It is shown after the
+    // cast's cut-in has finished (online the cut-in plays alongside the action, so wait out what is left of it).
+    for (const cue of zoneCues(before, game)) {
+      const st = useGame.getState();
+      const mineId = st.mode === 'hotseat' ? before.active : st.myId;
+      const wait = cutInRemainingMs(st.spotlights, cue.kind === 'discard' ? ['rot'] : ['grave'], Date.now());
+      const ms = cue.kind === 'discard' ? DISCARD_FX_MS : RAISE_FX_MS;
+      const fx = { id: dmgId.current++, kind: cue.kind, card: cue.card, side: cue.ownerId === mineId ? ('me' as const) : ('foe' as const), ms };
+      later(() => setZoneFx((z) => [...z, fx]), wait);
+      later(() => setZoneFx((z) => z.filter((x) => x.id !== fx.id)), wait + ms);
+    }
+
     // A land just entered -> it vaporizes into a blue mana orb that flies to its
     // controller's avatar (the land card itself is hidden; the mana readout is it now).
     const battleBefore = new Set(
@@ -789,6 +809,10 @@ export function BoardFx({ game, locked = false }: { game: GameState; locked?: bo
 
       {projectiles.map((p) => (
         <ProjectileFx key={p.id} fx={p} onImpact={onProjectileImpact} onDone={removeProjectile} />
+      ))}
+
+      {zoneFx.map((z) => (
+        <ZoneFx key={z.id} kind={z.kind} card={z.card} side={z.side} ms={z.ms} />
       ))}
 
       <AnimatePresence>

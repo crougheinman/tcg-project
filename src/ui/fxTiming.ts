@@ -51,6 +51,10 @@ export const SKILL_CREATURES: Record<string, string> = Object.fromEntries(
 // A creature's spell-trigger (Pyre Adept): its card is spotlighted for the charge-up plus a beat.
 export const TRIGGER_SPOT_MS = 1000;
 
+// ---- zone shows (ZoneFx): a card discarded by Rot, a card raised by Grave Call ----
+export const DISCARD_FX_MS = 3000;
+export const RAISE_FX_MS = 3400;
+
 // ---- the Iaijutsu cinematic ----
 // Iaijutsu Strike cast on Hana (the Kensei Duelist) blacks the screen out and plays a short film (IaijutsuCinematic):
 // fade to black, the clip once through (it never loops), a held frame with falling petals and a title, one cut of light,
