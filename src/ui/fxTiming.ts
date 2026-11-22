@@ -51,6 +51,10 @@ export const SKILL_CREATURES: Record<string, string> = Object.fromEntries(
 // A creature's spell-trigger (Pyre Adept): its card is spotlighted for the charge-up plus a beat.
 export const TRIGGER_SPOT_MS = 1000;
 
+// The board releases a phase-banner hold / lock on its own if one lasts this long without letting go (useLockFailsafe).
+// Chained banners legitimately hold it ~11 s (a turn change: End banner, gap, Main banner; 9 s even after a 12-attacker combat).
+export const LOCK_FAILSAFE_MS = 15000;
+
 // ---- zone shows (ZoneFx): a card discarded by Rot, a card raised by Grave Call ----
 export const DISCARD_FX_MS = 3000;
 export const RAISE_FX_MS = 3400;

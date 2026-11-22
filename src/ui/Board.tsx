@@ -18,6 +18,7 @@ import { ZoneViewer } from './ZoneViewer';
 import { BoardFx } from './BoardFx';
 import { CastSpotlight } from './CastSpotlight';
 import { warmIaijutsuClip } from './cinematics';
+import { useLockFailsafe } from './useLockFailsafe';
 import { PhaseBanner } from './PhaseBanner';
 import { blockStepIsEmpty } from './phaseInfo';
 import { CombatTallyChip } from './CombatTallyChip';
@@ -79,11 +80,9 @@ export function Board() {
     setCardsLocked(v);
     if (!v) setHold(null);
   }, []);
-  useEffect(() => {
-    if (!hold) return;
-    const t = setTimeout(() => lock(false), 15000); // failsafe: a banner that never reports back
-    return () => clearTimeout(t);
-  }, [hold, lock]);
+  // failsafe: a banner that never reports back (covers a held board AND locked cards: after a combat resolves nothing is held)
+  const releaseLock = useCallback(() => lock(false), [lock]);
+  useLockFailsafe(hold !== null || cardsLocked, releaseLock);
   useEffect(() => {
     warmIaijutsuClip(live); // the Iaijutsu film's clip is fetched once, as soon as a deck holds the card
   }, [live]);
