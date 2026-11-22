@@ -139,7 +139,9 @@ const INSTALL = async () => {
     persist('ATK_TAGS|', atkTags !== wantTags, 1500, `${atkTags} ATK tags shown, expected ${wantTags} in ${g.phase}`);
     // how long has the board been continuously held? (the longest stretch is reported with the result)
     if (held) { if (!H.heldSince) H.heldSince = now; H.maxHeld = Math.max(H.maxHeld || 0, now - H.heldSince); } else H.heldSince = 0;
-    persistRaw('LOCK_STUCK|', held, 12000, `the board stayed locked / held for 12s: phase ${g.phase}, active ${g.active}, turn ${g.turn}, banner "${(q('.phase-banner .pb-phase') || {}).textContent || 'none'}", charging ${!!s.charging}`);
+    // chained banners legitimately hold the board for ~12 s (11.6 s measured in one match); Board.tsx releases a hold at 15 s,
+    // so a hold still alive past 16 s means even that failsafe failed
+    persistRaw('LOCK_STUCK|', held, 16000, `the board stayed locked / held for 16s: phase ${g.phase}, active ${g.active}, turn ${g.turn}, banner "${(q('.phase-banner .pb-phase') || {}).textContent || 'none'}", charging ${!!s.charging}`);
     persistRaw('PREVIEW_STUCK|', !!q('.preview-overlay'), 3500, 'card preview stayed open with the pointer away from every card');
     persistRaw('CHARGING_STUCK|', !!s.charging, 5200, `store.charging still set (${s.charging && s.charging.def})`);
     persistRaw('ERROR_TOAST|', !!q('.toast:not(.net-stale)'), 0, `error toast on screen: ${(q('.toast:not(.net-stale)') || {}).textContent}`);
