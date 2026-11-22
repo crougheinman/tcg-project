@@ -65,6 +65,14 @@ the change (below). Playwright is not a project dependency; it must exist where 
   `PhaseBanner` skips the "Block phase" banner (no dim, no lock; it releases the board at once unless an earlier banner is still
   up), the Board auto-resolves the block for a human defender (same helper), and the store skips the AI's `PHASE_PAUSE_MS`
   (`phasePauseMs`) so the damage lands in about half a second instead of waiting out a banner that never came.
+  **Releasing the hold:** `Board` holds the pre-change state on every phase change and only `PhaseBanner`'s `onLock(false)` releases it.
+  An empty block step shows no banner, so it must release the hold itself unless an earlier banner's own lock is still pending
+  (`lockOn` ref). It used to check "previous banner's gap over" instead, and when the previous banner had left but its 1.2 s gap was
+  still running nothing released the hold: the board stayed on the pre-attack state for 15 s (found by the smoke batch; regression
+  test in `phaseBanner.test.tsx`). `useLockFailsafe` (`LOCK_FAILSAFE_MS` 40 s) releases a hold OR a lock that never lets go. Keep it
+  well above ordinary chains: a turn change holds the board ~10 s and, after the player's own attack, the clash plus the block / End /
+  enemy-Main banners chain to 12-23 s (measured over a smoke batch), and after a combat resolves the board holds nothing but the cards
+  stay locked, so a 15 s failsafe would cut those chains short.
 - **Combat clash timing** (`firstStrike.ts`, `fxTiming.ts`): `combatHoldMs` delays the next banner until the
   clash is over (+1.3 s). Kills play impact → crack (0.3 s, `ShatterFx`) → pulverize (0.2 s) → gone; the dying
   card stays until then via `CardView` variants.
@@ -139,6 +147,11 @@ the change (below). Playwright is not a project dependency; it must exist where 
 - **Rules / combat / store / whole-layout changes:** also `SEEDS=100 npm run qa:fuzz` and `npm run qa:scenarios`.
 - **Balance-affecting changes** (card stats, keywords, deck lists): `N=80 npm run qa:winrate` before and after
   with the same code otherwise; keep every deck between about 45% and 58%. Last measured range 46.6%-55.9% (before the owner's Beast Blitz change added Thornwood Brute and Dread Maw to the aura list, so re-measure Wildblitz and Emberwood).
+- **The browser harness knows about the board hold** (`tools/qa/ui-match.cjs`): the human waits for `.board.cards-locked` / `.phase-banner`
+  to clear before acting (the board ignores clicks while a banner is up), the DOM-vs-state checks (HUD, acting ring, tapped, ATK tags,
+  phase bar...) are skipped while the board is held (it deliberately draws the pre-change state for a banner plus a gap, longer than the
+  checks' tolerances), clicks freeze the target's infinite animations first (a creature that can attack bobs forever, and Playwright
+  refuses to click an element that is "not stable"), and `LOCK_STUCK` flags a hold over 36 s. Each result carries `maxHeldMs` and `longHolds`.
 - **Do not edit `src/` while a browser batch runs** (hot reload disturbs the matches). If every match "crashes"
   in 0 seconds, the dev server is down. One lone anomaly under load (`HUD_LIFE`, a missed tap) is usually a
   load flake: replay the same pairing a few times and compare with the code without your change before acting.
@@ -200,11 +213,11 @@ Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.
 - `npm run lint` currently reports two `react-hooks/exhaustive-deps` warnings, both from the owner's recent commits: `src/ui/Board.tsx`
   ~line 154 (missing `game.players` in a `useEffect`) and `src/ui/BoardFx.tsx` ~line 694 (missing `flushCues`). The lint script
   allows zero warnings, so fix them (carefully: each changes when its effect runs) before relying on lint.
-- `npm run qa:smoke` currently reports anomalies in all 8 matches (run 2026-11-22). It is not from the recent cinematic, zone-show or block-banner work: wildblitz v wildwood (desktop, same seed) gives the same anomaly set on `647ed58` (before all of it) and on current code, and only 6 milder ones (gesture / selection / blocked-tag mismatches, none of the HUD, acting-ring, tapped or ATK-tag ones) on `7c05168` (before the board-hold-during-banners change `6e3ffb1`). The HUD / ACTING_RING / TAPPED_DESYNC / ATK_TAGS anomalies fit the board showing the pre-change state while a banner plays, which the harness may not wait out; not confirmed. Until it is looked at, a smoke run cannot tell a new regression from this: compare a pairing against the commit before your change.
 - Not done: keyword badges on board cards; Beast Blitz is not data-driven; the full 56-match browser pass has not been run since the mechanics phases.
 
 ## Change log (newest first; add a line per change)
 
+- QA smoke batch trustworthy again (8/8 clean, exit 0): the harness now waits out the board hold, skips DOM-vs-state checks while held, freezes infinite animations for clicks and reports `maxHeldMs` / `longHolds` / `LOCK_STUCK`; and it caught a real bug of mine: an empty block step left the board frozen on the pre-attack state when the previous banner had left but its gap was running (fixed in `PhaseBanner` with `lockOn`, test added). New `useLockFailsafe` (40 s) covers a held board or locked cards.
 - No block-phase banner when nothing can block (no able creature for any attacker, no affordable instant): `blockStepIsEmpty` (tests), Board auto-resolve now uses it (flyers vs ground blockers count), AI pause skipped. Smoke batch not run.
 - Rot's discarded card is shown face up and rots away (purple light, greys and fades); Grave Call shows a green bloom first, then the returned creature fades in. New `zoneCues` diff helper (tests), `ZoneFx`, `cutInRemainingMs`; spotlights gained an `at` timestamp. Smoke batch skipped at the owner's request.
 - Iaijutsu Strike on Hana plays a 5 s blackout film (Japanese-cinema style: bars, grain, the supplied clip once through as a non-looping video, petals, 居合 title, cut of light); store `cinematic` spotlight + `isIaijutsuOnHana`, tests for AI (5 s hold), PvP (no delay) and reduced motion.

@@ -28,6 +28,14 @@ and are meant to be re-run after any rules, combat, store or layout change. Noth
   it where you run the browser tools (`npm i --no-save playwright && npx playwright install chromium`), or
   use an environment that has it.
 - **Do not edit `src/` while a browser batch runs.** Hot reload disturbs the matches and causes false alarms.
+- **The board hold.** On every phase change the board keeps drawing the state from before the change and locks its cards until the
+  phase banner has left (see CLAUDE.md, "Phase banners"); chained banners hold it 10-23 s (a turn change; after the player's own
+  attack, clash plus several banners). The match runner therefore waits for `.board.cards-locked` / `.phase-banner` to clear before it
+  acts, skips its DOM-vs-state checks while the board is held, and freezes a target's infinite animations (attackers bob forever, and
+  Playwright will not click an element that is "not stable") just for the click. `LOCK_STUCK` fires if the board stays held for 36 s
+  (the app's own failsafe releases at 40 s). Every result carries `maxHeldMs` and `longHolds` (each hold over 6 s, with where it
+  started and ended), which is how a long chain of banners is told from a lock that never releases. Before these fixes the batch
+  failed on every match with HUD / acting-ring / tapped / ATK-tag / gesture anomalies that were the harness, not the game.
 - **One lone anomaly is not proof.** Under heavy load (4+ browsers) a rare `HUD_LIFE` or a missed tap can
   appear and then not reproduce. Replay the same pairing a few times before changing code, and compare against
   the same run on the code without your change.
