@@ -31,6 +31,10 @@ describe('phase banner text', () => {
     expect(enemyAttacking.mine).toBe(false);
     expect(enemyAttacking.hint).toBe('Choose your blockers');
   });
+  it('marks only the End phase as a brief pass-through banner', () => {
+    expect(phaseBannerInfo(game('A', 'end'), 'A').short).toBe(true);
+    for (const ph of ['main1', 'combat_attack', 'combat_block', 'mulligan'] as const) expect(phaseBannerInfo(game('A', ph), 'A').short).toBe(false);
+  });
   it('has a new key whenever the phase, turn or owner changes (so the banner replays)', () => {
     const keys = new Set([
       phaseBannerInfo(game('A', 'main1'), 'A').key,

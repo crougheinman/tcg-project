@@ -55,11 +55,13 @@ the change (below). Playwright is not a project dependency; it must exist where 
 - **Framer owns card transforms.** Effects on cards use box-shadow, CSS individual `scale`/`translate`/`rotate`,
   WAAPI, filter, or SVG, never `transform` on the card. `AnimatePresence custom={...}` + `variants` +
   `exit="out"` for exits (the `exit` prop can't take a resolver in v11).
-- **Phase banners** (`PhaseBanner.tsx`, `phaseInfo.ts`): 3 s banners (`PHASE_BANNER_MS`) with a 1.2 s gap
-  (`PHASE_GAP_MS`), dark `.pb-dim` backdrop. While a banner is pending or showing, `Board.tsx` renders the
+- **Phase banners** (`PhaseBanner.tsx`, `phaseInfo.ts`): 2.2 s banners (`PHASE_BANNER_MS`; the End phase, a pass-through, 1.4 s via
+  `END_BANNER_MS` / `phaseBannerInfo(...).short`) with a 0.5 s gap (`PHASE_GAP_MS`), dark `.pb-dim` backdrop. They were 3 s with a 1.2 s gap, which
+  chained to a 10 s hand-over at each turn change and 12-23 s after the player's own attack, all with the cards locked. While a banner is pending or showing, `Board.tsx` renders the
   state from *before* the phase change (`hold`) and locks all cards (`cardsLocked`); both release when the
   banner leaves. A combat resolution is never held (`combatJustResolved`), and `BoardFx`, the block announce
-  and `impactDelays` read the live game. AI waits `PHASE_PAUSE_MS` after a phase change.
+  and `impactDelays` read the live game. AI waits `PHASE_PAUSE_MS` (banner + 0.6 s; `END_PAUSE_MS` after the End phase) after a phase change, so it never acts while the board is still
+  holding the old state; keep it tied to the banner length if you retime the banners.
   **An empty block step gets no banner** (`blockStepIsEmpty` in `phaseInfo.ts`): when the defender has no creature that can block any
   attacker (none untapped, or every attacker flies and they have no flyer/reach) and no instant or flash card they can afford,
   `PhaseBanner` skips the "Block phase" banner (no dim, no lock; it releases the board at once unless an earlier banner is still
@@ -71,7 +73,7 @@ the change (below). Playwright is not a project dependency; it must exist where 
   still running nothing released the hold: the board stayed on the pre-attack state for 15 s (found by the smoke batch; regression
   test in `phaseBanner.test.tsx`). `useLockFailsafe` (`LOCK_FAILSAFE_MS` 40 s) releases a hold OR a lock that never lets go. Keep it
   well above ordinary chains: a turn change holds the board ~10 s and, after the player's own attack, the clash plus the block / End /
-  enemy-Main banners chain to 12-23 s (measured over a smoke batch), and after a combat resolves the board holds nothing but the cards
+  enemy-Main banners chain to 12-23 s (measured over a smoke batch, with the old 3 s / 1.2 s timings), and after a combat resolves the board holds nothing but the cards
   stay locked, so a 15 s failsafe would cut those chains short.
 - **Combat clash timing** (`firstStrike.ts`, `fxTiming.ts`): `combatHoldMs` delays the next banner until the
   clash is over (+1.3 s). Kills play impact → crack (0.3 s, `ShatterFx`) → pulverize (0.2 s) → gone; the dying
@@ -219,6 +221,7 @@ Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.
 
 ## Change log (newest first; add a line per change)
 
+- Shorter board lock: banners 3 s -> 2.2 s, End phase banner 1.4 s (new `END_BANNER_MS`, `short` flag), gap 1.2 s -> 0.5 s, combat-to-End gap 1.3 s -> 0.7 s, AI pause = banner + 0.6 s. After the player's own attack the board is free at 6.9 s instead of 9.7 s (staged timeline); tests for the End banner length.
 - QA smoke batch trustworthy again (8/8 clean, exit 0): the harness now waits out the board hold, skips DOM-vs-state checks while held, freezes infinite animations for clicks and reports `maxHeldMs` / `longHolds` / `LOCK_STUCK`; and it caught a real bug of mine: an empty block step left the board frozen on the pre-attack state when the previous banner had left but its gap was running (fixed in `PhaseBanner` with `lockOn`, test added). New `useLockFailsafe` (40 s) covers a held board or locked cards.
 - Pyre Adept's trigger now throws a flaming fist instead of a bolt: the adept charges, jabs at the target (`punchTo`), a fist (`Projectile` kind `fist`, `.fire-fist`) accelerates in, and it lands as a big impact (`SpellImpactFx big`: 3 rings, 14 rays, bigger burst) plus a board jolt (`impactShake`). Timings `FIST_TRAVEL_MS` / `PUNCH_MS`; damage waits for the landing. Verified by DOM/WAAPI instrumentation, not by a captured frame.
 - Zombie tokens rise out of the ground (reveal from the base up behind a soil mound, wobble, flying clods, P/T shield last), asynchronously per card, for Grave Necromancer's trigger, Raise Horde and Rotting Hulk.

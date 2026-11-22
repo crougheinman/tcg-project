@@ -4,7 +4,7 @@ import { createInitialState } from '../../engine/state';
 import { DECK_EMBERWOOD, DECK_SKYWARD } from '../../cards/decks';
 import type { CardInstance, GameState } from '../../engine/types';
 import { PhaseBanner } from '../PhaseBanner';
-import { PHASE_BANNER_MS, PHASE_GAP_MS } from '../fxTiming';
+import { END_BANNER_MS, PHASE_BANNER_MS, PHASE_GAP_MS } from '../fxTiming';
 
 const mk = (def: string, owner: 'A' | 'B', iid: string): CardInstance => ({
   iid, def, owner, tapped: false, summoningSick: false, damage: 0, buffP: 0, buffT: 0, blitz: false,
@@ -51,5 +51,31 @@ describe('the board hold when a block step needs no banner', () => {
     view.rerender(<PhaseBanner game={table('combat_block', ['stoneback_cub'])} localId="A" guided={false} onLock={onLock} />);
     expect(onLock).toHaveBeenCalledWith(true); // locked for the banner that is about to play
     expect(view.container.textContent).toContain('Block phase');
+  });
+});
+
+describe('banner lengths', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+  const EXIT_MS = 280; // PhaseBanner's exit transition: the lock releases once the banner has fully left
+
+  it('the End phase banner is brief: the board is released after END_BANNER_MS, not PHASE_BANNER_MS', () => {
+    const onLock = vi.fn();
+    render(<PhaseBanner game={table('end', [])} localId="A" guided={false} onLock={onLock} />);
+    expect(onLock).toHaveBeenLastCalledWith(true);
+    act(() => { vi.advanceTimersByTime(END_BANNER_MS + EXIT_MS - 1); });
+    expect(onLock).toHaveBeenLastCalledWith(true); // still up
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(onLock).toHaveBeenLastCalledWith(false);
+    expect(END_BANNER_MS).toBeLessThan(PHASE_BANNER_MS);
+  });
+
+  it('an ordinary phase banner holds for PHASE_BANNER_MS', () => {
+    const onLock = vi.fn();
+    render(<PhaseBanner game={table('main1', [])} localId="A" guided={false} onLock={onLock} />);
+    act(() => { vi.advanceTimersByTime(PHASE_BANNER_MS + EXIT_MS - 1); });
+    expect(onLock).toHaveBeenLastCalledWith(true);
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(onLock).toHaveBeenLastCalledWith(false);
   });
 });

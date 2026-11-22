@@ -13,6 +13,8 @@ export interface PhaseBannerInfo {
   turnLabel: string;
   title: string;
   hint: string;
+  /** A pass-through phase (End): its banner is brief (END_BANNER_MS). */
+  short: boolean;
 }
 
 export function phaseBannerInfo(game: GameState, localId: PlayerId): PhaseBannerInfo {
@@ -26,6 +28,7 @@ export function phaseBannerInfo(game: GameState, localId: PlayerId): PhaseBanner
       turnLabel: mine ? 'Your decision' : "Enemy's decision",
       title: 'Opening hand',
       hint: mine ? 'Keep this hand, or mulligan' : 'Enemy is deciding',
+      short: false,
     };
   }
   const mine = game.active === localId;
@@ -55,6 +58,7 @@ export function phaseBannerInfo(game: GameState, localId: PlayerId): PhaseBanner
     turnLabel: mine ? 'Your turn' : "Enemy's turn",
     title,
     hint,
+    short: game.phase === 'end',
   };
 }
 

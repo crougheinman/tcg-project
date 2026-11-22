@@ -73,13 +73,18 @@ export const IAIJUTSU_CLIP_URL = '/ui/iaijutsu.mp4';
 
 // ---- phase banner ----
 
-export const PHASE_BANNER_MS = 3000; // how long the centred "ATTACK PHASE" banner holds
+// The banners used to hold 3 s with a 1.2 s gap, which chained to a 10 s hand-over at every turn change and 12-23 s after the
+// player's own attack (clash, then block / End / enemy-Main banners), all with the cards locked. Shortened by about a third;
+// the End phase (nothing is decided in it) gets a shorter banner still.
+export const PHASE_BANNER_MS = 2200; // how long the centred "ATTACK PHASE" banner holds
+export const END_BANNER_MS = 1400; // the End phase banner: a pass-through, so it is brief
 // Consecutive banners never touch: the next one waits this long after the previous one has gone.
-export const PHASE_GAP_MS = 1200;
-// After a phase or turn change the AI waits this much longer before its next move, so each banner gets
-// its own slot (banner + gap, less the AI's own ~600ms think time). vs AI and hotseat only; online play
-// never delays an action.
-export const PHASE_PAUSE_MS = PHASE_BANNER_MS + PHASE_GAP_MS - 600;
+export const PHASE_GAP_MS = 500;
+// After a phase or turn change the AI waits this much longer before its next move, so it never acts while the banner is
+// still up (the board holds the old state until the banner leaves): the banner, its exit and a beat. vs AI and hotseat
+// only; online play never delays an action.
+export const PHASE_PAUSE_MS = PHASE_BANNER_MS + 600;
+export const END_PAUSE_MS = END_BANNER_MS + 600; // ...after the End phase begins
 
 // ---- projectiles ----
 
@@ -124,7 +129,7 @@ export const fsSpotMs = (def: string): number => (FS_CUTINS[def] ? FS_CUTIN_SPOT
 /** The whole first-strike intro for this first striker: the spotlight, then the blackout and slashes. */
 export const fsIntroMs = (def: string): number => fsSpotMs(def) + FS_SLASH_MS;
 // ...and the phase banner that follows combat (the End phase) waits this long after the last strike lands.
-export const COMBAT_BANNER_GAP_MS = 1300;
+export const COMBAT_BANNER_GAP_MS = 700;
 
 // ---- entrances ----
 

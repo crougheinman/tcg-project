@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { GameState, PlayerId } from '../engine/types';
-import { PHASE_BANNER_MS, PHASE_GAP_MS } from './fxTiming';
+import { END_BANNER_MS, PHASE_BANNER_MS, PHASE_GAP_MS } from './fxTiming';
 import { combatHoldMs } from './firstStrike';
 import { blockStepIsEmpty, phaseBannerInfo, type PhaseBannerInfo } from './phaseInfo';
 
@@ -78,7 +78,7 @@ export function PhaseBanner({
     const startAt = Math.max(now + hold, freeAt.current);
     const show = () => {
       showPending.current = false;
-      const dur = PHASE_BANNER_MS * (guidedRef.current ? 1.4 : 1);
+      const dur = (info.short ? END_BANNER_MS : PHASE_BANNER_MS) * (guidedRef.current ? 1.4 : 1);
       freeAt.current = Date.now() + dur + EXIT_MS + PHASE_GAP_MS; // the gap is counted from the banner leaving
       clearTimeout(hideT.current);
       setShown(info);

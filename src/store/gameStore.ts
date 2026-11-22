@@ -24,6 +24,7 @@ import {
   HEAL_MS,
   HEAL_SPELLS,
   PHASE_PAUSE_MS,
+  END_PAUSE_MS,
   SKILL_CREATURES,
   skillMs,
   SMOKE_MS,
@@ -188,7 +189,8 @@ export const useGame = create<Store>((set, get) => {
   /** How long the AI waits after a phase or turn change so its banner can be read: none when no banner is shown (an empty block step). */
   function phasePauseMs(prev: GameState, next: GameState): number {
     if (next.phase === prev.phase && next.active === prev.active) return 0;
-    return blockStepIsEmpty(next) ? 0 : PHASE_PAUSE_MS;
+    if (blockStepIsEmpty(next)) return 0;
+    return next.phase === 'end' ? END_PAUSE_MS : PHASE_PAUSE_MS;
   }
 
   let spotSeq = 0;
