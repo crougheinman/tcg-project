@@ -206,12 +206,25 @@ async function playMatch(browser, A, B, idx) {
 
     const park = () => page.mouse.move(2, 2);
     const cardLoc = (iid, scope) => page.locator(`${scope} [data-iid="${iid}"]`).first();
+    // A creature that can attack bobs forever (atkbob / atknudge) and the End Turn button pulses; Playwright will not click
+    // an element that is "not stable". A person can click a moving card, so freeze the target's infinite animations just for
+    // the click (actionability still checks it is visible and not covered) and let them run again afterwards.
+    const freeze = (loc) => loc.evaluate((el) => {
+      const host = el.closest('.stack') || el;
+      const paused = [...host.getAnimations({ subtree: true }), ...el.getAnimations({ subtree: true })].filter((a) => a.effect && a.effect.getComputedTiming().iterations === Infinity && a.playState === 'running');
+      paused.forEach((a) => a.pause());
+      window.__H_paused = paused;
+    }).catch(() => {});
+    const thaw = (page_) => page_.evaluate(() => { (window.__H_paused || []).forEach((a) => { try { a.play(); } catch (e) { /* element is gone */ } }); window.__H_paused = []; }).catch(() => {});
     const clickEl = async (loc, what) => {
       try {
         // phone: cards fan over each other, so tap the visible left strip (like a thumb would)
+        await freeze(loc);
         await loc.click({ timeout: 6000, ...(VIEW === 'phone' ? { position: { x: 10, y: 16 } } : {}) });
+        await thaw(page);
         return true;
       } catch (e) {
+        await thaw(page);
         const msg = String(e.message).split('\n').filter((l) => /intercepts|not visible|outside|timeout/i.test(l)).slice(0, 2).join(' | ');
         let diag = '';
         try {
