@@ -996,6 +996,38 @@ input {
   font-family: 'Cinzel', serif; font-weight: 700; font-size: 12px; color: #f3e7c4;
 }
 .arena-pt.damaged span { color: #ff9a8a; }
+/* A Zombie token claws up out of the ground (CardView `rising`): the card is revealed from the base upward
+   behind a soil mound, wobbles as it frees itself, soil clods spray out, and its P/T shield pops in last.
+   Each card runs on its own --rise-delay, and nothing waits on it, so tokens rise independently. */
+.card.arena.rising {
+  animation: zombie-rise 1.25s cubic-bezier(0.2, 0.75, 0.25, 1) var(--rise-delay, 0.25s) both;
+}
+@keyframes zombie-rise {
+  0% { clip-path: inset(100% -60px -40px -60px); translate: 0 14px; filter: brightness(0.45) saturate(0.7); }
+  55% { clip-path: inset(40% -60px -40px -60px); translate: 0 5px; filter: brightness(0.8) saturate(0.9); rotate: -2.5deg; }
+  75% { rotate: 2deg; }
+  100% { clip-path: inset(-60px -60px -40px -60px); translate: 0 0; filter: none; rotate: 0deg; }
+}
+.card.arena.rising .arena-pt { animation: rise-pt 1.25s ease-out var(--rise-delay, 0.25s) both; }
+@keyframes rise-pt { 0%, 65% { opacity: 0; scale: 0.6; } 100% { opacity: 1; scale: 1; } }
+.rise-ground { position: absolute; left: 0; right: 0; bottom: 0; height: 0; z-index: 5; pointer-events: none; }
+.rise-mound {
+  position: absolute; left: -12%; right: -12%; bottom: -14px; height: 16px; border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 70%, #1c130b 0%, #3a2a18 55%, rgba(58, 42, 24, 0) 100%);
+  animation: rise-mound 1.25s ease-out var(--rise-delay, 0.25s) both;
+}
+@keyframes rise-mound { 0% { opacity: 0; scale: 0.4 1; } 25% { opacity: 1; scale: 1 1; } 80% { opacity: 1; } 100% { opacity: 0.35; scale: 1.1 0.8; } }
+.rise-ground i {
+  position: absolute; left: 50%; bottom: 0; width: var(--cs); height: var(--cs); border-radius: 40% 55% 45% 50%;
+  background: #4a3620; box-shadow: inset -1px -1px 0 rgba(0, 0, 0, 0.45);
+  opacity: 0; animation: rise-clod 0.8s ease-out calc(var(--rise-delay, 0.25s) + 0.3s + var(--cd)) both;
+}
+@keyframes rise-clod {
+  0% { opacity: 0; translate: 0 0; }
+  15% { opacity: 1; }
+  55% { translate: var(--cx) var(--cy); }
+  100% { opacity: 0; translate: calc(var(--cx) * 1.3) calc(var(--cy) + 38px); }
+}
 .arena-sick {
   position: absolute; top: 3px; right: 4px; z-index: 3;
   background: rgba(0, 0, 0, 0.55); border-radius: 4px; padding: 0 3px;
@@ -1511,6 +1543,22 @@ input {
   background: radial-gradient(circle at 35% 30%, #fff2c4, #ff9a3c 50%, #e0392b);
   box-shadow: 0 0 16px 6px rgba(255, 138, 60, 0.9);
 }
+/* Pyre Adept's punch: a flaming fist (drawn pointing along +x, turned to the target by .ff-turn) with a flame tail.
+   The outer element is driven by WAAPI (translate + scale); the turn is on the inner one so it cannot rotate the flight. */
+.fire-fist {
+  position: fixed; z-index: 68; pointer-events: none; width: 0; height: 0;
+  filter: drop-shadow(0 0 10px rgba(255, 138, 60, 0.95)) drop-shadow(0 0 22px rgba(255, 90, 30, 0.7));
+}
+.ff-turn { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.ff-hand { position: absolute; left: -22px; top: -17px; width: 44px; height: 34px; display: block; }
+.ff-tail {
+  position: absolute; right: 18px; top: -11px; width: 96px; height: 22px;
+  background: linear-gradient(to left, rgba(255, 214, 110, 0.95), rgba(255, 110, 30, 0.6) 45%, rgba(214, 50, 29, 0));
+  clip-path: polygon(100% 20%, 100% 80%, 0 100%, 12% 50%, 0 0);
+  filter: blur(1.5px); transform-origin: right center;
+  animation: ff-flicker 0.09s linear infinite alternate;
+}
+@keyframes ff-flicker { from { scale: 1 0.8; opacity: 0.85; } to { scale: 1.12 1.15; opacity: 1; } }
 /* Shuriken Volley: a spinning steel star (WAAPI drives the flight + spin) */
 .shuriken-proj {
   position: fixed; z-index: 67; pointer-events: none;

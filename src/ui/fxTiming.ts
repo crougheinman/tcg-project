@@ -91,8 +91,11 @@ export function travelMsFor(def: string): number {
   return def === 'shuriken_volley' ? SHURIKEN_TRAVEL_MS : PROJECTILE_TRAVEL_MS;
 }
 
-// A creature spell-trigger (Pyre Adept): a quick charge at the card, then a bolt.
+// A creature spell-trigger (Pyre Adept): a quick charge at the card, then a flaming fist punched at the opponent
+// (the card jabs forward as the fist leaves it; the fist accelerates, so it hits hard).
 export const TRIGGER_CHARGE_MS = 650;
+export const FIST_TRAVEL_MS = 260;
+export const PUNCH_MS = 560;
 
 // ---- combat (MTG Arena pacing: attackers strike one after another) ----
 

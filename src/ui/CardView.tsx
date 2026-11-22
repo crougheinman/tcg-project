@@ -6,6 +6,34 @@ import type { CardInstance } from '../engine/types';
 import { useSetHover } from './hover';
 import { artFallback } from './artFallback';
 import { Lightning } from './Lightning';
+import { useGame } from '../store/gameStore';
+
+// A Zombie token (Grave Necromancer's trigger, Raise Horde, Rotting Hulk's last breath) does not slam down like
+// other creatures: it claws up out of the ground. Purely visual and per card, so several rise at once without
+// waiting on each other or on the game. `isRising` is true for the first RISE_MS after a token is first drawn
+// (and only that long, so a re-render or a hotseat flip never replays it); the table resets with each new game.
+const RISE_MS = 2500;
+const RISE_CLODS = [
+  { x: '-26px', y: '-22px', s: 5, d: 0 },
+  { x: '-12px', y: '-34px', s: 4, d: 40 },
+  { x: '4px', y: '-28px', s: 6, d: 10 },
+  { x: '18px', y: '-36px', s: 4, d: 70 },
+  { x: '30px', y: '-20px', s: 5, d: 30 },
+  { x: '-34px', y: '-10px', s: 3, d: 90 },
+  { x: '38px', y: '-8px', s: 3, d: 60 },
+];
+let riseSeed: number | undefined;
+const firstSeen = new Map<string, number>();
+function isRising(iid: string, seed: number | undefined): boolean {
+  if (seed !== riseSeed) {
+    riseSeed = seed;
+    firstSeen.clear();
+  }
+  const now = Date.now();
+  const t = firstSeen.get(iid) ?? now;
+  firstSeen.set(iid, t);
+  return now - t < RISE_MS;
+}
 
 const LONG_PRESS_MS = 320;
 
@@ -91,6 +119,7 @@ export function CardView({
   onClick,
 }: Props) {
   const setHover = useSetHover();
+  const seed = useGame((s) => s.game?.seed);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const longPressed = useRef(false);
   const didDrag = useRef(false);
@@ -174,7 +203,10 @@ export function CardView({
         (isCreature ? `, ${pwr}/${tuf}` : '') +
         (def.text ? `. ${def.text}` : '');
   const arenaToken = arena && isCreature;
-  const finalCls = arenaToken ? cls + ' arena' : cls;
+  const rising = !!arenaToken && inst.def === 'zombie_token' && isRising(inst.iid, seed);
+  // a little stagger per card, so tokens raised together do not move in lockstep
+  const riseDelay = `${250 + (inst.iid.charCodeAt(inst.iid.length - 1) % 4) * 110}ms`;
+  const finalCls = (arenaToken ? cls + ' arena' : cls) + (rising ? ' rising' : '');
   const interactive = !!onClick;
   // The same sentence the mouse user gets as a tooltip, plus the state a sighted
   // player reads off the card's glow.
@@ -194,6 +226,7 @@ export function CardView({
       aria-label={label}
       aria-pressed={interactive && selected ? true : undefined}
       onKeyDown={interactive ? handleKeyDown : undefined}
+      style={rising ? ({ '--rise-delay': riseDelay } as React.CSSProperties) : undefined}
       // Keyboard focus surfaces the same big preview that hovering does — but
       // ONLY keyboard focus. See isKeyboardFocus: a tap focuses the card as well.
       onFocus={(e) => {
@@ -221,7 +254,11 @@ export function CardView({
       // Battlefield creatures SLAM down from above (MTG Arena thunk); hand cards
       // slide in from the deck side. Taps snap fast instead of springing.
       initial={
-        arenaToken ? { opacity: 0, scale: 1.55, y: -30 } : { opacity: 0, scale: 0.7, x: 48 }
+        rising
+          ? { opacity: 1, scale: 1, y: 0 } // no slam: the CSS rise reveals it from the ground up
+          : arenaToken
+            ? { opacity: 0, scale: 1.55, y: -30 }
+            : { opacity: 0, scale: 0.7, x: 48 }
       }
       animate={{ opacity: 1, scale: 1, x: 0, y: 0, rotate: inst.tapped ? 90 : 0 }}
       // A creature killed in combat (Board hands the AnimatePresence its impact delays as `custom`) keeps
@@ -259,6 +296,17 @@ export function CardView({
     >
       {arenaToken ? (
         <>
+          {rising && (
+            <span className="rise-ground" aria-hidden>
+              <span className="rise-mound" />
+              {RISE_CLODS.map((c, i) => (
+                <i
+                  key={i}
+                  style={{ '--cx': c.x, '--cy': c.y, '--cs': `${c.s}px`, '--cd': `${c.d}ms` } as React.CSSProperties}
+                />
+              ))}
+            </span>
+          )}
           {def.art && (
             <img className="arena-art" src={def.art} alt="" draggable={false} onError={artFallback} />
           )}
