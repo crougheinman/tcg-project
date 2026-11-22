@@ -52,8 +52,10 @@ export const SKILL_CREATURES: Record<string, string> = Object.fromEntries(
 export const TRIGGER_SPOT_MS = 1000;
 
 // The board releases a phase-banner hold / lock on its own if one lasts this long without letting go (useLockFailsafe).
-// Chained banners legitimately hold it ~11 s (a turn change: End banner, gap, Main banner; 9 s even after a 12-attacker combat).
-export const LOCK_FAILSAFE_MS = 15000;
+// Chained banners legitimately hold it a long time: a turn change is ~10 s (End banner, gap, Main banner) and after the
+// player's own attack the combat clash, the block / End / enemy-Main banners chain to 12-18 s (measured in 6 of 8 smoke
+// matches; one 24 s hold was seen too). So this sits well above that: it is a last resort for a banner that never reports back.
+export const LOCK_FAILSAFE_MS = 40000;
 
 // ---- zone shows (ZoneFx): a card discarded by Rot, a card raised by Grave Call ----
 export const DISCARD_FX_MS = 3000;

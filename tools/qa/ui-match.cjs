@@ -146,9 +146,10 @@ const INSTALL = async () => {
       if (H.heldSince && now - H.heldSince > 6000) (H.longHolds = H.longHolds || []).push({ ms: Math.round(now - H.heldSince), from: H.heldFrom, to: `${g.phase}/${g.active}/T${g.turn}` });
       H.heldSince = 0;
     }
-    // chained banners legitimately hold the board for ~11 s (a turn change; 9 s after a 12-attacker combat). Board.tsx's
-    // failsafe (LOCK_FAILSAFE_MS) releases a lock at 15 s, so anything past 14 s means a banner failed to report back
-    persistRaw('LOCK_STUCK|', held, 14000, `the board stayed locked / held for 14s: phase ${g.phase}, active ${g.active}, turn ${g.turn}, banner "${(q('.phase-banner .pb-phase') || {}).textContent || 'none'}", charging ${!!s.charging}`);
+    // chained banners legitimately hold the board 10-18 s (a turn change; after the player's own attack the clash and the
+    // block / End / enemy-Main banners chain; 24 s seen once). Board.tsx's failsafe (LOCK_FAILSAFE_MS) releases a lock at 40 s,
+    // so anything past 36 s means a banner failed to report back
+    persistRaw('LOCK_STUCK|', held, 36000, `the board stayed locked / held for 36s: phase ${g.phase}, active ${g.active}, turn ${g.turn}, banner "${(q('.phase-banner .pb-phase') || {}).textContent || 'none'}", charging ${!!s.charging}`);
     persistRaw('PREVIEW_STUCK|', !!q('.preview-overlay'), 3500, 'card preview stayed open with the pointer away from every card');
     persistRaw('CHARGING_STUCK|', !!s.charging, 5200, `store.charging still set (${s.charging && s.charging.def})`);
     persistRaw('ERROR_TOAST|', !!q('.toast:not(.net-stale)'), 0, `error toast on screen: ${(q('.toast:not(.net-stale)') || {}).textContent}`);
