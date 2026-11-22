@@ -138,7 +138,14 @@ const INSTALL = async () => {
     const atkTags = qa('.combat-tag.atk').filter((t) => liveIds.has(t.closest('.stack')?.querySelector('[data-iid]')?.dataset.iid)).length, wantTags = g.phase === 'combat_block' ? (g.combat?.attackers.length || 0) : 0;
     persist('ATK_TAGS|', atkTags !== wantTags, 1500, `${atkTags} ATK tags shown, expected ${wantTags} in ${g.phase}`);
     // how long has the board been continuously held? (the longest stretch is reported with the result)
-    if (held) { if (!H.heldSince) H.heldSince = now; H.maxHeld = Math.max(H.maxHeld || 0, now - H.heldSince); } else H.heldSince = 0;
+    if (held) {
+      if (!H.heldSince) { H.heldSince = now; H.heldFrom = `${g.phase}/${g.active}/T${g.turn}`; }
+      H.maxHeld = Math.max(H.maxHeld || 0, now - H.heldSince);
+    } else {
+      // a hold that has just ended: keep the long ones (with where they started) for the report
+      if (H.heldSince && now - H.heldSince > 6000) (H.longHolds = H.longHolds || []).push({ ms: Math.round(now - H.heldSince), from: H.heldFrom, to: `${g.phase}/${g.active}/T${g.turn}` });
+      H.heldSince = 0;
+    }
     // chained banners legitimately hold the board for ~12 s (11.6 s measured in one match); Board.tsx releases a hold at 15 s,
     // so a hold still alive past 16 s means even that failsafe failed
     persistRaw('LOCK_STUCK|', held, 16000, `the board stayed locked / held for 16s: phase ${g.phase}, active ${g.active}, turn ${g.turn}, banner "${(q('.phase-banner .pb-phase') || {}).textContent || 'none'}", charging ${!!s.charging}`);
@@ -354,6 +361,7 @@ async function playMatch(browser, A, B, idx) {
     // ---- result screen ----
     const fin = await page.evaluate(() => { const s = window.__game.getState(), g = s.game; return { winner: g.winner, turn: g.turn, lifeA: g.players.A.life, lifeB: g.players.B.life, libA: g.players.A.library.length, libB: g.players.B.library.length, decked: g.log.some((l) => /decks out/.test(l)) }; });
     res.maxHeldMs = Math.round(await page.evaluate(() => window.__H.maxHeld || 0)); // longest continuous board hold (phase banners)
+    res.longHolds = await page.evaluate(() => window.__H.longHolds || []); // every board hold over 6 s: how long and where it started/ended
     res.winner = fin.winner; res.turns = fin.turn; res.lifeA = fin.lifeA; res.lifeB = fin.lifeB;
     res.reason = fin.winner ? (fin.decked ? 'deck-out' : 'life') : 'unfinished';
     if (fin.winner) {
