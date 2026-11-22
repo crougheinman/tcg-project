@@ -200,6 +200,7 @@ Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.
 - `npm run lint` currently reports two `react-hooks/exhaustive-deps` warnings, both from the owner's recent commits: `src/ui/Board.tsx`
   ~line 154 (missing `game.players` in a `useEffect`) and `src/ui/BoardFx.tsx` ~line 694 (missing `flushCues`). The lint script
   allows zero warnings, so fix them (carefully: each changes when its effect runs) before relying on lint.
+- `npm run qa:smoke` currently reports anomalies in all 8 matches (run 2026-11-22). It is not from the recent cinematic, zone-show or block-banner work: wildblitz v wildwood (desktop, same seed) gives the same anomaly set on `647ed58` (before all of it) and on current code, and only 6 milder ones (gesture / selection / blocked-tag mismatches, none of the HUD, acting-ring, tapped or ATK-tag ones) on `7c05168` (before the board-hold-during-banners change `6e3ffb1`). The HUD / ACTING_RING / TAPPED_DESYNC / ATK_TAGS anomalies fit the board showing the pre-change state while a banner plays, which the harness may not wait out; not confirmed. Until it is looked at, a smoke run cannot tell a new regression from this: compare a pairing against the commit before your change.
 - Not done: keyword badges on board cards; Beast Blitz is not data-driven; the full 56-match browser pass has not been run since the mechanics phases.
 
 ## Change log (newest first; add a line per change)
