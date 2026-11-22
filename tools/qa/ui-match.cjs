@@ -86,7 +86,7 @@ const INSTALL = async () => {
     return g ? { phase: g.phase, turn: g.turn, active: g.active, actor: rules.actorOf(g), winner: g.winner, pending: !!g.pending, charging: !!s.charging, error: s.error, expectLeft: H.expect.length, trace: H.trace, idle: performance.now() - H.lastT, lifeA: g.players.A.life, lifeB: g.players.B.life } : null;
   };
   // ---- DOM auditor with persistence thresholds (animations legitimately lag the state) ----
-  const persist = (key, bad, thr, detail) => {
+  const persistRaw = (key, bad, thr, detail) => {
     const now = performance.now();
     if (!bad) { H.seen.delete(key); return; }
     if (!H.seen.has(key)) H.seen.set(key, now);
@@ -101,6 +101,12 @@ const INSTALL = async () => {
     const s = store.getState(), g = s.game;
     if (!g) return;
     const now = performance.now();
+    // While a phase banner is pending or showing, the board DELIBERATELY draws the state from before the phase change
+    // and locks its cards (Board.tsx `hold` / `cardsLocked`), for a banner (3 s) plus a gap: longer than the persistence
+    // thresholds below. A mismatch between the DOM and the live state is expected then, so those checks only count when
+    // the board is not held; a hold that never releases is caught separately (LOCK_STUCK).
+    const held = !!(q('.board.cards-locked') || q('.phase-banner'));
+    const persist = (key, bad, thr, detail) => persistRaw(key, bad && !held, thr, detail);
     for (const [side, pid] of [['me', 'A'], ['opp', 'B']]) {
       const P = g.players[pid];
       const dom = new Set(qa(`.player-zone.${side} .row.creatures [data-iid]`).map((e) => e.dataset.iid));
@@ -131,11 +137,12 @@ const INSTALL = async () => {
     // a card fading out after death keeps its frozen last render (incl. its tag) for 1.8s: not a live tag
     const atkTags = qa('.combat-tag.atk').filter((t) => liveIds.has(t.closest('.stack')?.querySelector('[data-iid]')?.dataset.iid)).length, wantTags = g.phase === 'combat_block' ? (g.combat?.attackers.length || 0) : 0;
     persist('ATK_TAGS|', atkTags !== wantTags, 1500, `${atkTags} ATK tags shown, expected ${wantTags} in ${g.phase}`);
-    persist('PREVIEW_STUCK|', !!q('.preview-overlay'), 3500, 'card preview stayed open with the pointer away from every card');
-    persist('CHARGING_STUCK|', !!s.charging, 5200, `store.charging still set (${s.charging && s.charging.def})`);
-    persist('ERROR_TOAST|', !!q('.toast:not(.net-stale)'), 0, `error toast on screen: ${(q('.toast:not(.net-stale)') || {}).textContent}`);
+    persistRaw('LOCK_STUCK|', held, 12000, 'the board stayed locked / held for 12s (a phase banner that never reported back?)');
+    persistRaw('PREVIEW_STUCK|', !!q('.preview-overlay'), 3500, 'card preview stayed open with the pointer away from every card');
+    persistRaw('CHARGING_STUCK|', !!s.charging, 5200, `store.charging still set (${s.charging && s.charging.def})`);
+    persistRaw('ERROR_TOAST|', !!q('.toast:not(.net-stale)'), 0, `error toast on screen: ${(q('.toast:not(.net-stale)') || {}).textContent}`);
     if (s.error) note('STORE_ERROR', s.error);
-    persist('FX_LEAK|', qa('[class*="fx-"]').length > 0 && now - H.lastT > 9000, 0, `${qa('[class*="fx-"]').length} fx node(s) alive 9s after the last state change`);
+    persistRaw('FX_LEAK|', qa('[class*="fx-"]').length > 0 && now - H.lastT > 9000, 0, `${qa('[class*="fx-"]').length} fx node(s) alive 9s after the last state change`);
     { const de = document.documentElement; const over = de.scrollWidth > de.clientWidth + 1; let det = 'page scrolls horizontally'; if (over) { const cw = de.clientWidth; const chain = (e) => { const o = []; for (let n = e; n && n !== document.body && o.length < 5; n = n.parentElement) { const cs = getComputedStyle(n); o.push(`${n.tagName}.${String(n.className).slice(0, 24)}(${cs.position}${cs.transform !== 'none' ? ',T' : ''}${cs.overflowX !== 'visible' ? ',ox=' + cs.overflowX : ''})`); } return o.join('<'); }; const els = [...document.querySelectorAll('body *')].map((e) => ({ e, r: e.getBoundingClientRect() })).filter((x) => x.r.width > 0 && x.r.right > cw - 0.5).sort((x, y) => y.r.right - x.r.right).slice(0, 5); det += ` sw=${de.scrollWidth} bodysw=${document.body.scrollWidth} cw=${cw} iw=${innerWidth} vv=${visualViewport && visualViewport.width} :: ` + els.map((x) => `[${x.r.right.toFixed(1)}] ${chain(x.e)}`).join(' || '); } persist('H_SCROLL|', over, 500, det); }
   }
   return true;
@@ -233,6 +240,8 @@ async function playMatch(browser, A, B, idx) {
       if (s.trace !== lastTrace) { lastTrace = s.trace; lastTraceAt = Date.now(); }
       if (Date.now() - lastTraceAt > 25000) { res.stuck = `no state change for 25s in ${s.phase}, actor ${s.actor}, charging=${s.charging}, expectLeft=${s.expectLeft}, error=${s.error}`; await page.screenshot({ path: `${SHOTS}/stuck-${A}-${B}-${VIEW}.png` }).catch(() => {}); break; }
       if (s.actor !== 'A' || s.charging || s.expectLeft > 0) { await sleep(120); continue; }
+      // The board ignores clicks while a phase banner is pending or showing (cards-locked): a real player waits for it too.
+      if (await page.evaluate(() => !!(document.querySelector('.board.cards-locked') || document.querySelector('.phase-banner')))) { await sleep(100); continue; }
 
       const { action } = await page.evaluate(() => window.__H.plan());
       steps++;
