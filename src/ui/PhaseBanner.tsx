@@ -35,6 +35,7 @@ export function PhaseBanner({
   const hideT = useRef<ReturnType<typeof setTimeout>>();
   const freeAt = useRef(0); // when the next banner may start (previous one's end + the gap)
   const showPending = useRef(false); // a banner is waiting for its slot
+  const lockOn = useRef(false); // our own lock is set and its release timer has not fired yet
   const guidedRef = useRef(guided);
   guidedRef.current = guided;
   const over = !!game.winner;
@@ -44,6 +45,7 @@ export function PhaseBanner({
       clearTimeout(showT.current);
       clearTimeout(hideT.current);
       clearTimeout(lockT.current);
+      lockOn.current = false;
       onLockRef.current?.(false);
       setShown(null);
       return;
@@ -51,15 +53,18 @@ export function PhaseBanner({
     if (info.key === lastKey.current) return;
     lastKey.current = info.key;
     const now = Date.now();
-    // A block step with nothing to decide (no creature can block, no instant to cast) gets no banner at all: the
-    // board is released at once (unless an earlier banner is still up or waiting, which releases it as it leaves).
+    // A block step with nothing to decide (no creature can block, no instant to cast) gets no banner at all. Board.tsx
+    // holds the old state on every phase change and only onLock(false) releases it, so release it here, unless an
+    // earlier banner's lock is still pending (its own timer releases it as that banner leaves). Not "unless its gap is
+    // still running": the lock is already gone by then and nothing else would release the hold (a frozen board).
     if (blockStepIsEmpty(game)) {
-      if (!showPending.current && now >= freeAt.current) onLockRef.current?.(false);
+      if (!lockOn.current) onLockRef.current?.(false);
       return;
     }
     // From the moment the phase changes until its banner (which may wait for the gap before it) has
     // played and left, the cards are locked and the board holds still (Board.tsx).
     clearTimeout(lockT.current);
+    lockOn.current = true;
     onLockRef.current?.(true);
     // Combat just resolved: its clash (first-strike cinematic, then each attacker's strike) plays out
     // first; the banner for the phase that follows waits for it plus a beat, instead of landing on top.
@@ -78,7 +83,10 @@ export function PhaseBanner({
       clearTimeout(hideT.current);
       setShown(info);
       hideT.current = setTimeout(() => setShown((cur) => (cur?.key === info.key ? null : cur)), dur);
-      lockT.current = setTimeout(() => onLockRef.current?.(false), dur + EXIT_MS);
+      lockT.current = setTimeout(() => {
+        lockOn.current = false;
+        onLockRef.current?.(false);
+      }, dur + EXIT_MS);
     };
     clearTimeout(showT.current);
     if (startAt > now) {
