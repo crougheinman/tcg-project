@@ -137,7 +137,9 @@ const INSTALL = async () => {
     // a card fading out after death keeps its frozen last render (incl. its tag) for 1.8s: not a live tag
     const atkTags = qa('.combat-tag.atk').filter((t) => liveIds.has(t.closest('.stack')?.querySelector('[data-iid]')?.dataset.iid)).length, wantTags = g.phase === 'combat_block' ? (g.combat?.attackers.length || 0) : 0;
     persist('ATK_TAGS|', atkTags !== wantTags, 1500, `${atkTags} ATK tags shown, expected ${wantTags} in ${g.phase}`);
-    persistRaw('LOCK_STUCK|', held, 12000, 'the board stayed locked / held for 12s (a phase banner that never reported back?)');
+    // how long has the board been continuously held? (the longest stretch is reported with the result)
+    if (held) { if (!H.heldSince) H.heldSince = now; H.maxHeld = Math.max(H.maxHeld || 0, now - H.heldSince); } else H.heldSince = 0;
+    persistRaw('LOCK_STUCK|', held, 12000, `the board stayed locked / held for 12s: phase ${g.phase}, active ${g.active}, turn ${g.turn}, banner "${(q('.phase-banner .pb-phase') || {}).textContent || 'none'}", charging ${!!s.charging}`);
     persistRaw('PREVIEW_STUCK|', !!q('.preview-overlay'), 3500, 'card preview stayed open with the pointer away from every card');
     persistRaw('CHARGING_STUCK|', !!s.charging, 5200, `store.charging still set (${s.charging && s.charging.def})`);
     persistRaw('ERROR_TOAST|', !!q('.toast:not(.net-stale)'), 0, `error toast on screen: ${(q('.toast:not(.net-stale)') || {}).textContent}`);
@@ -349,6 +351,7 @@ async function playMatch(browser, A, B, idx) {
 
     // ---- result screen ----
     const fin = await page.evaluate(() => { const s = window.__game.getState(), g = s.game; return { winner: g.winner, turn: g.turn, lifeA: g.players.A.life, lifeB: g.players.B.life, libA: g.players.A.library.length, libB: g.players.B.library.length, decked: g.log.some((l) => /decks out/.test(l)) }; });
+    res.maxHeldMs = Math.round(await page.evaluate(() => window.__H.maxHeld || 0)); // longest continuous board hold (phase banners)
     res.winner = fin.winner; res.turns = fin.turn; res.lifeA = fin.lifeA; res.lifeB = fin.lifeB;
     res.reason = fin.winner ? (fin.decked ? 'deck-out' : 'life') : 'unfinished';
     if (fin.winner) {
