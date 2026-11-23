@@ -28,6 +28,7 @@ async function setup(page, spec) {
     window.__game.setState({ game: g, error: null, charging: null });
   }, spec);
   await sleep(700);
+  if (!spec.noWait) await unlocked(page);
 }
 const iid = (page, o, d) => page.evaluate(([o, d]) => window.__game.getState().game.players[o].battlefield.find((c) => c.def === d)?.iid, [o, d]);
 const handIid = (page, d) => page.evaluate((d) => window.__game.getState().game.players.A.hand.find((c) => c.def === d)?.iid, d);
@@ -36,7 +37,12 @@ const phase = (page) => page.evaluate(() => window.__game.getState().game.phase)
 const banner = (page) => page.evaluate(() => document.querySelector('.announce')?.textContent || '');
 const lbl = async (page) => { await sleep(750); return lbl0(page); };
 const lbl0 = (page) => page.evaluate(() => ({ blocking: [...document.querySelectorAll('.player-zone.me .ready-box.block')].filter((e) => !e.classList.contains('pending')).length, pending: document.querySelectorAll('.player-zone.me .ready-box.pending').length, selected: document.querySelectorAll('.player-zone.me .card.selected').length }));
-const click = async (page, sel, opt = {}) => { try { await page.locator(sel).first().click({ timeout: 4000, ...opt }); await sleep(260); return true; } catch (e) { return 'CLICK FAILED: ' + (String(e.message).split('\n').find((l) => /intercept/.test(l)) || 'timeout').trim(); } };
+// The board holds the pre-change state and locks its cards while a phase banner is pending or showing, and ignores clicks then;
+// a creature that can attack bobs forever (atkbob), which Playwright refuses to click ("not stable"). So: wait for the board to
+// release, and freeze the target's infinite animations for the click (it can still be hit at its centre, and not-covered is still checked).
+const unlocked = (page) => page.waitForFunction(() => !document.querySelector('.board.cards-locked') && !document.querySelector('.phase-banner'), null, { timeout: 15000 }).catch(() => {});
+const freeze = (loc) => loc.evaluate((el) => { const host = el.closest('.stack') || el; [...host.getAnimations({ subtree: true }), ...el.getAnimations({ subtree: true })].filter((a) => a.effect && a.effect.getComputedTiming().iterations === Infinity).forEach((a) => a.pause()); }).catch(() => {});
+const click = async (page, sel, opt = {}) => { try { await unlocked(page); await freeze(page.locator(sel).first()); await page.locator(sel).first().click({ timeout: 4000, ...opt }); await sleep(260); return true; } catch (e) { return 'CLICK FAILED: ' + (String(e.message).split('\n').find((l) => /intercept/.test(l)) || 'timeout').trim(); } };
 const E = (id) => `[data-iid="${id}"]`;
 const ME = '.player-zone.me', OPP = '.player-zone.opp';
 
@@ -285,18 +291,20 @@ const ME = '.player-zone.me', OPP = '.player-zone.opp';
   for (const view of ['desktop', 'phone', 'landscape']) {
     const { ctx, page } = await boot(browser, view);
     const bn = () => page.evaluate(() => { const b = document.querySelector('.phase-banner'); if (!b) return null; const r = b.getBoundingClientRect(); return { turn: b.querySelector('.pb-turn')?.textContent, phase: b.querySelector('.pb-phase')?.textContent, cls: b.className, dx: Math.abs(r.left + r.width / 2 - innerWidth / 2), dy: Math.abs(r.top + r.height / 2 - innerHeight / 2), fits: r.left >= 0 && r.right <= innerWidth, over: document.documentElement.scrollWidth > innerWidth + 1 }; });
-    await setup(page, { phase: 'main1', active: 'A', a: ['aether_well', 'dread_maw', 'swift_lancer'], b: ['granite_sentinel'] }); await sleep(1800);
-    await page.locator('.actions button', { hasText: 'Go to Combat' }).click(); await sleep(450);
+    await setup(page, { phase: 'main1', active: 'A', a: ['aether_well', 'dread_maw', 'swift_lancer'], b: ['granite_sentinel'] }); await sleep(700);
+    await page.locator('.actions button', { hasText: 'Go to Combat' }).click();
+    await page.waitForSelector('.phase-banner', { timeout: 6000 }).catch(() => {}); await sleep(450);
     const mine = await bn();
-    await sleep(1700); const gone = await bn();
-    for (const id of await page.evaluate(() => [...document.querySelectorAll('.player-zone.me .row.creatures .card')].map((c) => c.dataset.iid))) await page.locator(`.player-zone.me [data-iid="${id}"]`).first().click({ position: { x: 10, y: 16 } }).catch(() => {});
+    await page.waitForSelector('.phase-banner', { state: 'detached', timeout: 8000 }).catch(() => {}); await sleep(300); const gone = await bn();
+    for (const id of await page.evaluate(() => [...document.querySelectorAll('.player-zone.me .row.creatures .card')].map((c) => c.dataset.iid))) await click(page, `.player-zone.me [data-iid="${id}"]`, { position: { x: 10, y: 16 } });
     await sleep(400);
     const atkTally = await page.evaluate(() => document.querySelector('.tally')?.innerText.replace(/\s+/g, ' ').trim());
     const btn = await page.evaluate(() => getComputedStyle(document.querySelector('.actions button.primary')).backgroundColor);
     const glowMine = await page.evaluate(() => document.querySelector('.turn-glow')?.className);
-    await setup(page, { phase: 'combat_block', active: 'B', a: ['aether_well', 'stoneback_cub', 'granite_sentinel'], b: ['dread_maw', 'swift_lancer'], attackers: ['dread_maw', 'swift_lancer'] }); await sleep(450);
+    await setup(page, { phase: 'combat_block', active: 'B', a: ['aether_well', 'stoneback_cub', 'granite_sentinel'], b: ['dread_maw', 'swift_lancer'], attackers: ['dread_maw', 'swift_lancer'], noWait: true });
+    await page.waitForSelector('.phase-banner', { timeout: 6000 }).catch(() => {}); await sleep(450);
     const theirs = await bn(); const glowTheirs = await page.evaluate(() => document.querySelector('.turn-glow')?.className);
-    await sleep(1700);
+    await page.waitForSelector('.phase-banner', { state: 'detached', timeout: 8000 }).catch(() => {}); await unlocked(page);
     const sent = await iid(page, 'A', 'granite_sentinel'), maw = await iid(page, 'B', 'dread_maw');
     await click(page, `${ME} ${E(sent)}`); await click(page, `${OPP} ${E(maw)}`); await sleep(500);
     const blkTally = await page.evaluate(() => document.querySelector('.tally')?.innerText.replace(/\s+/g, ' ').trim());
