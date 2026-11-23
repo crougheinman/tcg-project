@@ -23,7 +23,7 @@ import * as path from 'node:path';
 const SEEDS = Number(process.env.SEEDS ?? 12);
 const OUT = process.env.OUT ?? path.join(os.tmpdir(), 'engine-fuzz.json');
 const TOKENS = new Set(['wolf_token', 'zombie_token']);
-const BLITZ = ['swift_lancer', 'sky_talon', 'stoneback_cub', 'wolf_token'];
+const BLITZ = ['swift_lancer', 'sky_talon', 'stoneback_cub', 'wolf_token', 'thornwood_brute', 'dread_maw']; // Kunoichi's six beasts (kept independent of BLITZ_BEASTS on purpose)
 
 // tiny seeded PRNG so every failure is reproducible
 function rng(seed: number) {
@@ -78,7 +78,8 @@ function expectedCombatDeaths(before: GameState, a: Extract<Action, { type: 'dec
  * Combat, re-derived from the rules text (NOT from the engine's helpers): two damage steps,
  * deaths between them. Step 1 = first strike / double strike; step 2 = everything without first
  * strike, plus double strikers again. Trample assigns lethal to the blocker, the rest to the player;
- * deathtouch makes 1 damage lethal; lifelink gains the damage dealt, in the same step.
+ * deathtouch makes 1 damage lethal; lifelink gains the damage dealt, in the same step. Bushido gives +1/+1 to a
+ * creature that blocks or is blocked (before damage); an indestructible creature is not killed by damage, only by 0 toughness.
  */
 function simulateCombat(before: GameState, blocks: Record<string, string>): { delta: Record<PlayerId, number>; dead: Set<string> } {
   const find = (iid: string) => all(before).find((c) => c.iid === iid);
@@ -91,6 +92,11 @@ function simulateCombat(before: GameState, blocks: Record<string, string>): { de
   const blockerOf = new Map<string, string>();
   for (const [b, atk] of Object.entries(blocks)) blockerOf.set(atk, b);
   const kw = (iid: string, k: Parameters<typeof hasKeyword>[1]) => hasKeyword(find(iid)!, k);
+  // bushido: +1/+1 for each creature that is in a block, applied before any damage
+  const bushido = new Map<string, number>();
+  for (const [b, atk] of Object.entries(blocks)) for (const iid of [b, atk]) if (find(iid) && kw(iid, 'bushido')) bushido.set(iid, (bushido.get(iid) ?? 0) + 1);
+  const pw = (iid: string) => power(find(iid)!) + (bushido.get(iid) ?? 0);
+  const tough = (iid: string) => toughness(find(iid)!) + (bushido.get(iid) ?? 0);
   const deals = (iid: string, step: 1 | 2) => (step === 1 ? kw(iid, 'firstStrike') || kw(iid, 'doubleStrike') : kw(iid, 'doubleStrike') || !kw(iid, 'firstStrike'));
 
   for (const step of [1, 2] as const) {
@@ -100,29 +106,29 @@ function simulateCombat(before: GameState, blocks: Record<string, string>): { de
       const blkIid = blockerOf.get(atkIid);
       const blkAlive = !!blkIid && !!find(blkIid) && alive.has(blkIid);
       if (deals(atkIid, step)) {
-        const n = power(find(atkIid)!);
+        const n = pw(atkIid);
         if (!blkIid) hits.push({ src: atkIid, dst: 'face', n });
         else if (blkAlive) {
           if (kw(atkIid, 'trample')) {
-            const room = toughness(find(blkIid!)!) - (marked.get(blkIid!) ?? 0);
+            const room = tough(blkIid!) - (marked.get(blkIid!) ?? 0);
             const need = Math.max(0, kw(atkIid, 'deathtouch') ? Math.min(1, room) : room);
             hits.push({ src: atkIid, dst: blkIid!, n: Math.min(n, need) });
             hits.push({ src: atkIid, dst: 'face', n: Math.max(0, n - need) });
           } else hits.push({ src: atkIid, dst: blkIid!, n });
         } else if (kw(atkIid, 'trample')) hits.push({ src: atkIid, dst: 'face', n });
       }
-      if (blkAlive && deals(blkIid!, step)) hits.push({ src: blkIid!, dst: atkIid, n: power(find(blkIid!)!) });
+      if (blkAlive && deals(blkIid!, step)) hits.push({ src: blkIid!, dst: atkIid, n: pw(blkIid!) });
     }
     for (const h of hits) {
       if (h.n <= 0) continue;
       if (h.dst === 'face') delta[defSide] -= h.n;
       else {
         marked.set(h.dst, (marked.get(h.dst) ?? 0) + h.n);
-        if (kw(h.src, 'deathtouch')) marked.set(h.dst, Math.max(marked.get(h.dst)!, toughness(find(h.dst)!)));
+        if (kw(h.src, 'deathtouch')) marked.set(h.dst, Math.max(marked.get(h.dst)!, tough(h.dst)));
       }
       if (kw(h.src, 'lifelink')) delta[side(h.src)] += h.n;
     }
-    for (const iid of [...alive]) if ((marked.get(iid) ?? 0) >= toughness(find(iid)!)) alive.delete(iid);
+    for (const iid of [...alive]) if (kw(iid, 'indestructible') ? tough(iid) <= 0 : (marked.get(iid) ?? 0) >= tough(iid)) alive.delete(iid);
     if (before.players.A.life + delta.A <= 0 || before.players.B.life + delta.B <= 0) break; // game over: no second step
   }
   const dead = new Set<string>();
@@ -289,7 +295,14 @@ function check(
       const bl = all(before).find((c) => c.iid === b), at = all(before).find((c) => c.iid === atk);
       if (bl && at && hasKeyword(at, 'flying') && !hasKeyword(bl, 'flying') && !hasKeyword(bl, 'reach')) R('FLYER_BLOCKED_BY_GROUND', `${at.def} blocked by ${bl.def}`);
       if (bl?.tapped) R('TAPPED_BLOCKER', `${bl.def} blocked while tapped`);
+      if (bl && at && hasKeyword(at, 'skulk') && power(bl) > power(at)) R('SKULK_BLOCKED_BY_GREATER', `${at.def} (power ${power(at)}) blocked by ${bl.def} (power ${power(bl)})`);
     }
+  }
+  // indestructible: no damage, deathtouch or destroy takes a creature with it off the battlefield. (Creatures wearing the Kunoichi
+  // aura are skipped: losing the aura can take a point of toughness away, which is the one thing that does kill it.)
+  for (const c of creatures(before)) {
+    if (!hasKeyword(c, 'indestructible') || c.blitz || toughness(c) <= 0) continue;
+    if (!after.players[c.owner].battlefield.some((x) => x.iid === c.iid)) R('INDESTRUCTIBLE_DIED', `${c.def} (toughness ${toughness(c)}) left the battlefield`);
   }
   // damage must never survive into a new turn
   if (a.type === 'advance' && before.phase === 'end') for (const c of creatures(after)) if (c.damage) R('DAMAGE_ACROSS_TURNS', c.def);
@@ -341,7 +354,7 @@ function chaosAction(s: GameState, actor: PlayerId, r: () => number): Action {
     const used = new Set<string>();
     for (const atk of atks) {
       if (r() < 0.55) continue;
-      const opts = pool.filter((b) => !used.has(b.iid) && (!hasKeyword(atk, 'flying') || hasKeyword(b, 'flying') || hasKeyword(b, 'reach')));
+      const opts = pool.filter((b) => !used.has(b.iid) && (!hasKeyword(atk, 'flying') || hasKeyword(b, 'flying') || hasKeyword(b, 'reach')) && (!hasKeyword(atk, 'skulk') || power(b) <= power(atk)));
       if (!opts.length) continue;
       const b = opts[Math.floor(r() * opts.length)];
       blocks[b.iid] = atk.iid;
@@ -370,7 +383,7 @@ const t0 = Date.now();
 // Keyword stress: besides the real decks, replay every policy with the new keywords sprinkled at random
 // over the decks' creatures, so every keyword combination meets every situation (not just the few
 // the shipped cards happen to carry). Keywords are restored after each game.
-const STRESS_KW = ['reach', 'vigilance', 'firstStrike', 'doubleStrike', 'trample', 'deathtouch', 'lifelink', 'flash', 'prowess'] as const;
+const STRESS_KW = ['reach', 'vigilance', 'firstStrike', 'doubleStrike', 'trample', 'deathtouch', 'lifelink', 'flash', 'prowess', 'skulk', 'bushido', 'indestructible'] as const;
 type CardDefDeath = (typeof CARDS)[string]['onDeath'];
 function sprinkleKeywords(r: () => number): () => void {
   const saved = new Map<string, { kw: string[] | undefined; death: CardDefDeath; enter: CardDefDeath }>();
