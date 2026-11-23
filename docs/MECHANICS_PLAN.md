@@ -257,6 +257,5 @@ mutation-checked); the fuzz oracle tracks bounced and sacrificed creatures separ
 What the fuzz found: after a bounce the oracle still counted the bounced creature's spell trigger (the engine was right: a creature that left play does not trigger).
 
 Cards (all decks 45.7%-54.6% at N=80, 46.5%-55.5% at N=120): **Carrion Colossus** Edict on entering, **Ancient Treant** Cycling 2, **Iron Shogun** Rally (+1/+0) on entering. Rejected by the sim: a Storm
-Drake that bounces on entering (Skyward 57.5%, Pyromancer 43.8%, Wildblitz 44.8%) and a Dread Maw with Cycling (Pyromancer 42.7%, Wildwood 57.3%). Bounce and Rally as SPELLS wait for art:
-`card-art.md` has prompts for **Windrush**, **War Drums** and **Grave Toll**; once the art exists they become real cards after a win-rate check.
+Drake that bounces on entering (Skyward 57.5%, Pyromancer 43.8%, Wildblitz 44.8%) and a Dread Maw with Cycling (Pyromancer 42.7%, Wildwood 57.3%). Bounce, Rally and Edict as SPELLS arrived with their art: **Windrush** (Skyward, 2 copies), **War Drums** (Iron Blossom, 1 copy) and **Grave Toll** (Grave Tide, 1 copy). Win rates N=80 with all three: 46.4%-53.8%. War Drums was the hard one: two copies at the cost of Insight and a Ronin Blade dropped Iron Blossom to 39.8%, so it runs one copy in place of a Shuriken Volley (51.1%).
 

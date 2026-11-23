@@ -413,5 +413,6 @@ The lore is written to be **harvested, not obeyed**:
 - **New cards.** Each tradition has explicit room: Skyward's ninety-year ledger, Stonewall's
   refusal to heal with Well-light, the Wildwood's unfinished answer, whatever the Pyre is actually
   doing to the record.
+- **Late spells.** Windrush (Skyward), War Drums (Iron Blossom) and Grave Toll (Grave Tide) are in the game now; their scenes and lore lines are in `card-art.md`.
 - **Balance is unaffected.** Nothing here asks for a rules change. Where the fiction and the rules
   disagree, the rules are canon and the fiction is wrong.

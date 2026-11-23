@@ -322,6 +322,26 @@ export const CARDS: Record<string, CardDef> = {
     art: '/cards/cinderbolt.webp', // 420x422 WebP; other cards auto-wire to <id>.png
     flavor: 'A handful of the old warmth, spent all at once.',
   },
+  war_drums: {
+    id: 'war_drums',
+    name: 'War Drums',
+    type: 'sorcery',
+    cost: 3,
+    effect: { type: 'rally', power: 1, toughness: 0 },
+    text: 'Your creatures get +1/+0 until end of turn.',
+    art: '/cards/war_drums.webp', // 420x421 WebP; other cards auto-wire to <id>.png
+    flavor: 'Every drum a heartbeat, every heartbeat a step.',
+  },
+  grave_toll: {
+    id: 'grave_toll',
+    name: 'Grave Toll',
+    type: 'sorcery',
+    cost: 4,
+    effect: { type: 'edict' },
+    text: 'Your opponent sacrifices a creature of their choice.',
+    art: '/cards/grave_toll.webp', // 420x417 WebP; other cards auto-wire to <id>.png
+    flavor: 'The bell asks only one. They choose which.',
+  },
   scorch: {
     id: 'scorch',
     name: 'Scorch',
@@ -402,6 +422,16 @@ export const CARDS: Record<string, CardDef> = {
     text: 'Instant — Gain 6 life.',
     art: '/cards/soothe.webp', // 420x421 WebP; other cards auto-wire to <id>.png
     flavor: 'Rest now. The walls will hold.',
+  },
+  windrush: {
+    id: 'windrush',
+    name: 'Windrush',
+    type: 'instant',
+    cost: 2,
+    effect: { type: 'bounce' },
+    text: "Instant — return target creature to its owner's hand.",
+    art: '/cards/windrush.webp', // 420x420 WebP; other cards auto-wire to <id>.png
+    flavor: 'Gone before it knew it was moved.',
   },
   topple: {
     id: 'topple',

@@ -20,7 +20,8 @@ export const DECK_EMBERWOOD: string[] = [
 
 export const DECK_SKYWARD: string[] = [
   ...repeat('aether_well', 12),
-  ...repeat('stoneback_cub', 6),
+  ...repeat('stoneback_cub', 4),
+  ...repeat('windrush', 2),
   ...repeat('sky_talon', 2),
   ...repeat('granite_sentinel', 3),
   ...repeat('storm_drake', 2),
@@ -86,13 +87,14 @@ export const DECK_IRONBLOSSOM: string[] = [
   ...repeat('iron_shogun', 1),
   ...repeat('iaijutsu_strike', 2),
   ...repeat('warding_stance', 1),
-  ...repeat('shuriken_volley', 2),
+  ...repeat('shuriken_volley', 1),
   ...repeat('insight', 1),
+  ...repeat('war_drums', 1),
 ]; // 30
 
 export const DECK_GRAVETIDE: string[] = [
   ...repeat('aether_well', 13),
-  ...repeat('shambling_ghoul', 6),
+  ...repeat('shambling_ghoul', 5),
   ...repeat('plague_priest', 2),
   ...repeat('grave_necromancer', 2),
   ...repeat('rotting_hulk', 1),
@@ -101,6 +103,7 @@ export const DECK_GRAVETIDE: string[] = [
   ...repeat('withering_touch', 2),
   ...repeat('soul_siphon', 1),
   ...repeat('grasp_from_grave', 1),
+  ...repeat('grave_toll', 1),
 ]; // 30
 
 export interface DeckMeta {
