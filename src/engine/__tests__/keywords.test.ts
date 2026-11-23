@@ -210,7 +210,7 @@ describe('lifelink', () => {
 // The AI judges a block with `duel`. If it ever disagrees with the real resolution the AI makes
 // confidently wrong blocks, so hold the two equal over a large random sample of keyword/stat mixes.
 describe('duel (the AI\'s predictor) matches the real combat resolution', () => {
-  const KW: Keyword[] = ['firstStrike', 'doubleStrike', 'trample', 'deathtouch', 'lifelink'];
+  const KW: Keyword[] = ['firstStrike', 'doubleStrike', 'trample', 'deathtouch', 'lifelink', 'bushido', 'indestructible'];
   function rng(seed: number) {
     let s = seed >>> 0 || 1;
     return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);

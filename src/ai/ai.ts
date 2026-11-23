@@ -143,13 +143,13 @@ function scoreSpell(
       const found = findCreature(state, a.target.iid);
       if (!found || found.controller === ai) return score(BAND.never); // never shoot our own
       const victim = found.card;
-      if (toughness(victim) - victim.damage > eff.amount) return score(BAND.never); // wouldn't kill
+      if (hasKeyword(victim, 'indestructible') || toughness(victim) - victim.damage > eff.amount) return score(BAND.never); // wouldn't kill
       return score(BAND.removalKill, power(victim) * 20 + thrift); // biggest threat first
     }
     case 'destroy': {
       if (a.target?.kind !== 'creature') return score(BAND.never);
       const found = findCreature(state, a.target.iid);
-      if (!found || found.controller === ai) return score(BAND.never);
+      if (!found || found.controller === ai || hasKeyword(found.card, 'indestructible')) return score(BAND.never); // it would survive
       return score(BAND.destroy, power(found.card) * 20 + thrift);
     }
     case 'tapAll': {
@@ -226,7 +226,7 @@ function pickTriggerTarget(state: GameState, ai: PlayerId): Action {
     if (!found) continue;
     const c = found.card;
     const enemy = found.controller === oppId;
-    const kills = toughness(c) - c.damage <= 1;
+    const kills = !hasKeyword(c, 'indestructible') && toughness(c) - c.damage <= 1;
     const band = enemy ? (kills ? 2 : 1) : 0;
     const s = band * SCALE + (kills && enemy ? power(c) : -toughness(c));
     if (!best || s > best.s) best = { action: a, s };

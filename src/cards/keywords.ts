@@ -16,6 +16,9 @@ export const KEYWORD_INFO: Record<Keyword, { label: string; rule: string }> = {
   lifelink: { label: 'Lifelink', rule: 'damage it deals also gains its controller that much life.' },
   flash: { label: 'Flash', rule: 'can be cast at instant speed: in your main phase, in the attack step, or as a surprise blocker while you are defending.' },
   prowess: { label: 'Prowess', rule: 'gets +1/+1 until end of turn each time its controller casts a spell.' },
+  skulk: { label: 'Skulk', rule: 'cannot be blocked by creatures with greater power.' },
+  bushido: { label: 'Bushido', rule: 'gets +1/+1 until end of turn when it blocks or becomes blocked.' },
+  indestructible: { label: 'Indestructible', rule: 'lethal damage and destroy effects do not kill it. Only losing all its toughness does.' },
 };
 
 export const keywordLabel = (k: Keyword): string => KEYWORD_INFO[k].label;

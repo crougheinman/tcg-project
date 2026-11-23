@@ -53,7 +53,7 @@ const SECTIONS: { title: string; items: string[] }[] = [
       'Attacking creatures tap (unless they have Vigilance).',
       'Each blocker blocks one attacker; each attacker is blocked by at most one.',
       'Unblocked attackers hit the player; blocked creatures trade damage. With first strike or double strike in the fight, damage is dealt in two steps and creatures destroyed in the first step do not strike back.',
-      'A creature with damage equal to or above its toughness is destroyed.',
+      'A creature with damage equal to or above its toughness is destroyed (unless it is indestructible).',
     ],
   },
   {

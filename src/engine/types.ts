@@ -18,7 +18,10 @@ export type Keyword =
   | 'deathtouch'
   | 'lifelink'
   | 'flash' // a creature castable at instant speed (the block step, the attack step, your main phase)
-  | 'prowess'; // +1/+1 until end of turn whenever its controller casts a spell
+  | 'prowess' // +1/+1 until end of turn whenever its controller casts a spell
+  | 'skulk' // cannot be blocked by a creature with greater power
+  | 'bushido' // +1/+1 until end of turn when it blocks or becomes blocked
+  | 'indestructible'; // lethal damage and destroy effects do not kill it (only 0 toughness does)
 
 /** What a creature can be targeted as / what an effect targets. */
 export type TargetSpec = 'any' | 'creature' | 'player';

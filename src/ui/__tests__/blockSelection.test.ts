@@ -41,6 +41,18 @@ describe('one attacker', () => {
     expect(r.hint).toMatch(/Stoneback Cub can't block Sky Talon — only flyers or reach creatures can block a flyer/);
   });
 
+  it('refuses a blocker with greater power against a skulking attacker, and says why', () => {
+    const { g, def } = blockStep(['kunoichi'], ['granite_sentinel']); // Kunoichi has Skulk (power 2); the Sentinel has power 3
+    const r = tapBlocker(empty, g, def[0].iid);
+    expect(r.sel).toEqual(empty);
+    expect(r.hint).toMatch(/Granite Sentinel can't block Kunoichi — Skulk: it can't be blocked by a creature with greater power/);
+  });
+
+  it('lets an equal-power creature block a skulking attacker', () => {
+    const { g, atk, def } = blockStep(['kunoichi'], ['ronin_blade']); // power 2 vs power 2
+    expect(tapBlocker(empty, g, def[0].iid).sel.blocks).toEqual({ [def[0].iid]: atk[0].iid });
+  });
+
   it('lets a flyer block a flyer', () => {
     const { g, atk, def } = blockStep(['storm_drake'], ['sky_talon']);
     expect(tapBlocker(empty, g, def[0].iid).sel.blocks).toEqual({ [def[0].iid]: atk[0].iid });

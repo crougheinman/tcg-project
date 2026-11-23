@@ -22,6 +22,13 @@ export function toughness(c: CardInstance): number {
 export function hasKeyword(c: CardInstance, kw: Keyword): boolean {
   return (getDef(c.def).keywords ?? []).includes(kw);
 }
+/**
+ * Has `c` taken enough to die? Marked damage at or past its toughness, except that an indestructible creature ignores
+ * damage (deathtouch and `destroy` included) and dies only when its toughness has fallen to 0.
+ */
+export function isLethal(c: CardInstance): boolean {
+  return hasKeyword(c, 'indestructible') ? toughness(c) <= 0 : c.damage >= toughness(c);
+}
 export function isCreature(c: CardInstance): boolean {
   return getDef(c.def).type === 'creature';
 }
@@ -68,6 +75,9 @@ export function blockError(blocker: CardInstance, attacker: CardInstance): strin
   if (blocker.tapped) return 'tapped creature cannot block';
   if (hasKeyword(attacker, 'flying') && !hasKeyword(blocker, 'flying') && !hasKeyword(blocker, 'reach')) {
     return 'only flyers or reach creatures can block a flyer';
+  }
+  if (hasKeyword(attacker, 'skulk') && power(blocker) > power(attacker)) {
+    return 'a skulking creature cannot be blocked by a creature with greater power';
   }
   return null;
 }
@@ -138,6 +148,13 @@ export interface DuelResult {
 export function duel(attacker: CardInstance, blocker: CardInstance): DuelResult {
   const a = { ...attacker };
   const b = { ...blocker };
+  // Bushido: a creature that blocks or becomes blocked gets +1/+1 (here both are in this one fight)
+  for (const c of [a, b]) {
+    if (hasKeyword(c, 'bushido')) {
+      c.tempP = (c.tempP ?? 0) + 1;
+      c.tempT = (c.tempT ?? 0) + 1;
+    }
+  }
   const out: DuelResult = { atkDies: false, blkDies: false, toFace: 0, atkGain: 0, blkGain: 0 };
   let aAlive = true;
   let bAlive = true;
@@ -156,8 +173,8 @@ export function duel(attacker: CardInstance, blocker: CardInstance): DuelResult 
     }
     markDamage(b, a, toA);
     markDamage(a, b, toB);
-    aAlive = a.damage < toughness(a);
-    bAlive = b.damage < toughness(b);
+    aAlive = !isLethal(a);
+    bAlive = !isLethal(b);
   }
   out.atkDies = !aAlive;
   out.blkDies = !bAlive;

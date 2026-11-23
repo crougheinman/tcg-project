@@ -11,6 +11,7 @@ import {
   hasKeyword,
   isCreature,
   isLand,
+  isLethal,
   markDamage,
   splitDamage,
   strikesIn,
@@ -162,6 +163,17 @@ export function applyAction(state: GameState, action: Action): GameState {
     }
     case 'declareBlockers': {
       s.combat = { attackers: s.combat?.attackers ?? [], blocks: { ...action.blocks } };
+      // Bushido: a creature that blocks, or is blocked, gets +1/+1 until end of turn (before damage)
+      for (const [blk, atk] of Object.entries(s.combat.blocks)) {
+        for (const iid of [blk, atk]) {
+          const c = findCreature(s, iid)?.card;
+          if (c && hasKeyword(c, 'bushido')) {
+            c.tempP = (c.tempP ?? 0) + 1;
+            c.tempT = (c.tempT ?? 0) + 1;
+            s.log.push(`${getDef(c.def).name} — bushido`);
+          }
+        }
+      }
       resolveCombat(s);
       break;
     }
@@ -351,8 +363,12 @@ function applyEffect(s: GameState, controller: PlayerId, effect: Effect, target?
       if (target?.kind === 'creature') {
         const found = findCreature(s, target.iid);
         if (found) {
-          found.card.damage += 9999; // lethal -> checkDeaths removes it (+ destroy VFX)
-          s.log.push(`${getDef(found.card.def).name} is destroyed`);
+          if (hasKeyword(found.card, 'indestructible')) {
+            s.log.push(`${getDef(found.card.def).name} is indestructible`); // destroy does nothing to it
+          } else {
+            found.card.damage += 9999; // lethal -> checkDeaths removes it (+ destroy VFX)
+            s.log.push(`${getDef(found.card.def).name} is destroyed`);
+          }
         }
       }
       break;
@@ -454,7 +470,7 @@ function checkDeaths(s: GameState): void {
     // other player's, each in battlefield order (the order the engine, the log and replays all agree on).
     for (const pid of [s.active, opponentOf(s.active)] as PlayerId[]) {
       const p = s.players[pid];
-      const dead = p.battlefield.filter((c) => isCreature(c) && c.damage >= toughness(c));
+      const dead = p.battlefield.filter((c) => isCreature(c) && isLethal(c));
       if (!dead.length) continue;
       p.battlefield = p.battlefield.filter((c) => !dead.includes(c));
       for (const c of dead) {

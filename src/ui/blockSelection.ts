@@ -57,6 +57,9 @@ function reason(why: string, blocker: CardInstance, attacker: CardInstance): str
   if (why === 'only flyers or reach creatures can block a flyer') {
     return `${name(blocker)} can't block ${name(attacker)} — only flyers or reach creatures can block a flyer`;
   }
+  if (why === 'a skulking creature cannot be blocked by a creature with greater power') {
+    return `${name(blocker)} can't block ${name(attacker)} — Skulk: it can't be blocked by a creature with greater power`;
+  }
   if (why === 'tapped creature cannot block') return `${name(blocker)} is tapped and can't block`;
   return `${name(blocker)} can't block ${name(attacker)}`;
 }

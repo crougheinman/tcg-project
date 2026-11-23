@@ -120,9 +120,10 @@ export const CARDS: Record<string, CardDef> = {
     cost: 2,
     power: 2,
     toughness: 1,
+    keywords: ['skulk'],
     skill: 'Beast Blitz',
     art: '/cards/kunoichi.webp', // 420x564 WebP; other cards auto-wire to <id>.png
-    text: 'Beast Blitz — your Swift Lancer, Sky Talon, Stoneback Cub, Thornwood Brute, Dread Maw, and Wolves get +1/+1.',
+    text: 'Skulk. Beast Blitz — your Swift Lancer, Sky Talon, Stoneback Cub, Thornwood Brute, Dread Maw, and Wolves get +1/+1.',
     flavor: 'One whistle, and the wild answers.',
   },
 
@@ -181,8 +182,10 @@ export const CARDS: Record<string, CardDef> = {
     name: 'Ashigaru',
     type: 'creature',
     cost: 1,
-    power: 2,
-    toughness: 1,
+    power: 1,
+    toughness: 2,
+    keywords: ['bushido'],
+    text: 'Bushido.',
     art: '/cards/ashigaru.webp', // 420x418 WebP; other cards auto-wire to <id>.png
     flavor: 'A footman of the clan — spear steady, honor steadier.',
   },
