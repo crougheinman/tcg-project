@@ -56,7 +56,7 @@ const ME = '.player-zone.me', OPP = '.player-zone.opp';
     const c = await click(page, `${ME} ${E(cub)}`); const l1 = await lbl(page), b1 = await banner(page);
     const c2 = await click(page, `${OPP} ${E(talon)}`); const l2 = await lbl(page);
     await click(page, '.actions button:has-text("Confirm Blocks")');
-    rec('S1', 'Ground creature vs a lone flyer is refused up front, with the reason', c === true && l1.selected === 0 && l1.pending === 0 && /can't block Sky Talon/.test(b1) && l2.blocking === 0 && !(await err(page)) && (await phase(page)) === 'end',
+    rec('S1', 'Ground creature vs a lone flyer is refused up front, with the reason', c === true && l1.selected === 0 && l1.pending === 0 && /can't block Sky Talon/.test(b1) && l2.blocking === 0 && !(await err(page)) && ['end', 'main1'].includes(await phase(page)), // an empty block step resolves itself, and the AI may already have passed the turn
       `tap -> selected=${l1.selected} pending=${l1.pending}, banner "${b1}"; then tap flyer -> blocking=${l2.blocking}; Confirm -> error=${await err(page)}, phase ${await phase(page)}`);
     await ctx.close(); }
 
@@ -194,7 +194,8 @@ const ME = '.player-zone.me', OPP = '.player-zone.opp';
   { const { ctx, page } = await boot(browser);
     await setup(page, { phase: 'main1', active: 'A', a: ['aether_well', 'aether_well', 'aether_well'], b: ['stoneback_cub'], hand: ['thornwood_brute'] });
     const brute = await handIid(page, 'thornwood_brute'), cub = await iid(page, 'B', 'stoneback_cub');
-    const k = await click(page, `.player-dock .hand ${E(brute)}`); await sleep(2000);
+    const k = await click(page, `.player-dock .hand ${E(brute)}`);
+    await page.waitForFunction(() => window.__game.getState().game.pending?.kind === 'enter', null, { timeout: 8000 }).catch(() => {}); await sleep(200); // the cast has a 2.4 s cut-in first
     const prompt = await page.evaluate(() => document.querySelector('.prompt')?.textContent || '');
     const pend = await page.evaluate(() => window.__game.getState().game.pending?.kind || null);
     const k2 = await click(page, `${OPP} ${E(cub)}`); await sleep(500);
@@ -209,7 +210,8 @@ const ME = '.player-zone.me', OPP = '.player-zone.opp';
     const bul = await handIid(page, 'bulwark'), maw = await iid(page, 'B', 'dread_maw');
     const glow = await page.evaluate((id) => document.querySelector(`.player-dock .hand [data-iid="${id}"]`)?.classList.contains('green-glow'), bul);
     const hint = await page.evaluate(() => document.querySelector('.prompt-hint')?.textContent || '');
-    const k = await click(page, `.player-dock .hand ${E(bul)}`); await sleep(700);
+    const k = await click(page, `.player-dock .hand ${E(bul)}`);
+    await page.waitForFunction(() => window.__game.getState().game.players.A.battlefield.some((c) => c.def === 'bulwark'), null, { timeout: 8000 }).catch(() => {}); await sleep(300); // the flash cast has a 2.4 s cut-in first
     const onBoard = await iid(page, 'A', 'bulwark');
     const k2 = onBoard ? await click(page, `${ME} ${E(onBoard)}`) : 'no bulwark on board'; await sleep(300);
     const l = await lbl(page);
@@ -303,8 +305,9 @@ const ME = '.player-zone.me', OPP = '.player-zone.opp';
     const glowMine = await page.evaluate(() => document.querySelector('.turn-glow')?.className);
     await setup(page, { phase: 'combat_block', active: 'B', a: ['aether_well', 'stoneback_cub', 'granite_sentinel'], b: ['dread_maw', 'swift_lancer'], attackers: ['dread_maw', 'swift_lancer'], noWait: true });
     await page.waitForSelector('.phase-banner', { timeout: 6000 }).catch(() => {}); await sleep(450);
-    const theirs = await bn(); const glowTheirs = await page.evaluate(() => document.querySelector('.turn-glow')?.className);
+    const theirs = await bn();
     await page.waitForSelector('.phase-banner', { state: 'detached', timeout: 8000 }).catch(() => {}); await unlocked(page);
+    const glowTheirs = await page.evaluate(() => document.querySelector('.turn-glow')?.className); // after the banner: until then the board shows the held, pre-change state
     const sent = await iid(page, 'A', 'granite_sentinel'), maw = await iid(page, 'B', 'dread_maw');
     await click(page, `${ME} ${E(sent)}`); await click(page, `${OPP} ${E(maw)}`); await sleep(500);
     const blkTally = await page.evaluate(() => document.querySelector('.tally')?.innerText.replace(/\s+/g, ' ').trim());
