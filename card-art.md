@@ -190,6 +190,28 @@ Lore: the Tide's slow arithmetic, one touch and the account is settled. No flame
 
 > A young stoneback bear cub (or any small beast) in a sunlit forest clearing, caught mid-swell as green light and curling vines wrap around it and its body visibly grows larger and stronger, muscles thickening, moss and small flowers blooming along its fur. Fresh shoots and glowing leaves swirl upward around it. A calm, confident look on its face. Palette: bright spring green, golden light, warm brown fur, soft white blossoms.
 
+## Prompts: new spells for Phase 4c (cards not in the game yet)
+
+The effects exist and are tested (`bounce`, `rally`, `edict` in `src/engine`), but a new card needs art, so these three are waiting for it. When the art arrives
+they become real cards (balance-tested with the win-rate sim first): **Windrush** (Skyward, instant, 2: return target creature to its owner's hand), **War Drums**
+(Iron Blossom, sorcery, 3: your creatures get +1/+0 until end of turn) and **Grave Toll** (Grave Tide, sorcery, 4: your opponent sacrifices a creature of their choice).
+Paste the shared style line first, then the scene.
+
+**Windrush** (instant, return target creature to its owner's hand; "Gone before it knew it was moved.")
+Lore: the Skyward do not strike their enemies down, they put them somewhere else, and wait for them to find their way back.
+
+> A huge armoured brute mid-charge, axe raised, suddenly plucked backwards out of the frame by a roaring spiral of wind and cloud, his boots leaving the ground, his face caught between fury and surprise. Behind him a Skyward stormcaller in blue-black robes stands calm on a rocky ledge, one hand opened toward the gust, hair and cloak streaming. Torn banners, loose leaves and a few pale lightning threads in the spiral. Palette: storm blue-black, cloud white, pale lightning yellow, a little warm skin tone on the brute.
+
+**War Drums** (sorcery, your creatures get +1/+0 until end of turn; "Every drum a heartbeat, every heartbeat a step.")
+Lore: before a Clan marches, the taiko speak first, and the line hears the order in its own chest.
+
+> A row of Iron Blossom drummers on a stone terrace at dusk, shirtless to the waist, striking enormous taiko drums with thick wooden sticks, mid-swing, muscles taut. Behind them, rank on rank of Clan soldiers (ashigaru with spears, a duelist, a banner-bearer) lift their weapons together as a shockwave of crimson light rolls out from the drums across the frame. Cherry-blossom petals blown sideways by the sound. Palette: dark iron, crimson, white, indigo, cherry-blossom pink.
+
+**Grave Toll** (sorcery, your opponent sacrifices a creature of their choice; "The bell asks only one. They choose which.")
+Lore: Grave Tide's rite is a bell in a drowned chapel; each stroke takes one of the living, and it lets them argue about who.
+
+> A drowned stone chapel half sunk in grey-green water, a huge cracked bronze bell hanging in the roofless belfry, a pale undead sexton in a mud-streaked cassock ringing it with a long rope, his grin quiet and patient. Under the bell, three frightened soldiers stand knee-deep in the water, each turned toward the others, one of them already being drawn down by pale hands rising from below. Sickly green mist, floating candle stubs. Palette: sickly grey-green, bruised purple, pale bone, mud brown, tarnished bronze.
+
 ## Prompts: Land
 
 **Aether Well** (land, tap for one mana; "It hums with borrowed light.")

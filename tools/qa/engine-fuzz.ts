@@ -48,11 +48,40 @@ const creatures = (s: GameState) => all(s).filter(isCreature);
 // battlefield, a creature or spell being cast), not read from the engine's own `diedThisTurn` / `spellsThisTurn`.
 type Track = { died: boolean; spells: Record<PlayerId, number> };
 const newTrack = (): Track => ({ died: false, spells: { A: 0, B: 0 } });
+
+/**
+ * Creatures this action takes off the battlefield for a reason other than damage. A BOUNCED creature goes back to a hand (or, as a token, ceases to
+ * exist): that is not a death. A SACRIFICED one does die, but indestructible does not save it. (For an Edict that has not asked yet, every creature the
+ * victim has is listed: a superset is fine, it only serves as an exemption.)
+ */
+function leavers(before: GameState, a: Action): { bounced: Set<string>; sacrificed: Set<string> } {
+  const bounced = new Set<string>(), sacrificed = new Set<string>();
+  const cardOf = (who: PlayerId, iid: string) => before.players[who].hand.find((c) => c.iid === iid) ?? before.players[who].graveyard.find((c) => c.iid === iid);
+  const everyVictim = (who: PlayerId) => { for (const c of before.players[opponentOf(who)].battlefield) if (isCreature(c)) sacrificed.add(c.iid); };
+  if (a.type === 'castSorcery') {
+    const who = actorOf(before);
+    const e = cardOf(who, a.iid) && getDef(cardOf(who, a.iid)!.def).effect;
+    if (e?.type === 'bounce' && a.target?.kind === 'creature') bounced.add(a.target.iid);
+    if (e?.type === 'edict') everyVictim(who);
+  }
+  if (a.type === 'castCreature') {
+    const who = actorOf(before);
+    const e = cardOf(who, a.iid) && getDef(cardOf(who, a.iid)!.def).onEnter;
+    if (e?.type === 'edict') everyVictim(who);
+  }
+  if (a.type === 'resolveTrigger' && before.pending) {
+    if (before.pending.kind === 'sacrifice') sacrificed.add(a.target);
+    else if (getDef(before.pending.def).onEnter?.type === 'bounce') bounced.add(a.target);
+  }
+  return { bounced, sacrificed };
+}
+
 function updateTrack(t: Track, before: GameState, a: Action, after: GameState): void {
   if (a.type === 'advance' && before.phase === 'end') { t.died = false; t.spells = { A: 0, B: 0 }; return; }
   if (a.type === 'castCreature' || a.type === 'castSorcery') t.spells[actorOf(before)] += 1;
   const stillThere = new Set(all(after).map((c) => c.iid));
-  for (const c of creatures(before)) if (!stillThere.has(c.iid)) t.died = true;
+  const lv = leavers(before, a);
+  for (const c of creatures(before)) if (!stillThere.has(c.iid) && !lv.bounced.has(c.iid)) t.died = true;
 }
 
 function expectedLife(before: GameState, a: Action, t: Track): Record<PlayerId, number> {
@@ -84,9 +113,12 @@ function expectedLife(before: GameState, a: Action, t: Track): Record<PlayerId, 
     // ramp puts lands from hand onto the battlefield, and each one is a landfall
     if (main.type === 'ramp') landfalls(caster, Math.min(main.amount, before.players[caster].hand.filter((c) => getDef(c.def).type === 'land').length));
     bonus(getDef(hand.def), caster);
-    // creature triggers: every trigger creature the caster controls AFTER the spell resolved
-    // (a token made by the spell cannot have a trigger, so using the pre-state is equivalent)
+    // creature triggers: every trigger creature the caster controls AFTER the spell resolved. A token made by the spell cannot have a trigger, but a
+    // creature the spell bounced is gone before the triggers are looked at, so it does not trigger; one that merely dies of damage still does
+    // (deaths are checked after the whole action).
+    const bouncedAway = leavers(before, a).bounced;
     for (const cr of before.players[caster].battlefield) {
+      if (bouncedAway.has(cr.iid)) continue;
       const d = getDef(cr.def);
       if (!d.spellTrigger) continue;
       if (isInstant && !d.spellTriggerInstant) continue;
@@ -202,7 +234,7 @@ function check(
   const decked = (after.log.at(-1) ?? '').includes('decks out') || after.log.some((l, i) => i >= before.log.length && l.includes('decks out'));
   if (!decked) {
     for (const pid of ['A', 'B'] as PlayerId[]) {
-      if (after.players[pid].life !== el[pid]) R('LIFE_MISMATCH', `${pid}: expected ${el[pid]} got ${after.players[pid].life} after ${a.type}`);
+      if (after.players[pid].life !== el[pid]) R('LIFE_MISMATCH', `${pid}: expected ${el[pid]} got ${after.players[pid].life} after ${a.type}; log: ${after.log.slice(before.log.length).join(' / ')}`);
     }
   }
 
@@ -237,13 +269,19 @@ function check(
     for (const c of creatures(after)) if (c.tempP || c.tempT) R('TEMP_NOT_EXPIRED', `${c.def} still has +${c.tempP}/+${c.tempT} in the next turn`);
   }
   if (a.type === 'castSorcery') {
-    // prowess: every surviving prowess creature of the caster gets exactly one more +1/+1
+    // prowess: every surviving prowess creature of the caster gets exactly one more +1/+1; a Rally spell gives EVERY creature of the caster
+    // (prowess or not) its +P/+T on top. A creature that entered or left does not count.
     const casterId = before.phase === 'combat_block' ? opponentOf(before.active) : before.active;
+    const spellDef = (before.players[casterId].hand.find((x) => x.iid === a.iid) ?? before.players[casterId].graveyard.find((x) => x.iid === a.iid))!;
+    const rally = getDef(spellDef.def).effect?.type === 'rally' ? (getDef(spellDef.def).effect as { power: number; toughness: number }) : { power: 0, toughness: 0 };
     for (const c of before.players[casterId].battlefield) {
-      if (!isCreature(c) || !hasKeyword(c, 'prowess')) continue;
+      if (!isCreature(c)) continue;
       const now = after.players[casterId].battlefield.find((x) => x.iid === c.iid);
       if (!now) continue; // died to the spell itself
-      if ((now.tempP ?? 0) !== (c.tempP ?? 0) + 1 || (now.tempT ?? 0) !== (c.tempT ?? 0) + 1) R('PROWESS_WRONG', `${c.def} temp ${c.tempP ?? 0}/${c.tempT ?? 0} -> ${now.tempP ?? 0}/${now.tempT ?? 0} after a spell`);
+      const pro = hasKeyword(c, 'prowess') ? 1 : 0;
+      if ((now.tempP ?? 0) !== (c.tempP ?? 0) + pro + rally.power || (now.tempT ?? 0) !== (c.tempT ?? 0) + pro + rally.toughness) {
+        R('PROWESS_WRONG', `${c.def} temp ${c.tempP ?? 0}/${c.tempT ?? 0} -> ${now.tempP ?? 0}/${now.tempT ?? 0} after a spell (prowess ${pro}, rally +${rally.power}/+${rally.toughness})`);
+      }
     }
   }
   if (a.type === 'castCreature' && before.phase !== 'main1') {
@@ -306,6 +344,49 @@ function check(
     }
   }
 
+  // 3c. Part 4c: Cycling, Bounce and Edict, each re-derived from the rule text
+  if (a.type === 'cycle') {
+    const who = before.active;
+    const was = before.players[who].hand.find((c) => c.iid === a.iid)!;
+    const cost = getDef(was.def).cycling!;
+    const tappedLands = (st: GameState) => st.players[who].battlefield.filter((c) => c.tapped && getDef(c.def).type === 'land').length;
+    if (after.players[who].hand.some((c) => c.iid === a.iid)) R('CYCLE_STILL_IN_HAND', `${was.def} is still in hand`);
+    if (!after.players[who].graveyard.some((c) => c.iid === a.iid)) R('CYCLE_NOT_IN_GRAVEYARD', `${was.def} is not in the graveyard`);
+    if (tappedLands(after) - tappedLands(before) !== cost) R('CYCLE_COST', `${was.def}: paid ${tappedLands(after) - tappedLands(before)}, cycling costs ${cost}`);
+    if (!after.winner && after.players[who].hand.length !== before.players[who].hand.length) R('CYCLE_HAND_SIZE', `hand ${before.players[who].hand.length} -> ${after.players[who].hand.length}: one card out, one drawn`);
+    if (!after.winner && after.players[who].library.length !== before.players[who].library.length - 1) R('CYCLE_NO_DRAW', 'the library did not shrink by exactly one');
+    if ((after.spellsThisTurn?.[who] ?? 0) !== (before.spellsThisTurn?.[who] ?? 0)) R('CYCLE_COUNTED_AS_SPELL', 'cycling is not a cast');
+    if (after.players.A.life !== before.players.A.life || after.players.B.life !== before.players.B.life) R('CYCLE_CHANGED_LIFE', 'cycling changed a life total');
+  }
+  for (const iid of leavers(before, a).bounced) {
+    const was = all(before).find((c) => c.iid === iid);
+    if (!was) continue;
+    if (all(after).some((c) => c.iid === iid)) R('BOUNCE_STILL_IN_PLAY', `${was.def} is still on the battlefield`);
+    const inHand = after.players[was.owner].hand.find((c) => c.iid === iid);
+    if (!TOKENS.has(was.def) !== !!inHand) R('BOUNCE_ZONE', `${was.def}: ${TOKENS.has(was.def) ? 'a token must vanish' : "must be in its owner's hand"}`);
+    if ((after.combat?.attackers ?? []).includes(iid) || Object.entries(after.combat?.blocks ?? {}).some(([b, at]) => b === iid || at === iid)) R('BOUNCE_STILL_IN_COMBAT', `${was.def} is still named in combat`);
+    if (inHand && (inHand.buffP || inHand.buffT || inHand.damage || inHand.tempP || inHand.tempT || inHand.blitz || inHand.tapped)) R('BOUNCE_KEEPS_STATE', `${was.def} came back with its marks, buffs or aura`);
+  }
+  if (a.type === 'castSorcery' || a.type === 'castCreature') {
+    const who = actorOf(before);
+    const card = before.players[who].hand.find((c) => c.iid === a.iid) ?? before.players[who].graveyard.find((c) => c.iid === a.iid);
+    const e = card && (a.type === 'castSorcery' ? getDef(card.def).effect : getDef(card.def).onEnter);
+    if (e?.type === 'edict') {
+      const victim = opponentOf(who);
+      const theirs = before.players[victim].battlefield.filter(isCreature);
+      const asking = after.pending?.kind === 'sacrifice' && after.pending.controller === victim;
+      if (theirs.length === 0 && after.pending) R('EDICT_PHANTOM_CHOICE', 'an Edict with nothing to sacrifice asked for a choice');
+      if (theirs.length === 1 && (after.pending || all(after).some((c) => c.iid === theirs[0].iid))) R('EDICT_ONLY_CREATURE_KEPT', `${theirs[0].def} is the only creature and must be sacrificed at once`);
+      if (theirs.length >= 2 && !asking) R('EDICT_NO_CHOICE_OFFERED', `${victim} has ${theirs.length} creatures but was not asked to choose`);
+    }
+  }
+  if (a.type === 'resolveTrigger' && before.pending?.kind === 'sacrifice') {
+    const was = all(before).find((c) => c.iid === a.target)!;
+    if (all(after).some((c) => c.iid === a.target)) R('SACRIFICE_SURVIVED', `${was.def} was sacrificed but is still in play`);
+    if (after.pending) R('SACRIFICE_STILL_PENDING', 'the choice was made but the game still waits on it');
+    if (!TOKENS.has(was.def) && !after.players[was.owner].graveyard.some((c) => c.iid === a.target)) R('SACRIFICE_NOT_IN_GRAVEYARD', `${was.def} is not in its owner's graveyard`);
+  }
+
   // 4. combat-specific
   if (a.type === 'declareAttackers' && a.attackers.length) {
     // Battle cry: each OTHER attacker gets +1/+0. Exalted: a lone attacker gets +1/+1 per exalted creature its controller has.
@@ -345,8 +426,9 @@ function check(
   }
   // indestructible: no damage, deathtouch or destroy takes a creature with it off the battlefield. (Creatures wearing the Kunoichi
   // aura are skipped: losing the aura can take a point of toughness away, which is the one thing that does kill it.)
+  const lv = leavers(before, a);
   for (const c of creatures(before)) {
-    if (!hasKeyword(c, 'indestructible') || c.blitz || toughness(c) <= 0) continue;
+    if (!hasKeyword(c, 'indestructible') || c.blitz || toughness(c) <= 0 || lv.bounced.has(c.iid) || lv.sacrificed.has(c.iid)) continue;
     if (!after.players[c.owner].battlefield.some((x) => x.iid === c.iid)) R('INDESTRUCTIBLE_DIED', `${c.def} (toughness ${toughness(c)}) left the battlefield`);
   }
   // damage must never survive into a new turn
@@ -385,7 +467,8 @@ function chaosAction(s: GameState, actor: PlayerId, r: () => number): Action {
     const t = legalActions(s, actor);
     return t[Math.floor(r() * t.length)];
   }
-  if (s.pending?.kind === 'enter') {
+  if (s.pending) {
+    // an enter trigger waiting for a target, or an Edict waiting for the victim's choice
     const t = legalActions(s, actor);
     return t[Math.floor(r() * t.length)];
   }
@@ -430,13 +513,13 @@ const t0 = Date.now();
 // the shipped cards happen to carry). Keywords are restored after each game.
 const STRESS_KW = ['reach', 'vigilance', 'firstStrike', 'doubleStrike', 'trample', 'deathtouch', 'lifelink', 'flash', 'prowess', 'skulk', 'bushido', 'indestructible', 'battleCry', 'exalted'] as const;
 type CardDefDeath = (typeof CARDS)[string]['onDeath'];
-type Sprinkled = { kw: string[] | undefined; death: CardDefDeath; enter: CardDefDeath; land: CardDefDeath; attack: CardDefDeath; bonus: (typeof CARDS)[string]['bonus'] };
+type Sprinkled = { kw: string[] | undefined; death: CardDefDeath; enter: CardDefDeath; land: CardDefDeath; attack: CardDefDeath; bonus: (typeof CARDS)[string]['bonus']; cycling: number | undefined };
 function sprinkleKeywords(r: () => number): () => void {
   const saved = new Map<string, Sprinkled>();
   const flashed: string[] = [];
   for (const def of Object.values(CARDS)) {
     if (def.type !== 'creature') continue;
-    saved.set(def.id, { kw: def.keywords as string[] | undefined, death: def.onDeath, enter: def.onEnter, land: def.landTrigger, attack: def.onAttack, bonus: def.bonus });
+    saved.set(def.id, { kw: def.keywords as string[] | undefined, death: def.onDeath, enter: def.onEnter, land: def.landTrigger, attack: def.onAttack, bonus: def.bonus, cycling: def.cycling });
     const extra = STRESS_KW.filter(() => r() < 0.25);
     if (extra.length) def.keywords = [...(def.keywords ?? []), ...extra];
     // some creatures raise a token when they die (tokens included, so triggers can chain through them)
@@ -446,7 +529,24 @@ function sprinkleKeywords(r: () => number): () => void {
     if (!def.onAttack && r() < 0.2) def.onAttack = r() < 0.5 ? { type: 'heal', amount: 1 } : { type: 'damage', amount: 1, targets: 'player' };
     if (!def.bonus && r() < 0.25) def.bonus = { when: r() < 0.5 ? 'morbid' : 'secondSpell', effect: r() < 0.5 ? { type: 'heal', amount: 2 } : { type: 'damage', amount: 1, targets: 'player' } };
     // some creatures make the opponent discard, or bring the last fallen creature back, as they enter
-    if (!def.onEnter && r() < 0.1) def.onEnter = r() < 0.5 ? { type: 'discard', amount: 1 } : { type: 'recall' };
+    if (!def.onEnter && r() < 0.18) {
+      const roll = r();
+      def.onEnter = roll < 0.2 ? { type: 'discard', amount: 1 } : roll < 0.4 ? { type: 'recall' } : roll < 0.6 ? { type: 'edict' } : roll < 0.8 ? { type: 'rally', power: 1, toughness: 1 } : { type: 'bounce' };
+    }
+    // Cycling on some creatures
+    if (def.cycling === undefined && r() < 0.15) def.cycling = 1 + Math.floor(r() * 2);
+  }
+  // some spells become a Bounce, an Edict or a Rally (their old effect is restored afterwards) and some gain Cycling
+  const spellEffect = new Map<string, (typeof CARDS)[string]['effect']>();
+  const spellCycling = new Map<string, number | undefined>();
+  for (const def of Object.values(CARDS)) {
+    if (def.type !== 'sorcery' && def.type !== 'instant') continue;
+    if (!def.blockOnly && def.flashback === undefined && r() < 0.3) {
+      spellEffect.set(def.id, def.effect);
+      const roll = r();
+      def.effect = roll < 0.34 ? { type: 'bounce' } : roll < 0.67 ? { type: 'edict' } : { type: 'rally', power: 1, toughness: 1 };
+    }
+    if (def.cycling === undefined && r() < 0.15) { spellCycling.set(def.id, def.cycling); def.cycling = 1 + Math.floor(r() * 2); }
   }
   // some spells carry a Morbid / second-spell bonus too
   const spellBonus = new Map<string, CardDefDeath | (typeof CARDS)[string]['bonus']>();
@@ -463,7 +563,7 @@ function sprinkleKeywords(r: () => number): () => void {
       flashed.push(def.id);
     }
   }
-  return () => { for (const [id, v] of saved) { CARDS[id].keywords = v.kw as never; CARDS[id].onDeath = v.death; CARDS[id].onEnter = v.enter; CARDS[id].landTrigger = v.land; CARDS[id].onAttack = v.attack; CARDS[id].bonus = v.bonus; } for (const [id, b] of spellBonus) CARDS[id].bonus = b as never; for (const id of flashed) delete CARDS[id].flashback; };
+  return () => { for (const [id, v] of saved) { CARDS[id].keywords = v.kw as never; CARDS[id].onDeath = v.death; CARDS[id].onEnter = v.enter; CARDS[id].landTrigger = v.land; CARDS[id].onAttack = v.attack; CARDS[id].bonus = v.bonus; CARDS[id].cycling = v.cycling; } for (const [id, b] of spellBonus) CARDS[id].bonus = b as never; for (const [id, e] of spellEffect) CARDS[id].effect = e; for (const [id, c] of spellCycling) CARDS[id].cycling = c; for (const id of flashed) delete CARDS[id].flashback; };
 }
 
 for (const policyName of ['ai', 'chaos', 'ai+kw', 'chaos+kw'] as const) {
