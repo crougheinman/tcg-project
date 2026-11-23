@@ -202,7 +202,7 @@ visible keywords first and the two engine keystones (statics, activated abilitie
 | Part | What | Size | Status |
 |---|---|---|---|
 | 4a | **Combat keywords II**: Skulk (cannot be blocked by a creature with greater power), Bushido (+1/+1 when it blocks or is blocked), Indestructible | S | **done** (see below) |
-| 4b | **More triggers**: Landfall, Morbid / spells-this-turn conditions, attack triggers (Battle cry, Exalted, "whenever it attacks") | M | planned |
+| 4b | **More triggers**: Landfall, Morbid / spells-this-turn conditions, attack triggers (Battle cry, Exalted, "whenever it attacks") | M | **done** (see below) |
 | 4c | **Spells**: Bounce, Edict (opponent sacrifices a creature of their choice), Rally (team buff), Cycling | S-M | planned |
 | 4d | **Data-driven static abilities**: Beast Blitz moves onto data; Lords ("other Wolves +1/+1"); Threshold ("7+ cards in your graveyard") | M | planned |
 | 4e | **Activated abilities** (`{T}: ...`): mana creatures, pingers, a Treasure token | M-L | planned |
@@ -226,4 +226,20 @@ each rule on purpose makes it report). Deviations from the plan, driven by the w
   deathtouch in Phase 1.
 - Fixed in the QA tooling on the way: the fuzz policy did not know the skulk block rule, and its Beast Blitz list had the original four beasts (so every run
   reported `BLITZ_FLAG`).
+
+### Part 4b: done
+
+New data fields on `CardDef`: `landTrigger` (Landfall: once per land that enters under its controller's control, played or ramped), `onAttack` (when the
+creature attacks, even if it is then blocked) and `bonus: { when: 'morbid' | 'secondSpell', effect }` (a creature's bonus on entering, a spell's after its effect).
+All three take untargeted effects only (damage only at the player), enforced by a card-data test. Two keywords: **Battle cry** (each other attacker gets +1/+0)
+and **Exalted** (a lone attacker gets +1/+1 per exalted creature its controller has). Per-turn counters `diedThisTurn` and `spellsThisTurn` live in the game state
+(optional, reset in `beginTurn`); creature spells count as spells, and a bonus sees only deaths and spells from BEFORE its own action (state-based deaths resolve after
+the action, as in the rules text). Attack pumps are `tempP`/`tempT`, so they are in place before blocks. Tested on throwaway cards (`triggers2.test.ts`, each of eight
+mechanics mutation-checked); the fuzz oracle keeps its OWN Morbid / second-spell counters from observed transitions, checks life for every trigger and the attack pumps,
+and the keyword-stress mode sprinkles the new keywords and trigger data over every deck (22,400 games, zero findings; breaking each rule makes it report).
+
+Cards (all decks 45.7%-54.5% at N=80 / N=120, tighter than before): **Granite Sentinel** Landfall (gain 1 life), **Stoneback Cub** Morbid (draw a card), **Cinderbolt**
+second spell (1 damage to the opponent), **Sky Talon** Exalted, **Storm Drake** "whenever it attacks, gain 1 life", **Iron Shogun** Battle cry. Rejected by the sim: an
+Ember Sprite attack trigger (1 damage: Emberwood 58.9%, Skyward 42.5%) and a Swift Lancer Battle cry (Wildblitz 60.9%, Skyward 42.1%): a hasty swarm plus a free pump is too much.
+The UI floats a small label ("Landfall", "On attack", "Battle cry!", "Exalted", "Morbid", "Second spell") over the creature that fired, from the new log lines (`triggerCues`).
 

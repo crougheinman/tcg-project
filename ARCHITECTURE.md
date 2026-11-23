@@ -581,6 +581,15 @@ Bushido (as a 2/1 it pushed Iron Blossom to 61%). **Indestructible is on no prin
 49%) or Storm Drake it pushed Pyromancer to 43%, below the 45% floor, because burn cannot answer it. It waits for a one-turn trick
 spell instead (a later part). Win rates at N=80: 45.5%-54.6%.
 
+### (m) Triggers II: Landfall, Morbid, second spell, Battle cry, Exalted, attack triggers (Phase 4b)
+New trigger families are data on `CardDef`, each resolved by one small reducer helper: `landfall` (after `playLand` and once per land a ramp effect moved),
+`attackTriggers` (Battle cry, Exalted and `onAttack`, in declaration order, as `tempP`/`tempT` so the pumps exist before blocks), and `resolveBonus` (a card's Morbid or
+second-spell bonus). Morbid and second spell read two per-turn counters on the game state (`diedThisTurn`, set by `checkDeaths`; `spellsThisTurn`, counted at cast, creature
+spells included), both reset in `beginTurn`; a bonus sees only what happened before its own action. Choices stay out of it: every new trigger takes an untargeted effect, so
+no new `pending` kind was needed. The fuzz oracle tracks the same two counters independently from observed transitions and checks every trigger's life effect and the attack
+pumps; the stress mode puts the triggers on random creatures and spells. What the sim decided: Landfall on the Sentinel, Morbid on the Cub, second spell on Cinderbolt, Exalted
+on Sky Talon, an attack heal on Storm Drake and Battle cry on Iron Shogun balance (45.7%-54.5%); an attack ping on Ember Sprite and Battle cry on Swift Lancer did not.
+
 ## 8. Run it
 
 ```bash

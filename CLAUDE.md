@@ -10,7 +10,7 @@ mechanics, tooling, conventions, known issues). See "Keeping this file current" 
 deterministic engine, an in-browser heuristic AI, online PvP over Supabase Realtime (lockstep), Zustand
 for UI state, Capacitor for mobile. Hosted on Vercel. CI (`.github/workflows/ci.yml`) runs tsc, tests and build on PRs and pushes. Deeper docs: `card-art.md` (card art style guide and prompts), `README.md` (setup),
 `ARCHITECTURE.md` (how it works and why, with a "what changed and what it found" log), `LORE.md` (the world,
-the 8 decks, card flavour), `docs/MECHANICS_PLAN.md` (the mechanics roadmap: Phases 0-3 done; Phase 4 is built in parts, 4a done),
+the 8 decks, card flavour), `docs/MECHANICS_PLAN.md` (the mechanics roadmap: Phases 0-3 done; Phase 4 is built in parts, 4a and 4b done),
 `tools/qa/README.md` (the QA harness).
 
 ## Commands
@@ -153,7 +153,7 @@ the change (below). Playwright is not a project dependency; it must exist where 
   for this. **Do not run the full 56-match browser pass unless asked** (it takes 15+ minutes).
 - **Rules / combat / store / whole-layout changes:** also `SEEDS=100 npm run qa:fuzz` and `npm run qa:scenarios`.
 - **Balance-affecting changes** (card stats, keywords, deck lists): `N=80 npm run qa:winrate` before and after
-  with the same code otherwise; keep every deck between about 45% and 58%. Last measured range 45.5%-54.6% (N=80, after Part 4a, with the Beast Blitz list at six beasts).
+  with the same code otherwise; keep every deck between about 45% and 58%. Last measured range 45.7%-54.5% (N=80 and N=120, after Part 4b; the closest to the floor is Pyromancer).
 - **The browser harness knows about the board hold** (`tools/qa/ui-match.cjs`): the human waits for `.board.cards-locked` / `.phase-banner`
   to clear before acting (the board ignores clicks while a banner is up), the DOM-vs-state checks (HUD, acting ring, tapped, ATK tags,
   phase bar...) are skipped while the board is held (it deliberately draws the pre-change state for a banner plus a gap, longer than the
@@ -167,9 +167,10 @@ the change (below). Playwright is not a project dependency; it must exist where 
 
 ## Mechanics currently in the game
 
-Keywords (15): haste, flying, defender, reach, vigilance, first strike, double strike, trample, deathtouch,
+Keywords (17): haste, flying, defender, reach, vigilance, first strike, double strike, trample, deathtouch,
 lifelink, flash, prowess, skulk (cannot be blocked by greater power; Kunoichi), bushido (+1/+1 when it blocks or is blocked, until end of turn; Ashigaru, a 1/2),
-indestructible (damage, deathtouch and destroy do not kill it, only 0 toughness; `isLethal`; on no printed card yet, see `docs/MECHANICS_PLAN.md` Part 4a). Effects: damage, draw, buff, heal, ramp, token, tapAll, destroy, discard (random,
+indestructible (damage, deathtouch and destroy do not kill it, only 0 toughness; `isLethal`; on no printed card yet, see `docs/MECHANICS_PLAN.md` Part 4a), battle cry (each other attacker +1/+0; Iron Shogun), exalted (a lone attacker +1/+1 per exalted creature; Sky Talon).
+Trigger data on `CardDef` (Part 4b, untargeted effects only, damage only at the player): `landTrigger` (Landfall: per land that enters, played or ramped; Granite Sentinel), `onAttack` (Storm Drake), `bonus: { when: 'morbid' | 'secondSpell', effect }` (Stoneback Cub, Cinderbolt). Per-turn counters `diedThisTurn` / `spellsThisTurn` on the game state, reset in `beginTurn`; creature spells count as spells. Effects: damage, draw, buff, heal, ramp, token, tapAll, destroy, discard (random,
 deterministic), recall (most recently fallen creature). Triggers: `onEnter` (a targeted one waits on `pending`,
 resolved by `resolveTrigger`), `onDeath` (active player first; tokens trigger), `spellTrigger`. Flashback
 (cast from the graveyard, then exiled; `PlayerState.exile`). Mulligan: opt-in at the engine, on in every real
@@ -225,6 +226,7 @@ Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.
 
 ## Change log (newest first; add a line per change)
 
+- Phase 4b (`docs/MECHANICS_PLAN.md`): Landfall, Morbid, second-spell bonuses, Battle cry, Exalted and attack triggers (`landTrigger` / `onAttack` / `bonus` on `CardDef`, `diedThisTurn` / `spellsThisTurn` counters). Cards: Granite Sentinel (Landfall: gain 1), Stoneback Cub (Morbid: draw), Cinderbolt (second spell: 1 damage), Sky Talon (Exalted), Storm Drake (attack: gain 1), Iron Shogun (Battle cry); an Ember Sprite attack ping and a Swift Lancer Battle cry were rejected by the sim. 21 engine tests (8 mechanics mutation-checked), 4 for the new floating labels (`triggerCues`), fuzz oracle extended with its own counters (22,400 games, zero findings, each rule mutation-detected). Win rates 45.7%-54.5%. Browser scenarios and smoke: see below once run.
 - Fixed: during a phase banner the action buttons (Go to Combat, End Turn, Attack, Confirm Blocks...) showed the old phase but acted on the live state, so a double-tap on Go to Combat skipped the attack step. They now do nothing while the board is held and look dimmed. The browser scenarios script was also stale (it ignored the board hold, bobbing attackers and the new cut-in / banner timings): 10 -> 40 of 40 pass with it fixed (S9, the double-tap check, passes only with the button fix). Smoke 8/8 clean.
 - Phase 4a (first part of Phase 4, `docs/MECHANICS_PLAN.md`): Skulk, Bushido, Indestructible. Kunoichi has Skulk, Ashigaru is a 1/2 with Bushido, Indestructible waits for a card (Pyromancer fell to 43% with it on a Sentinel or Drake). Tests (`keywords2.test.ts`, mutation-checked), `duel` property test extended, fuzz oracle extended (22,400 games, zero findings), block planner explains Skulk refusals. Also fixed the fuzz tool: its policy ignored skulk and its Beast Blitz list had only the original four beasts (it had reported `BLITZ_FLAG` on every run). Win rates N=80: 45.5%-54.6%. Browser scenarios 40/40 and smoke 8/8 clean (after the fixes below).
 - Shorter board lock: banners 3 s -> 2.2 s, End phase banner 1.4 s (new `END_BANNER_MS`, `short` flag), gap 1.2 s -> 0.5 s, combat-to-End gap 1.3 s -> 0.7 s, AI pause = banner + 0.6 s. After the player's own attack the board is free at 6.9 s instead of 9.7 s (staged timeline); tests for the End banner length. Smoke batch 8/8 clean: the longest board hold fell from 23.3 s to 8.4 s and the 8 matches ran about 15% faster (504 s vs about 590 s).
