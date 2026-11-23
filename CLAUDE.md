@@ -67,6 +67,9 @@ the change (below). Playwright is not a project dependency; it must exist where 
   `PhaseBanner` skips the "Block phase" banner (no dim, no lock; it releases the board at once unless an earlier banner is still
   up), the Board auto-resolves the block for a human defender (same helper), and the store skips the AI's `PHASE_PAUSE_MS`
   (`phasePauseMs`) so the damage lands in about half a second instead of waiting out a banner that never came.
+  **Action buttons are inert while the board is held** (`act` in `Board.tsx`, dimmed via `.board.holding`): they are drawn from the held, pre-change state
+  but dispatch against the live one, so a quick second tap on "Go to Combat" used to hit the same button again and skip the attack step
+  (scenario S9 is the regression check).
   **Releasing the hold:** `Board` holds the pre-change state on every phase change and only `PhaseBanner`'s `onLock(false)` releases it.
   An empty block step shows no banner, so it must release the hold itself unless an earlier banner's own lock is still pending
   (`lockOn` ref). It used to check "previous banner's gap over" instead, and when the previous banner had left but its 1.2 s gap was
@@ -222,6 +225,7 @@ Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.
 
 ## Change log (newest first; add a line per change)
 
+- Fixed: during a phase banner the action buttons (Go to Combat, End Turn, Attack, Confirm Blocks...) showed the old phase but acted on the live state, so a double-tap on Go to Combat skipped the attack step. They now do nothing while the board is held and look dimmed. The browser scenarios script was also stale (it ignored the board hold, bobbing attackers and the new cut-in / banner timings): 10 -> 33+ of 40 pass with it fixed.
 - Phase 4a (first part of Phase 4, `docs/MECHANICS_PLAN.md`): Skulk, Bushido, Indestructible. Kunoichi has Skulk, Ashigaru is a 1/2 with Bushido, Indestructible waits for a card (Pyromancer fell to 43% with it on a Sentinel or Drake). Tests (`keywords2.test.ts`, mutation-checked), `duel` property test extended, fuzz oracle extended (22,400 games, zero findings), block planner explains Skulk refusals. Also fixed the fuzz tool: its policy ignored skulk and its Beast Blitz list had only the original four beasts (it had reported `BLITZ_FLAG` on every run). Win rates N=80: 45.5%-54.6%. Smoke not yet run on this.
 - Shorter board lock: banners 3 s -> 2.2 s, End phase banner 1.4 s (new `END_BANNER_MS`, `short` flag), gap 1.2 s -> 0.5 s, combat-to-End gap 1.3 s -> 0.7 s, AI pause = banner + 0.6 s. After the player's own attack the board is free at 6.9 s instead of 9.7 s (staged timeline); tests for the End banner length. Smoke batch 8/8 clean: the longest board hold fell from 23.3 s to 8.4 s and the 8 matches ran about 15% faster (504 s vs about 590 s).
 - QA smoke batch trustworthy again (8/8 clean, exit 0): the harness now waits out the board hold, skips DOM-vs-state checks while held, freezes infinite animations for clicks and reports `maxHeldMs` / `longHolds` / `LOCK_STUCK`; and it caught a real bug of mine: an empty block step left the board frozen on the pre-attack state when the previous banner had left but its gap was running (fixed in `PhaseBanner` with `lockOn`, test added). New `useLockFailsafe` (40 s) covers a held board or locked cards.
