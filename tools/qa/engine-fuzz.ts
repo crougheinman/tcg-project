@@ -14,7 +14,7 @@ import {
 } from '../../src/engine/rules';
 import { DECK_LIST } from '../../src/cards/decks';
 import { CARDS, getDef } from '../../src/cards/cards';
-import type { Action, CardInstance, GameState, PlayerId } from '../../src/engine/types';
+import type { Action, CardInstance, Effect, GameState, PlayerId } from '../../src/engine/types';
 import { needsTarget, opponentOf } from '../../src/engine/types';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -44,15 +44,46 @@ const all = (s: GameState) => [...s.players.A.battlefield, ...s.players.B.battle
 const creatures = (s: GameState) => all(s).filter(isCreature);
 
 // ---------- independent expectations ----------
-function expectedLife(before: GameState, a: Action): Record<PlayerId, number> {
+// Per-game counters for Morbid and second-spell bonuses, kept HERE from what is observed between states (a creature leaving the
+// battlefield, a creature or spell being cast), not read from the engine's own `diedThisTurn` / `spellsThisTurn`.
+type Track = { died: boolean; spells: Record<PlayerId, number> };
+const newTrack = (): Track => ({ died: false, spells: { A: 0, B: 0 } });
+function updateTrack(t: Track, before: GameState, a: Action, after: GameState): void {
+  if (a.type === 'advance' && before.phase === 'end') { t.died = false; t.spells = { A: 0, B: 0 }; return; }
+  if (a.type === 'castCreature' || a.type === 'castSorcery') t.spells[actorOf(before)] += 1;
+  const stillThere = new Set(all(after).map((c) => c.iid));
+  for (const c of creatures(before)) if (!stillThere.has(c.iid)) t.died = true;
+}
+
+function expectedLife(before: GameState, a: Action, t: Track): Record<PlayerId, number> {
   const life = { A: before.players.A.life, B: before.players.B.life };
   const caster = before.phase === 'combat_block' ? opponentOf(before.active) : before.active;
+  // an untargeted trigger or bonus effect: it heals its controller, or hurts the opponent when it is damage aimed at the player
+  const eff = (e: Effect | undefined, who: PlayerId) => {
+    if (!e) return;
+    if (e.type === 'heal') life[who] += e.amount;
+    if (e.type === 'damage' && e.targets === 'player') life[opponentOf(who)] -= e.amount;
+  };
+  // Morbid: a creature died earlier this turn. Second spell: the caster has already cast one this turn.
+  const bonus = (d: ReturnType<typeof getDef>, who: PlayerId) => {
+    if (!d.bonus) return;
+    if (d.bonus.when === 'morbid' ? t.died : t.spells[who] >= 1) eff(d.bonus.effect, who);
+  };
+  const landfalls = (who: PlayerId, lands: number) => {
+    for (const cr of before.players[who].battlefield) if (isCreature(cr)) for (let i = 0; i < lands; i++) eff(getDef(cr.def).landTrigger, who);
+  };
+  if (a.type === 'playLand') landfalls(before.active, 1);
+  if (a.type === 'castCreature') bonus(getDef(before.players[actorOf(before)].hand.find((c) => c.iid === a.iid)!.def), actorOf(before));
+  if (a.type === 'declareAttackers') for (const iid of a.attackers) eff(getDef(before.players[before.active].battlefield.find((c) => c.iid === iid)!.def).onAttack, before.active);
   if (a.type === 'castSorcery') {
     const hand = (before.players[caster].hand.find((c) => c.iid === a.iid) ?? before.players[caster].graveyard.find((c) => c.iid === a.iid))!; // (flashback casts from the graveyard)
-    const eff = getDef(hand.def).effect!;
+    const main = getDef(hand.def).effect!;
     const isInstant = getDef(hand.def).type === 'instant';
-    if (eff.type === 'damage' && a.target?.kind === 'player') life[a.target.player] -= eff.amount;
-    if (eff.type === 'heal') life[caster] += eff.amount;
+    if (main.type === 'damage' && a.target?.kind === 'player') life[a.target.player] -= main.amount;
+    if (main.type === 'heal') life[caster] += main.amount;
+    // ramp puts lands from hand onto the battlefield, and each one is a landfall
+    if (main.type === 'ramp') landfalls(caster, Math.min(main.amount, before.players[caster].hand.filter((c) => getDef(c.def).type === 'land').length));
+    bonus(getDef(hand.def), caster);
     // creature triggers: every trigger creature the caster controls AFTER the spell resolved
     // (a token made by the spell cannot have a trigger, so using the pre-state is equivalent)
     for (const cr of before.players[caster].battlefield) {
@@ -139,7 +170,7 @@ function simulateCombat(before: GameState, blocks: Record<string, string>): { de
 // ---------- invariants over one transition ----------
 function check(
   before: GameState, a: Action, after: GameState, sizes: Record<PlayerId, number>,
-  ctx: { pair: string; policy: string; seed: number; step: number },
+  ctx: { pair: string; policy: string; seed: number; step: number; track?: Track },
 ) {
   const R = (code: string, d: string) => report(code, d, ctx);
 
@@ -167,7 +198,7 @@ function check(
   }
 
   // 2. life oracle (skipped once a deck-out has fired: the oracle does not model draws)
-  const el = expectedLife(before, a);
+  const el = expectedLife(before, a, ctx.track!);
   const decked = (after.log.at(-1) ?? '').includes('decks out') || after.log.some((l, i) => i >= before.log.length && l.includes('decks out'));
   if (!decked) {
     for (const pid of ['A', 'B'] as PlayerId[]) {
@@ -276,6 +307,20 @@ function check(
   }
 
   // 4. combat-specific
+  if (a.type === 'declareAttackers' && a.attackers.length) {
+    // Battle cry: each OTHER attacker gets +1/+0. Exalted: a lone attacker gets +1/+1 per exalted creature its controller has.
+    const mine = before.players[before.active].battlefield;
+    const exalted = mine.filter((c) => isCreature(c) && hasKeyword(c, 'exalted')).length;
+    for (const iid of a.attackers) {
+      const was = mine.find((x) => x.iid === iid), now = after.players[before.active].battlefield.find((x) => x.iid === iid);
+      if (!was || !now) continue;
+      const cries = a.attackers.filter((o) => o !== iid && hasKeyword(mine.find((x) => x.iid === o)!, 'battleCry')).length;
+      const ex = a.attackers.length === 1 ? exalted : 0;
+      const dP = (now.tempP ?? 0) - (was.tempP ?? 0), dT = (now.tempT ?? 0) - (was.tempT ?? 0);
+      if (dP !== cries + ex) R('ATTACK_PUMP_POWER', `${was.def}: temp power ${was.tempP ?? 0} -> ${now.tempP ?? 0}, expected +${cries + ex} (${cries} battle cry, ${ex} exalted)`);
+      if (dT !== ex) R('ATTACK_PUMP_TOUGHNESS', `${was.def}: temp toughness ${was.tempT ?? 0} -> ${now.tempT ?? 0}, expected +${ex}`);
+    }
+  }
   if (a.type === 'declareAttackers') {
     for (const iid of a.attackers) {
       const c = after.players[before.active].battlefield.find((x) => x.iid === iid);
@@ -383,20 +428,33 @@ const t0 = Date.now();
 // Keyword stress: besides the real decks, replay every policy with the new keywords sprinkled at random
 // over the decks' creatures, so every keyword combination meets every situation (not just the few
 // the shipped cards happen to carry). Keywords are restored after each game.
-const STRESS_KW = ['reach', 'vigilance', 'firstStrike', 'doubleStrike', 'trample', 'deathtouch', 'lifelink', 'flash', 'prowess', 'skulk', 'bushido', 'indestructible'] as const;
+const STRESS_KW = ['reach', 'vigilance', 'firstStrike', 'doubleStrike', 'trample', 'deathtouch', 'lifelink', 'flash', 'prowess', 'skulk', 'bushido', 'indestructible', 'battleCry', 'exalted'] as const;
 type CardDefDeath = (typeof CARDS)[string]['onDeath'];
+type Sprinkled = { kw: string[] | undefined; death: CardDefDeath; enter: CardDefDeath; land: CardDefDeath; attack: CardDefDeath; bonus: (typeof CARDS)[string]['bonus'] };
 function sprinkleKeywords(r: () => number): () => void {
-  const saved = new Map<string, { kw: string[] | undefined; death: CardDefDeath; enter: CardDefDeath }>();
+  const saved = new Map<string, Sprinkled>();
   const flashed: string[] = [];
   for (const def of Object.values(CARDS)) {
     if (def.type !== 'creature') continue;
-    saved.set(def.id, { kw: def.keywords as string[] | undefined, death: def.onDeath, enter: def.onEnter });
+    saved.set(def.id, { kw: def.keywords as string[] | undefined, death: def.onDeath, enter: def.onEnter, land: def.landTrigger, attack: def.onAttack, bonus: def.bonus });
     const extra = STRESS_KW.filter(() => r() < 0.25);
     if (extra.length) def.keywords = [...(def.keywords ?? []), ...extra];
     // some creatures raise a token when they die (tokens included, so triggers can chain through them)
     if (!def.onDeath && r() < 0.12) def.onDeath = { type: 'token', token: 'zombie_token', count: 1 };
+    // Phase 4b triggers: Landfall and attack triggers (life gain / burn to the player) and Morbid / second-spell bonuses
+    if (!def.landTrigger && r() < 0.2) def.landTrigger = r() < 0.5 ? { type: 'heal', amount: 1 } : { type: 'damage', amount: 1, targets: 'player' };
+    if (!def.onAttack && r() < 0.2) def.onAttack = r() < 0.5 ? { type: 'heal', amount: 1 } : { type: 'damage', amount: 1, targets: 'player' };
+    if (!def.bonus && r() < 0.25) def.bonus = { when: r() < 0.5 ? 'morbid' : 'secondSpell', effect: r() < 0.5 ? { type: 'heal', amount: 2 } : { type: 'damage', amount: 1, targets: 'player' } };
     // some creatures make the opponent discard, or bring the last fallen creature back, as they enter
     if (!def.onEnter && r() < 0.1) def.onEnter = r() < 0.5 ? { type: 'discard', amount: 1 } : { type: 'recall' };
+  }
+  // some spells carry a Morbid / second-spell bonus too
+  const spellBonus = new Map<string, CardDefDeath | (typeof CARDS)[string]['bonus']>();
+  for (const def of Object.values(CARDS)) {
+    if ((def.type === 'sorcery' || def.type === 'instant') && !def.bonus && r() < 0.3) {
+      spellBonus.set(def.id, def.bonus);
+      def.bonus = { when: r() < 0.5 ? 'morbid' : 'secondSpell', effect: r() < 0.5 ? { type: 'heal', amount: 2 } : { type: 'damage', amount: 1, targets: 'player' } };
+    }
   }
   // some untargeted spells gain flashback (cost + 1)
   for (const def of Object.values(CARDS)) {
@@ -405,7 +463,7 @@ function sprinkleKeywords(r: () => number): () => void {
       flashed.push(def.id);
     }
   }
-  return () => { for (const [id, v] of saved) { CARDS[id].keywords = v.kw as never; CARDS[id].onDeath = v.death; CARDS[id].onEnter = v.enter; } for (const id of flashed) delete CARDS[id].flashback; };
+  return () => { for (const [id, v] of saved) { CARDS[id].keywords = v.kw as never; CARDS[id].onDeath = v.death; CARDS[id].onEnter = v.enter; CARDS[id].landTrigger = v.land; CARDS[id].onAttack = v.attack; CARDS[id].bonus = v.bonus; } for (const [id, b] of spellBonus) CARDS[id].bonus = b as never; for (const id of flashed) delete CARDS[id].flashback; };
 }
 
 for (const policyName of ['ai', 'chaos', 'ai+kw', 'chaos+kw'] as const) {
@@ -421,7 +479,7 @@ for (const policyName of ['ai', 'chaos', 'ai+kw', 'chaos+kw'] as const) {
         const r = rng(gseed ^ 0x9e3779b9);
         let g = createInitialState(gseed, A.cards, B.cards, { mulligan: seed % 2 === 0 }); // half the games open with the keep-or-mulligan decision
         const sizes = { A: A.cards.length, B: B.cards.length } as Record<PlayerId, number>;
-        const ctx = { pair: `${A.id} v ${B.id}`, policy: policyName, seed: gseed, step: 0 };
+        const ctx = { pair: `${A.id} v ${B.id}`, policy: policyName, seed: gseed, step: 0, track: newTrack() };
         const restore = stress ? sprinkleKeywords(rng(gseed ^ 0x51ed270b)) : () => {};
         let step = 0;
         while (!g.winner && step < 3000) {
@@ -441,6 +499,7 @@ for (const policyName of ['ai', 'chaos', 'ai+kw', 'chaos+kw'] as const) {
             }
           }
           check(g, act, next, sizes, ctx);
+          updateTrack(ctx.track, g, act, next);
           g = next; step++;
         }
         restore();
