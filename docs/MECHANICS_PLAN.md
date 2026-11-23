@@ -192,3 +192,38 @@ check the dev server is up before concluding a batch "crashed"; a single-game wi
 Phase 0, then Reach and Vigilance (smallest, and Reach removes the AI's duplicated block check), then
 First strike and Double strike (the `resolveCombat` split), then Trample, Deathtouch and Lifelink on
 top of it. Full-pass checkpoint. Then Phase 2 in the order 1, 2, 3, 4. Full-pass checkpoint.
+
+## 4. Phase 4: more Magic mechanics, built in parts
+
+Status: **in progress.** Phases 0-3 are done. Phase 4 is built one part at a time; each part ends green (lint, tsc, tests, the fuzz oracle
+extended for the new rules, a win-rate check, the smoke batch) and is committed before the next starts. The order puts the cheap,
+visible keywords first and the two engine keystones (statics, activated abilities) before the showpiece (ninjutsu).
+
+| Part | What | Size | Status |
+|---|---|---|---|
+| 4a | **Combat keywords II**: Skulk (cannot be blocked by a creature with greater power), Bushido (+1/+1 when it blocks or is blocked), Indestructible | S | **done** (see below) |
+| 4b | **More triggers**: Landfall, Morbid / spells-this-turn conditions, attack triggers (Battle cry, Exalted, "whenever it attacks") | M | planned |
+| 4c | **Spells**: Bounce, Edict (opponent sacrifices a creature of their choice), Rally (team buff), Cycling | S-M | planned |
+| 4d | **Data-driven static abilities**: Beast Blitz moves onto data; Lords ("other Wolves +1/+1"); Threshold ("7+ cards in your graveyard") | M | planned |
+| 4e | **Activated abilities** (`{T}: ...`): mana creatures, pingers, a Treasure token | M-L | planned |
+| 4f | **Choices**: Scry, Loot, Modal ("choose one"), X spells, Kicker / Buyback, Fight / bite, Hexproof / Ward | M | planned |
+| 4g | **Graveyard**: Undying, Unearth | M | planned |
+| 4h | **Showpiece**: Ninjutsu for Kunoichi / Hana (a short window between blocks and damage), later Equipment | L | planned |
+
+Still out of scope: the stack and counterspells, steal effects (controller is tied to owner), hidden-information mechanics, coloured mana.
+
+### Part 4a: done
+
+Skulk, Bushido and Indestructible are implemented (`rules.ts` `blockError` / `isLethal` / `duel`, `reducer.ts` `declareBlockers` / `checkDeaths` /
+`destroy`, `cards/keywords.ts`, the Rulebook, the block planner's refusal text), tested (`keywords2.test.ts`, each rule mutation-checked; the
+3000-fight `duel` property test now includes bushido and indestructible), and modelled by the fuzz oracle (22,400 games, zero findings; breaking
+each rule on purpose makes it report). Deviations from the plan, driven by the win-rate sim (N=80, all decks 45.5%-54.6%):
+
+- **Ashigaru is now a 1/2 with Bushido** (as a 2/1 with Bushido Iron Blossom reached 61%).
+- **Kunoichi has Skulk** (neutral: Wildblitz 48.9% -> 49.6%).
+- **Indestructible is on no printed card yet.** On Granite Sentinel or Storm Drake it dropped Pyromancer to about 43%: burn cannot answer it. It is waiting for a
+  one-turn "gains indestructible until end of turn" trick spell (part 4c/4f, needs temporary keywords) rather than a permanent body. Same precedent as
+  deathtouch in Phase 1.
+- Fixed in the QA tooling on the way: the fuzz policy did not know the skulk block rule, and its Beast Blitz list had the original four beasts (so every run
+  reported `BLITZ_FLAG`).
+

@@ -104,7 +104,7 @@ Lore: not raised by anyone; enough hollowed dead lie together until they "agree"
 
 ## Prompts: Iron Blossom Clans
 
-**Ashigaru** (2/1; "A footman of the clan — spear steady, honor steadier.")
+**Ashigaru** (1/2, Bushido; "A footman of the clan — spear steady, honor steadier.")
 The living counterpart of the Zombie token (a dead Ashigaru): same lacquered armour and straw hat, so the pair reads as
 "before and after". Keep him a plain rank-and-file soldier, steady rather than heroic.
 

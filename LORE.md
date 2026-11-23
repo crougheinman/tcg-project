@@ -89,7 +89,7 @@ with her. She does not command beasts; she *reminds* them of something. Her whis
 of the Sleeper's dream, and the three who always answer it — the lancer's mount, the talon on the
 wind, the cub from the stone country — grow bolder for hearing it, and so do the wolves a howl
 brings running. (*Beast Blitz: Swift Lancer, Sky Talon, Stoneback Cub and Wolves get +1/+1 — the
-three who always answer her whistle, and the pack that answers the call.*)
+three who always answer her whistle, and the pack that answers the call. She also has *Skulk*: none who outweigh her can block her, because she is not where they are looking.*)
 
 Kasei is the single most argued-over person in the world: Wildblitz claims her as a prophet,
 Emberwood as a daughter, and the Treants have twice sent envoys asking her, politely, to stop.

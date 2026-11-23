@@ -566,6 +566,21 @@ before, so every older fixture and test is untouched. The AI keeps 2 to all-but-
 Saved online matches from before this change cannot be replayed (their logs lack the decisions); the restore path
 already reports that and returns to the menu.
 
+### (l) Combat keywords II: Skulk, Bushido, Indestructible (Phase 4a)
+Three more keywords on the shared combat code. **Skulk** is one rule in `blockError`: a creature with greater power than the
+skulker cannot block it (current power, so a pump counts), and the block planner explains the refusal. **Bushido** gives a creature
+that blocks or is blocked +1/+1 until end of turn (`tempP`/`tempT`, the prowess mechanism) when blocks are declared, before damage;
+`duel` applies the same bonus to its throwaway copies so the AI and the damage readout still match the real fight (a 3000-fight
+property test holds them equal with the new keywords mixed in). **Indestructible** goes through `isLethal`: marked damage (deathtouch
+included) and `destroy` do not kill it, only a toughness of 0 does. The independent fuzz oracle models all three from the rule text and
+the keyword-stress mode sprinkles them over every deck; breaking each rule in the engine on purpose makes the oracle report
+findings. What it found: the fuzz's own chaos policy built blocks with its own copy of the legality rules and tried a skulk block
+(fixed in the tool), and its Beast Blitz list was still the original four beasts (`BLITZ_FLAG` on every run since the owner added
+Thornwood Brute and Dread Maw; fixed, so the fuzz is back to zero findings). Cards: Kunoichi has Skulk and Ashigaru is now a 1/2 with
+Bushido (as a 2/1 it pushed Iron Blossom to 61%). **Indestructible is on no printed card yet**: on Granite Sentinel (Stonewall 46% ->
+49%) or Storm Drake it pushed Pyromancer to 43%, below the 45% floor, because burn cannot answer it. It waits for a one-turn trick
+spell instead (a later part). Win rates at N=80: 45.5%-54.6%.
+
 ## 8. Run it
 
 ```bash
