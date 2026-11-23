@@ -2681,3 +2681,6 @@ button.count-chip:hover:not(:disabled) { color: var(--vs-ink); background: var(-
   .zfx.discard .zfx-body, .zfx.raise .zfx-body { animation-name: zfx-plain; }
 }
 @keyframes zfx-plain { 0% { opacity: 0; } 15%, 80% { opacity: 1; } 100% { opacity: 0; } }
+
+/* While a phase banner holds the board, the action buttons still show the old phase and ignore clicks (Board.tsx `act`): dim them. */
+.board.holding .actions button { opacity: 0.55; cursor: default; }

@@ -5,7 +5,7 @@ import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { getDef } from '../cards/cards';
 import { actorOf, availableMana, canAttack, canBlock, hasKeyword, isCreature, isLand } from '../engine/rules';
-import type { CardInstance, GameState, PlayerId } from '../engine/types';
+import type { Action, CardInstance, GameState, PlayerId } from '../engine/types';
 import { needsTarget, opponentOf } from '../engine/types';
 import { CardView } from './CardView';
 import { liveAttackers, prune, tapAttacker, tapBlocker } from './blockSelection';
@@ -83,6 +83,13 @@ export function Board() {
   // failsafe: a banner that never reports back (covers a held board AND locked cards: after a combat resolves nothing is held)
   const releaseLock = useCallback(() => lock(false), [lock]);
   useLockFailsafe(hold !== null || cardsLocked, releaseLock);
+  // The action buttons (Go to Combat, End Turn, Attack, Confirm Blocks...) are drawn from the HELD state while a phase banner plays, but
+  // dispatch against the live one. A quick second tap on "Go to Combat" therefore hit the same button again and skipped the attack
+  // step. While the board is held they do nothing, as the cards do (and look dimmed: `.board.holding`).
+  const act = (a: Action) => {
+    if (hold) return;
+    dispatch(a);
+  };
   useEffect(() => {
     warmIaijutsuClip(live); // the Iaijutsu film's clip is fetched once, as soon as a deck holds the card
   }, [live]);
@@ -782,11 +789,11 @@ export function Board() {
         return (
           <div className="actions">
             <span className="prompt">Keep this hand?</span>
-            <button className="primary" onClick={() => dispatch({ type: 'keepHand' })}>
+            <button className="primary" onClick={() => act({ type: 'keepHand' })}>
               Keep hand
             </button>
             {taken < MAX_MULLIGANS && (
-              <button onClick={() => dispatch({ type: 'mulligan' })}>
+              <button onClick={() => act({ type: 'mulligan' })}>
                 Mulligan ({OPENING_HAND - taken - 1})
               </button>
             )}
@@ -796,9 +803,9 @@ export function Board() {
       case 'main1': {
         // End the turn in one click: advance straight past combat + end.
         const endTurn = () => {
-          dispatch({ type: 'advance' }); // main1 -> combat_attack
-          dispatch({ type: 'advance' }); // combat_attack -> end
-          dispatch({ type: 'advance' }); // end -> next turn
+          act({ type: 'advance' }); // main1 -> combat_attack
+          act({ type: 'advance' }); // combat_attack -> end
+          act({ type: 'advance' }); // end -> next turn
         };
         // No creature can attack → combat is pointless; offer only End Turn.
         if (!canAnyAttack) {
@@ -817,7 +824,7 @@ export function Board() {
         // Attackers available: offer Combat, or End Turn to skip it entirely.
         return (
           <div className="actions">
-            <button className="primary" onClick={() => dispatch({ type: 'advance' })}>
+            <button className="primary" onClick={() => act({ type: 'advance' })}>
               Go to Combat
             </button>
             <button className="primary" onClick={endTurn}>End Turn</button>
@@ -839,11 +846,11 @@ export function Board() {
             <span className="prompt">⚔ Select creatures to attack</span>
             <button
               className="primary"
-              onClick={() => dispatch({ type: 'declareAttackers', attackers: [...attackers] })}
+              onClick={() => act({ type: 'declareAttackers', attackers: [...attackers] })}
             >
               Attack ({attackers.size})
             </button>
-            <button onClick={() => dispatch({ type: 'advance' })}>Skip Combat</button>
+            <button onClick={() => act({ type: 'advance' })}>Skip Combat</button>
           </div>
         );
       case 'combat_block': {
@@ -861,7 +868,7 @@ export function Board() {
                 {instantHint}
               </div>
               {instantInHand && (
-                <button onClick={() => dispatch({ type: 'declareBlockers', blocks: {} })}>
+                <button onClick={() => act({ type: 'declareBlockers', blocks: {} })}>
                   Let it through
                 </button>
               )}
@@ -890,19 +897,19 @@ export function Board() {
                   });
                   return;
                 }
-                dispatch({ type: 'declareBlockers', blocks });
+                act({ type: 'declareBlockers', blocks });
               }}
             >
               Confirm Blocks
             </button>
-            <button onClick={() => dispatch({ type: 'declareBlockers', blocks: {} })}>No Blocks</button>
+            <button onClick={() => act({ type: 'declareBlockers', blocks: {} })}>No Blocks</button>
           </div>
         );
       }
       case 'end':
         return (
           <div className="actions">
-            <button className="primary" onClick={() => dispatch({ type: 'advance' })}>
+            <button className="primary" onClick={() => act({ type: 'advance' })}>
               End Turn
             </button>
           </div>
@@ -920,6 +927,7 @@ export function Board() {
             'board' +
             (depth ? ' depth-3d' : '') +
             (cardsLocked ? ' cards-locked' : '') +
+            (hold ? ' holding' : '') +
             (myTurnToAct && game.phase === 'main1' && !sorceryIid && !game.pending && !game.winner
               ? ' nudge-main'
               : '')
