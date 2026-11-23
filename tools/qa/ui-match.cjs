@@ -283,6 +283,11 @@ async function playMatch(browser, A, B, idx) {
         case 'playLand': case 'castCreature':
           bump(action.type); await page.evaluate((a) => window.__H.setExpect([a]), action);
           ok = await clickEl(cardLoc(action.iid, scopeHand), action.type); break;
+        case 'cycle': // Cycling: tap the Cycle button, then the card (a two-step gesture, like casting a targeted spell)
+          bump('cycle'); await page.evaluate((a) => window.__H.setExpect([a]), action);
+          ok = await clickEl(btn(/Cycle/), 'Cycle');
+          if (ok) { await sleep(150); ok = await clickEl(cardLoc(action.iid, scopeHand), 'cycle card'); }
+          break;
         case 'keepHand':
           bump('keepHand'); await page.evaluate((a) => window.__H.setExpect([a]), action);
           ok = await clickEl(btn(/Keep hand/), 'Keep hand'); break;
