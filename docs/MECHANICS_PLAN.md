@@ -203,7 +203,7 @@ visible keywords first and the two engine keystones (statics, activated abilitie
 |---|---|---|---|
 | 4a | **Combat keywords II**: Skulk (cannot be blocked by a creature with greater power), Bushido (+1/+1 when it blocks or is blocked), Indestructible | S | **done** (see below) |
 | 4b | **More triggers**: Landfall, Morbid / spells-this-turn conditions, attack triggers (Battle cry, Exalted, "whenever it attacks") | M | **done** (see below) |
-| 4c | **Spells**: Bounce, Edict (opponent sacrifices a creature of their choice), Rally (team buff), Cycling | S-M | planned |
+| 4c | **Spells**: Bounce, Edict (opponent sacrifices a creature of their choice), Rally (team buff), Cycling | S-M | **done** (see below) |
 | 4d | **Data-driven static abilities**: Beast Blitz moves onto data; Lords ("other Wolves +1/+1"); Threshold ("7+ cards in your graveyard") | M | planned |
 | 4e | **Activated abilities** (`{T}: ...`): mana creatures, pingers, a Treasure token | M-L | planned |
 | 4f | **Choices**: Scry, Loot, Modal ("choose one"), X spells, Kicker / Buyback, Fight / bite, Hexproof / Ward | M | planned |
@@ -242,4 +242,21 @@ Cards (all decks 45.7%-54.5% at N=80 / N=120, tighter than before): **Granite Se
 second spell (1 damage to the opponent), **Sky Talon** Exalted, **Storm Drake** "whenever it attacks, gain 1 life", **Iron Shogun** Battle cry. Rejected by the sim: an
 Ember Sprite attack trigger (1 damage: Emberwood 58.9%, Skyward 42.5%) and a Swift Lancer Battle cry (Wildblitz 60.9%, Skyward 42.1%): a hasty swarm plus a free pump is too much.
 The UI floats a small label ("Landfall", "On attack", "Battle cry!", "Exalted", "Morbid", "Second spell") over the creature that fired, from the new log lines (`triggerCues`).
+
+### Part 4c: done
+
+Three new `Effect`s and one new action. **Bounce** (`{ type: 'bounce' }`, targeted like Whipflash, so as a creature's enter effect it waits on a `pending` choice): the creature goes to its OWNER's
+hand with every buff, mark and aura gone and summoning sick (a token just ceases to exist), and it leaves combat; it is not a death (no dies trigger, no Morbid) and it works on an indestructible
+creature. **Edict** (`{ type: 'edict' }`, untargeted): the opponent sacrifices a creature of THEIR choice. With none nothing happens, with exactly one it is sacrificed at once, with more a
+`pending` `{ kind: 'sacrifice', controller: victim }` is set: `actorOf` hands the turn to the victim, `resolveTrigger` carries their pick, and a sacrificed creature (`doomed`) dies even if
+indestructible. **Rally** (`{ type: 'rally', power, toughness }`, untargeted): every creature the controller has NOW gets +P/+T until end of turn (`tempP`/`tempT`). **Cycling**
+(`CardDef.cycling` + the `cycle` action): in your main phase pay the cost, discard the card from hand and draw one; it is not a cast (no prowess, no spell count) and logs "cycles", not
+"discards", so Rot's discard animation does not fire for it. The AI scores bounce, edict and rally as spells, chooses what to bounce or sacrifice (the enemy's dearest creature; a token first),
+and cycles a card it cannot cast within a turn. The Board has a sacrifice prompt (your own creatures glow) and a Cycle mode (tap Cycle, then the card). Tested (`spells2.test.ts`, nine rules
+mutation-checked); the fuzz oracle tracks bounced and sacrificed creatures separately from deaths, checks every rule from the rule text and stress-sprinkles all four mechanics (22,400 games).
+What the fuzz found: after a bounce the oracle still counted the bounced creature's spell trigger (the engine was right: a creature that left play does not trigger).
+
+Cards (all decks 45.7%-54.6% at N=80, 46.5%-55.5% at N=120): **Carrion Colossus** Edict on entering, **Ancient Treant** Cycling 2, **Iron Shogun** Rally (+1/+0) on entering. Rejected by the sim: a Storm
+Drake that bounces on entering (Skyward 57.5%, Pyromancer 43.8%, Wildblitz 44.8%) and a Dread Maw with Cycling (Pyromancer 42.7%, Wildwood 57.3%). Bounce and Rally as SPELLS wait for art:
+`card-art.md` has prompts for **Windrush**, **War Drums** and **Grave Toll**; once the art exists they become real cards after a win-rate check.
 

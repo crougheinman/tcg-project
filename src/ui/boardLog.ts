@@ -11,5 +11,6 @@ export function humanize(s: string, myId: PlayerId): string {
     .replace(new RegExp(`\\b${opp}\\b`, 'g'), 'Opponent')
     // first-person verb agreement for the local player
     .replace(/\bYou is\b/g, 'You are')
-    .replace(/\bYou (plays|casts|attacks|blocks|decks|creates|ramps|gains|heals)\b/g, (_m, v) => 'You ' + v.slice(0, -1));
+    .replace(/\bYou (plays|casts|attacks|blocks|decks|creates|ramps|gains|heals|sacrifices|cycles|returns|discards|keeps|takes|finds)\b/g, (_m, v) => 'You ' + v.slice(0, -1))
+    .replace(/\bYou has\b/g, 'You have');
 }

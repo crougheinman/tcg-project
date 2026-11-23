@@ -590,6 +590,16 @@ no new `pending` kind was needed. The fuzz oracle tracks the same two counters i
 pumps; the stress mode puts the triggers on random creatures and spells. What the sim decided: Landfall on the Sentinel, Morbid on the Cub, second spell on Cinderbolt, Exalted
 on Sky Talon, an attack heal on Storm Drake and Battle cry on Iron Shogun balance (45.7%-54.5%); an attack ping on Ember Sprite and Battle cry on Swift Lancer did not.
 
+### (n) Spells II: Bounce, Edict, Rally, Cycling (Phase 4c)
+Three effects and one action, all through the existing seams. **Edict** is the first decision made by the player who did NOT cause it: it uses the same `pending` + `resolveTrigger` +
+`actorOf` machinery as Whipflash with a new kind (`'sacrifice'`, controller = the victim), so the lockstep rule "one actor at a time" holds without a new mechanism; `legalActions` lists the
+victim's own creatures, `validateAction` refuses anyone else's, and the card behind the choice is named by `pending.def` (set after the cast resolves). A sacrificed creature is marked `doomed`
+and dies at the next death check even if indestructible; a creature with exactly one candidate is sacrificed without asking. **Bounce** reuses `needsTarget` (so a creature's enter-bounce waits for
+a pick like Whipflash) and removes the creature from combat the way a death does, but is not a death: no dies trigger, no Morbid (the fuzz oracle exempts bounced creatures from its own
+died-this-turn counter). **Rally** is an untargeted `tempP`/`tempT` effect, so triggers can use it as well as spells. **Cycling** is a `cycle` action (main phase, `CardDef.cycling`), kept out of
+the cast path on purpose: no spell trigger, no prowess, no spell count, and a log line that does not say "discards". The sim kept an Edict Colossus, a cycling Treant and a rallying Shogun and
+rejected a bouncing Storm Drake and a cycling Dread Maw (burn decks cannot answer a tempo creature that also replays itself): the spell versions of Bounce and Rally wait for new card art.
+
 ## 8. Run it
 
 ```bash
