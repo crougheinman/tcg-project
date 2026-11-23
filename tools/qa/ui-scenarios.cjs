@@ -173,8 +173,8 @@ const ME = '.player-zone.me', OPP = '.player-zone.opp';
     const talon = await iid(page, 'A', 'sky_talon');
     const k1 = await click(page, `${ME} ${E(talon)}`); const k2 = await click(page, '.actions button:has-text("Attack")'); await sleep(2400);
     const r = await page.evaluate((id) => { const g = window.__game.getState().game; const c = g.players.A.battlefield.find((x) => x.iid === id); const el = document.querySelector(`.player-zone.me [data-iid="${id}"]`); return { tapped: c?.tapped, domTapped: el?.classList.contains('tapped'), oppLife: g.players.B.life }; }, talon);
-    rec('K2', 'A Vigilance attacker deals its damage and stays untapped', k1 === true && k2 === true && r.tapped === false && r.domTapped === false && r.oppLife === 18,
-      `attack clicks ${k1}/${k2}; after combat tapped=${r.tapped} dom.tapped=${r.domTapped}; opponent life ${r.oppLife} (expect 18)`);
+    rec('K2', 'A Vigilance attacker deals its damage and stays untapped', k1 === true && k2 === true && r.tapped === false && r.domTapped === false && r.oppLife === 17, // Sky Talon is Exalted: attacking alone it is 3/2, so it deals 3
+      `attack clicks ${k1}/${k2}; after combat tapped=${r.tapped} dom.tapped=${r.domTapped}; opponent life ${r.oppLife} (expect 17: a lone Exalted Sky Talon hits for 3)`);
     await ctx.close(); }
 
   // K3  lifelink: the life gained in combat is shown (green +N at the avatar) and is real
