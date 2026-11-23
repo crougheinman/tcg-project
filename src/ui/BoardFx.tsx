@@ -52,6 +52,7 @@ import { CrackFx, DustFx } from './ShatterFx';
 import { useTimers } from './useTimers';
 import { momentCues, type MomentCue } from './momentCues';
 import { cutInRemainingMs, zoneCues } from './zoneCues';
+import { triggerCues } from './triggerCues';
 import { ZoneFx } from './ZoneFx';
 import type { Burst } from './Vfx';
 
@@ -354,6 +355,13 @@ export function BoardFx({ game, locked = false }: { game: GameState; locked?: bo
         const r = el.getBoundingClientRect();
         newStatFloats.push({ id: dmgId.current++, x: r.left + r.width / 2, y: r.top + 6, text, up });
       }
+    // Landfall / attack trigger / Battle cry / Exalted / Morbid: a label over the creature that did it (a little above the stat float)
+    for (const cue of triggerCues(before, game)) {
+      const el = document.querySelector(`[data-iid="${cue.iid}"]`);
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      newStatFloats.push({ id: dmgId.current++, x: r.left + r.width / 2, y: r.top - 14, text: cue.label, up: true });
+    }
     if (newStatFloats.length) setStatFloats((s) => [...s, ...newStatFloats]);
 
     // Spell impact: a damage spell fires a bolt from the caster's avatar to its

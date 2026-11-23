@@ -18,6 +18,8 @@ export const KEYWORD_INFO: Record<Keyword, { label: string; rule: string }> = {
   prowess: { label: 'Prowess', rule: 'gets +1/+1 until end of turn each time its controller casts a spell.' },
   skulk: { label: 'Skulk', rule: 'cannot be blocked by creatures with greater power.' },
   bushido: { label: 'Bushido', rule: 'gets +1/+1 until end of turn when it blocks or becomes blocked.' },
+  battleCry: { label: 'Battle cry', rule: 'when it attacks, each other attacking creature gets +1/+0 until end of turn.' },
+  exalted: { label: 'Exalted', rule: 'when a creature you control attacks alone, it gets +1/+1 until end of turn for each creature you control with Exalted.' },
   indestructible: { label: 'Indestructible', rule: 'lethal damage and destroy effects do not kill it. Only losing all its toughness does.' },
 };
 

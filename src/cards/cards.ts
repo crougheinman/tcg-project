@@ -45,6 +45,8 @@ export const CARDS: Record<string, CardDef> = {
     id: 'stoneback_cub',
     name: 'Stoneback Cub',
     type: 'creature',
+    bonus: { when: 'morbid', effect: { type: 'draw', amount: 1 } },
+    text: 'Morbid — when it enters, if a creature died this turn, draw a card.',
     cost: 2,
     power: 2,
     toughness: 2,
@@ -58,8 +60,8 @@ export const CARDS: Record<string, CardDef> = {
     cost: 3,
     power: 2,
     toughness: 1,
-    keywords: ['flying', 'vigilance'],
-    text: 'Flying. Vigilance.',
+    keywords: ['flying', 'vigilance', 'exalted'],
+    text: 'Flying. Vigilance. Exalted.',
     art: '/cards/sky_talon.webp', // 420x420 WebP; other cards auto-wire to <id>.png
     flavor: 'It hunts the wind itself.',
   },
@@ -84,7 +86,8 @@ export const CARDS: Record<string, CardDef> = {
     power: 3,
     toughness: 5,
     keywords: ['reach'],
-    text: 'Reach.',
+    landTrigger: { type: 'heal', amount: 1 },
+    text: 'Reach. Landfall — whenever a land enters under your control, gain 1 life.',
     art: '/cards/granite_sentinel.webp', // 420x418 WebP; other cards auto-wire to <id>.png
     flavor: 'Patient as the mountain, immovable as its roots.',
   },
@@ -96,7 +99,8 @@ export const CARDS: Record<string, CardDef> = {
     power: 4,
     toughness: 4,
     keywords: ['flying', 'vigilance'],
-    text: 'Flying. Vigilance.',
+    onAttack: { type: 'heal', amount: 1 },
+    text: 'Flying. Vigilance. Whenever it attacks, gain 1 life.',
     art: '/cards/storm_drake.webp', // 420x422 WebP; other cards auto-wire to <id>.png
     flavor: 'Thunder is merely the sound of its wings.',
   },
@@ -221,8 +225,8 @@ export const CARDS: Record<string, CardDef> = {
     cost: 5,
     power: 5,
     toughness: 4,
-    keywords: ['firstStrike'],
-    text: 'First strike. The charge is led from the front.',
+    keywords: ['firstStrike', 'battleCry'],
+    text: 'First strike. Battle cry. The charge is led from the front.',
     art: '/cards/iron_shogun.webp', // 420x419 WebP; other cards auto-wire to <id>.png
     flavor: 'Where his banner rides, the line follows.',
   },
@@ -306,11 +310,12 @@ export const CARDS: Record<string, CardDef> = {
   // --- Sorceries ---
   cinderbolt: {
     id: 'cinderbolt',
+    bonus: { when: 'secondSpell', effect: { type: 'damage', amount: 1, targets: 'player' } },
     name: 'Cinderbolt',
     type: 'sorcery',
     cost: 1,
     effect: { type: 'damage', amount: 3, targets: 'any' },
-    text: 'Deal 3 damage to any target.',
+    text: 'Deal 3 damage to any target. If it is your second spell this turn, also deal 1 damage to your opponent.',
     art: '/cards/cinderbolt.webp', // 420x422 WebP; other cards auto-wire to <id>.png
     flavor: 'A handful of the old warmth, spent all at once.',
   },

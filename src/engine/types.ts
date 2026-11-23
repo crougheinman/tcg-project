@@ -21,7 +21,9 @@ export type Keyword =
   | 'prowess' // +1/+1 until end of turn whenever its controller casts a spell
   | 'skulk' // cannot be blocked by a creature with greater power
   | 'bushido' // +1/+1 until end of turn when it blocks or becomes blocked
-  | 'indestructible'; // lethal damage and destroy effects do not kill it (only 0 toughness does)
+  | 'indestructible' // lethal damage and destroy effects do not kill it (only 0 toughness does)
+  | 'battleCry' // when it attacks, each other attacking creature gets +1/+0 until end of turn
+  | 'exalted'; // when a creature its controller controls attacks alone, it gets +1/+1 until end of turn for each exalted creature
 
 /** What a creature can be targeted as / what an effect targets. */
 export type TargetSpec = 'any' | 'creature' | 'player';
@@ -73,6 +75,10 @@ export interface CardDef {
   onDeath?: Effect; // creature: resolves when it dies (token creation, draw, heal, or damage to the opponent)
   spellTrigger?: Effect; // creature: fires whenever its controller casts a sorcery
   spellTriggerInstant?: boolean; // creature: its spellTrigger also fires on instant casts
+  landTrigger?: Effect; // creature: Landfall, resolves whenever a land enters under its controller's control (untargeted effects only)
+  onAttack?: Effect; // creature: resolves whenever it attacks (untargeted effects only)
+  /** Resolves in addition to the card's own effect when the condition holds: a creature when it enters, a spell after its effect. Untargeted effects only. */
+  bonus?: { when: 'morbid' | 'secondSpell'; effect: Effect };
   blockOnly?: boolean; // instant that can be cast only during the block step (combat_block)
   flashback?: number; // spell: may be cast from the graveyard for this much mana, and is then exiled (untargeted effects only)
   text?: string;
@@ -145,6 +151,8 @@ export interface GameState {
   pending: PendingTrigger | null; // must be resolved before any other action
   mulligan?: MulliganState | null; // only present when the game was created with the mulligan option
   nextIid: number; // counter for deterministic instance ids
+  diedThisTurn?: boolean; // a creature has died this turn (Morbid); reset as each turn begins. Optional so older fixtures need nothing
+  spellsThisTurn?: Record<PlayerId, number>; // spells (creatures included) each player has cast this turn (second-spell bonuses); reset each turn
   winner: PlayerId | 'draw' | null;
   log: string[];
 }

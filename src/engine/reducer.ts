@@ -1,5 +1,5 @@
 import { BLITZ_BEASTS, getDef, isToken } from '../cards/cards';
-import type { Action, CardInstance, Effect, GameState, PlayerId, PlayerState, Target } from './types';
+import type { Action, CardDef, CardInstance, Effect, GameState, PlayerId, PlayerState, Target } from './types';
 import { needsCreatureChoice, opponentOf } from './types';
 import { nextRandom, shuffle } from './rng';
 import { OPENING_HAND } from './state';
@@ -37,6 +37,7 @@ export function applyAction(state: GameState, action: Action): GameState {
       moveFromHand(active, action.iid, active.battlefield);
       active.landPlayedThisTurn = true;
       s.log.push(`${s.active} plays ${name(action.iid, s)}`);
+      landfall(s, s.active);
       break;
     }
     case 'castCreature': {
@@ -53,6 +54,7 @@ export function applyAction(state: GameState, action: Action): GameState {
       c.summoningSick = !hasKeyword(c, 'haste');
       caster.battlefield.push(c);
       s.log.push(`${casterId} casts ${def.name}`);
+      countSpell(s, casterId);
       const skill = def.skill ?? def.name;
       if (def.onEnter) {
         if (needsCreatureChoice(def.onEnter)) {
@@ -71,6 +73,7 @@ export function applyAction(state: GameState, action: Action): GameState {
       }
       // Beast Blitz announces itself only when Kunoichi and a beast meet, whichever arrives second.
       if (blitz) s.log.push('✦ Beast Blitz activated!');
+      resolveBonus(s, casterId, def);
       break;
     }
     case 'keepHand': {
@@ -126,9 +129,11 @@ export function applyAction(state: GameState, action: Action): GameState {
       if (fromGrave) (caster.exile ??= []).push(c);
       else caster.graveyard.push(c);
       s.log.push(`${casterId} casts ${def.name}${fromGrave ? ' (flashback)' : ''}`);
+      countSpell(s, casterId);
       const blitz = blitzCue(caster, c); // a token spell (Call Wolves) making beasts next to Kunoichi
       applyEffect(s, casterId, def.effect!, action.target);
       if (blitz) s.log.push('✦ Beast Blitz activated!');
+      resolveBonus(s, casterId, def);
       // Creatures that trigger when their controller casts a spell. By default they
       // fire only on sorceries (e.g. Pyre Adept, Plague Priest); a creature flagged
       // `spellTriggerInstant` (e.g. Grave Necromancer) also fires on instants.
@@ -158,6 +163,7 @@ export function applyAction(state: GameState, action: Action): GameState {
       else {
         s.phase = 'combat_block';
         s.log.push(`${s.active} attacks with ${action.attackers.length}`);
+        attackTriggers(s, action.attackers);
       }
       break;
     }
@@ -308,6 +314,7 @@ function applyEffect(s: GameState, controller: PlayerId, effect: Effect, target?
         }
       }
       if (moved) s.log.push(`${controller} ramps ${moved} land${moved > 1 ? 's' : ''}`);
+      for (let i = 0; i < moved; i++) landfall(s, controller); // each land that entered
       break;
     }
     case 'token': {
@@ -439,6 +446,8 @@ function toEnd(s: GameState): void {
 function beginTurn(s: GameState, next: PlayerId): void {
   s.active = next;
   s.turn += 1;
+  s.diedThisTurn = false; // per-turn counters for Morbid and second-spell bonuses
+  s.spellsThisTurn = { A: 0, B: 0 };
   const p = s.players[next];
   for (const c of p.battlefield) {
     c.tapped = false;
@@ -460,6 +469,64 @@ function beginTurn(s: GameState, next: PlayerId): void {
 }
 
 /** State-based actions: lethal-damage deaths and life<=0 loss. */
+/** Landfall: each creature its controller has with a landTrigger resolves it, once per land that entered. */
+function landfall(s: GameState, pid: PlayerId): void {
+  for (const c of [...s.players[pid].battlefield]) {
+    const trig = isCreature(c) ? getDef(c.def).landTrigger : undefined;
+    if (!trig) continue;
+    s.log.push(`✦ ${getDef(c.def).name} — landfall`);
+    applyEffect(s, pid, trig, { kind: 'player', player: opponentOf(pid) });
+  }
+}
+
+/** One more spell cast by `pid` this turn (creature spells count). Read by second-spell bonuses. */
+function countSpell(s: GameState, pid: PlayerId): void {
+  s.spellsThisTurn ??= { A: 0, B: 0 };
+  s.spellsThisTurn[pid] += 1;
+}
+
+/** A card's conditional bonus: Morbid (a creature has died this turn) or second spell (the caster's 2nd or later this turn). */
+function resolveBonus(s: GameState, pid: PlayerId, def: CardDef): void {
+  const b = def.bonus;
+  if (!b) return;
+  const holds = b.when === 'morbid' ? !!s.diedThisTurn : (s.spellsThisTurn?.[pid] ?? 0) >= 2;
+  if (!holds) return;
+  s.log.push(`✦ ${def.name} — ${b.when === 'morbid' ? 'morbid' : 'second spell'}`);
+  applyEffect(s, pid, b.effect, { kind: 'player', player: opponentOf(pid) });
+}
+
+/**
+ * Attack triggers, in the order the attackers were declared: Battle cry (each OTHER attacker gets +1/+0), Exalted (a creature
+ * attacking alone gets +1/+1 for each exalted creature its controller has, attacking or not) and onAttack effects. All
+ * "until end of turn" (tempP / tempT), so they are in place before blocks are declared.
+ */
+function attackTriggers(s: GameState, attackers: string[]): void {
+  const mine = s.players[s.active].battlefield;
+  const atk = attackers.map((iid) => mine.find((c) => c.iid === iid)!).filter(Boolean);
+  for (const c of atk) {
+    if (!hasKeyword(c, 'battleCry')) continue;
+    s.log.push(`✦ ${getDef(c.def).name} — battle cry`);
+    for (const o of atk) {
+      if (o.iid === c.iid) continue;
+      o.tempP = (o.tempP ?? 0) + 1;
+    }
+  }
+  if (atk.length === 1) {
+    const n = mine.filter((c) => isCreature(c) && hasKeyword(c, 'exalted')).length;
+    if (n > 0) {
+      atk[0].tempP = (atk[0].tempP ?? 0) + n;
+      atk[0].tempT = (atk[0].tempT ?? 0) + n;
+      s.log.push(`✦ Exalted — ${getDef(atk[0].def).name} attacks alone: +${n}/+${n}`);
+    }
+  }
+  for (const c of atk) {
+    const trig = getDef(c.def).onAttack;
+    if (!trig) continue;
+    s.log.push(`✦ ${getDef(c.def).name} — attack trigger`);
+    applyEffect(s, s.active, trig, { kind: 'player', player: opponentOf(s.active) });
+  }
+}
+
 function checkDeaths(s: GameState): void {
   const gone = new Set<string>();
   // Dies triggers can change the board (a token appears), so deaths are processed in rounds until the
@@ -494,6 +561,7 @@ function checkDeaths(s: GameState): void {
       }
     }
     if (!fallen.length) break;
+    s.diedThisTurn = true; // Morbid: a creature has died this turn
     // Dies triggers (tokens trigger too: they die like any creature, they just leave no card behind).
     for (const c of fallen) {
       const trig = getDef(c.def).onDeath;

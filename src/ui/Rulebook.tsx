@@ -66,6 +66,7 @@ const SECTIONS: { title: string; items: string[] }[] = [
       'Hover a card — or press and hold on mobile — to read its full details.',
       'Watch the activity log (bottom-right) to follow every action.',
       'Flashback: a spell with Flashback can be cast again from your graveyard (tap the graveyard counter), for its flashback cost. It is then exiled.',
+      'Landfall triggers when a land enters under your control (played or ramped). An attack trigger fires when its creature attacks, even if it is then blocked. Morbid is true once a creature has died this turn, and a second-spell bonus once you have cast two spells this turn (creature spells count); both are on the card that carries them.',
       'Last breath triggers when a creature dies (tokens too). Rot makes the opponent discard at random. Grave Call returns your most recently fallen creature.',
     ],
   },
