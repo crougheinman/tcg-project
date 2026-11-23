@@ -152,7 +152,8 @@ export const CARDS: Record<string, CardDef> = {
     power: 7,
     toughness: 7,
     keywords: ['trample'],
-    text: 'Trample.',
+    cycling: 2,
+    text: 'Trample. Cycling 2 — pay 2, discard this card: draw a card.',
     art: '/cards/ancient_treant.webp', // 520x285 WebP; other cards auto-wire to <id>.png
     flavor: 'Older than the kingdoms that fear it.',
   },
@@ -226,7 +227,8 @@ export const CARDS: Record<string, CardDef> = {
     power: 5,
     toughness: 4,
     keywords: ['firstStrike', 'battleCry'],
-    text: 'First strike. Battle cry. The charge is led from the front.',
+    onEnter: { type: 'rally', power: 1, toughness: 0 },
+    text: 'First strike. Battle cry. When it enters, your creatures get +1/+0 until end of turn. The charge is led from the front.',
     art: '/cards/iron_shogun.webp', // 420x419 WebP; other cards auto-wire to <id>.png
     flavor: 'Where his banner rides, the line follows.',
   },
@@ -302,7 +304,8 @@ export const CARDS: Record<string, CardDef> = {
     power: 7,
     toughness: 6,
     keywords: ['lifelink'],
-    text: 'Lifelink.',
+    onEnter: { type: 'edict' },
+    text: 'Lifelink. When it enters, your opponent sacrifices a creature of their choice.',
     art: '/cards/carrion_colossus.webp', // 420x418 WebP; other cards auto-wire to <id>.png
     flavor: 'The tide of the dead, made flesh at last.',
   },

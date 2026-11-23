@@ -74,6 +74,7 @@ export function applyAction(state: GameState, action: Action): GameState {
       // Beast Blitz announces itself only when Kunoichi and a beast meet, whichever arrives second.
       if (blitz) s.log.push('✦ Beast Blitz activated!');
       resolveBonus(s, casterId, def);
+      if (s.pending && !s.pending.def) s.pending.def = def.id; // an Edict on entering: name the card behind the choice
       break;
     }
     case 'keepHand': {
@@ -104,6 +105,13 @@ export function applyAction(state: GameState, action: Action): GameState {
     }
     case 'resolveTrigger': {
       const pend = s.pending!;
+      if (pend.kind === 'sacrifice') {
+        // Edict: the victim's chosen creature is sacrificed (it dies even if indestructible)
+        const victim = findCreature(s, action.target)!;
+        sacrifice(s, pend.controller, victim.card);
+        s.pending = null;
+        break;
+      }
       const def = getDef(pend.def);
       const found = findCreature(s, action.target);
       if (found && def.onEnter) {
@@ -134,6 +142,7 @@ export function applyAction(state: GameState, action: Action): GameState {
       applyEffect(s, casterId, def.effect!, action.target);
       if (blitz) s.log.push('✦ Beast Blitz activated!');
       resolveBonus(s, casterId, def);
+      if (s.pending && !s.pending.def) s.pending.def = def.id; // an Edict spell: name the card behind the choice
       // Creatures that trigger when their controller casts a spell. By default they
       // fire only on sorceries (e.g. Pyre Adept, Plague Priest); a creature flagged
       // `spellTriggerInstant` (e.g. Grave Necromancer) also fires on instants.
@@ -181,6 +190,16 @@ export function applyAction(state: GameState, action: Action): GameState {
         }
       }
       resolveCombat(s);
+      break;
+    }
+    case 'cycle': {
+      // Cycling: pay its cycling cost, discard it from hand, draw a card (it is a discard you choose, not a cast: no spell triggers)
+      const c = takeFromHand(active, action.iid);
+      const d = getDef(c.def);
+      payMana(active, d.cycling!);
+      active.graveyard.push(c);
+      s.log.push(`${s.active} cycles ${d.name}`);
+      applyEffect(s, s.active, { type: 'draw', amount: 1 });
       break;
     }
     case 'advance': {
@@ -286,6 +305,46 @@ function applyEffect(s: GameState, controller: PlayerId, effect: Effect, target?
     }
     case 'draw': {
       for (let i = 0; i < effect.amount; i++) drawCard(s, controller);
+      break;
+    }
+    case 'rally': {
+      // every creature the controller has NOW gets +P/+T until end of turn (a creature that enters later does not)
+      for (const c of s.players[controller].battlefield) {
+        if (!isCreature(c)) continue;
+        c.tempP = (c.tempP ?? 0) + effect.power;
+        c.tempT = (c.tempT ?? 0) + effect.toughness;
+      }
+      s.log.push(`✦ ${controller}'s creatures get +${effect.power}/+${effect.toughness} until end of turn`);
+      break;
+    }
+    case 'bounce': {
+      if (target?.kind !== 'creature') break;
+      const found = findCreature(s, target.iid);
+      if (!found) break;
+      const c = found.card;
+      const side = s.players[found.controller];
+      side.battlefield = side.battlefield.filter((x) => x.iid !== c.iid);
+      // it leaves play like a dead creature does: every buff, mark and aura is gone, and it is summoning sick if recast
+      c.tapped = false; c.damage = 0; c.buffP = 0; c.buffT = 0; c.tempP = 0; c.tempT = 0; c.blitz = false; c.summoningSick = true;
+      if (!isToken(c.def)) s.players[c.owner].hand.push(c); // a token just ceases to exist
+      // it is no longer attacking or blocking
+      if (s.combat) {
+        s.combat.attackers = s.combat.attackers.filter((iid) => iid !== c.iid);
+        for (const [blk, atk] of Object.entries(s.combat.blocks)) if (blk === c.iid || atk === c.iid) delete s.combat.blocks[blk];
+      }
+      s.log.push(`${getDef(c.def).name} is returned to ${isToken(c.def) ? 'nowhere (a token)' : "its owner's hand"}`);
+      break;
+    }
+    case 'edict': {
+      const victimId = opponentOf(controller);
+      const theirs = s.players[victimId].battlefield.filter(isCreature);
+      if (theirs.length === 0) s.log.push(`${victimId} has no creature to sacrifice`);
+      else if (theirs.length === 1) sacrifice(s, victimId, theirs[0]); // nothing to choose
+      else {
+        // the VICTIM chooses, so the decision is theirs: `actorOf` hands the turn to them until they pick
+        s.pending = { kind: 'sacrifice', source: '', def: '', controller: victimId };
+        s.log.push(`✦ ${victimId} must sacrifice a creature`);
+      }
       break;
     }
     case 'buff': {
@@ -469,6 +528,12 @@ function beginTurn(s: GameState, next: PlayerId): void {
 }
 
 /** State-based actions: lethal-damage deaths and life<=0 loss. */
+/** Sacrifice: marked for the next death check, which kills it even if it is indestructible. */
+function sacrifice(s: GameState, pid: PlayerId, c: CardInstance): void {
+  c.doomed = true;
+  s.log.push(`${pid} sacrifices ${getDef(c.def).name}`);
+}
+
 /** Landfall: each creature its controller has with a landTrigger resolves it, once per land that entered. */
 function landfall(s: GameState, pid: PlayerId): void {
   for (const c of [...s.players[pid].battlefield]) {
@@ -537,7 +602,7 @@ function checkDeaths(s: GameState): void {
     // other player's, each in battlefield order (the order the engine, the log and replays all agree on).
     for (const pid of [s.active, opponentOf(s.active)] as PlayerId[]) {
       const p = s.players[pid];
-      const dead = p.battlefield.filter((c) => isCreature(c) && isLethal(c));
+      const dead = p.battlefield.filter((c) => isCreature(c) && (isLethal(c) || c.doomed));
       if (!dead.length) continue;
       p.battlefield = p.battlefield.filter((c) => !dead.includes(c));
       for (const c of dead) {
@@ -550,6 +615,7 @@ function checkDeaths(s: GameState): void {
         c.tempP = 0;
         c.tempT = 0;
         c.blitz = false;
+        c.doomed = false;
         c.summoningSick = true;
         // A token that dies simply ceases to exist. It is not a card, so it must not
         // pad the graveyard (the count, the viewer and the result screen all read it).

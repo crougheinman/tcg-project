@@ -1,4 +1,4 @@
-import { getDef } from '../cards/cards';
+import { getDef, isToken } from '../cards/cards';
 import type { Action, CardInstance, GameState, PlayerId } from '../engine/types';
 import { opponentOf } from '../engine/types';
 import { MAX_MULLIGANS } from '../engine/state';
@@ -45,6 +45,7 @@ function pickMulligan(state: GameState, ai: PlayerId): Action {
 export function pickAction(state: GameState, ai: PlayerId): Action {
   if (state.phase === 'mulligan') return pickMulligan(state, ai);
   if (state.pending?.kind === 'enter') return pickTriggerTarget(state, ai);
+  if (state.pending?.kind === 'sacrifice') return pickSacrifice(state, ai);
   if (state.phase === 'combat_block' && state.active !== ai) return pickBlocks(state, ai);
   switch (state.phase) {
     case 'main1':
@@ -66,13 +67,17 @@ const BAND = {
   lethalBurn: 90, // burn that closes the game out
   removalKill: 80, // burn that kills a creature
   destroy: 78, // hard removal on a tapped creature
+  edict: 77, // the opponent sacrifices: strongest against a thin board, where they cannot give up their worst
   tapAll: 76, // Topple, when it actually catches something
+  bounce: 74, // tempo removal on their best creature
   creature: 70, // biggest body we can afford
+  rally: 62, // a team pump, worth it when two or more creatures can attack
   token: 60,
   ramp: 58,
   heal: 56, // only when genuinely low
   buff: 50,
   draw: 40,
+  cycle: 3, // swap a card we cannot cast soon for a fresh one, when nothing better is left to do
   advance: 0, // the floor: do nothing else
   never: -1, // legal but never wanted (wasted burn, healing at full life, ...)
 } as const;
@@ -108,6 +113,14 @@ function scoreAction(state: GameState, ai: PlayerId, a: Action): number {
     }
     case 'castSorcery':
       return scoreSpell(state, ai, a);
+    case 'cycle': {
+      // Only worth it for a card we cannot cast within the next turn: the lands we have, plus one more if we hold a land
+      const card = handCard(state, ai, a.iid);
+      if (!card) return score(BAND.never);
+      const me = state.players[ai];
+      const reach = me.battlefield.filter(isLand).length + (me.hand.some(isLand) ? 1 : 0);
+      return getDef(card.def).cost > reach ? score(BAND.cycle, getDef(card.def).cost) : score(BAND.never);
+    }
     case 'advance':
       return score(BAND.advance);
     default:
@@ -176,6 +189,25 @@ function scoreSpell(
     }
     case 'draw':
       return score(BAND.draw, thrift);
+    case 'rally': {
+      // before combat, and only with two or more creatures that will actually attack
+      if (state.phase !== 'main1') return score(BAND.never);
+      return me.battlefield.filter(canAttack).length >= 2 ? score(BAND.rally, thrift) : score(BAND.never);
+    }
+    case 'edict': {
+      // the fewer creatures they have, the less they can hide behind a worthless one
+      const n = opp.battlefield.filter(isCreature).length;
+      if (n === 0 || n > 2) return score(BAND.never);
+      return score(BAND.edict, (3 - n) * 20 + thrift);
+    }
+    case 'bounce': {
+      if (a.target?.kind !== 'creature') return score(BAND.never);
+      const found = findCreature(state, a.target.iid);
+      if (!found || found.controller === ai) return score(BAND.never); // never our own
+      // a token is simply gone; otherwise the dearer the creature, the more tempo it costs them
+      const cost = getDef(found.card.def).cost;
+      return score(BAND.bounce, isToken(found.card.def) ? power(found.card) * 10 : cost * 20 + power(found.card));
+    }
     default:
       return score(BAND.never);
   }
@@ -212,12 +244,35 @@ function pickAttacks(state: GameState, ai: PlayerId): Action {
   return { type: 'declareAttackers', attackers };
 }
 
+/** Edict: give up the least valuable creature we have: a token first, then the smallest and cheapest. */
+function pickSacrifice(state: GameState, ai: PlayerId): Action {
+  const mine = legalActions(state, ai).filter((a): a is Extract<Action, { type: 'resolveTrigger' }> => a.type === 'resolveTrigger');
+  if (!mine.length) return { type: 'advance' };
+  const worth = (iid: string) => {
+    const c = findCreature(state, iid)!.card;
+    return (isToken(c.def) ? -100 : 0) + power(c) + toughness(c) + getDef(c.def).cost * 2 + (hasKeyword(c, 'indestructible') ? 3 : 0);
+  };
+  return mine.sort((x, y) => worth(x.target) - worth(y.target))[0];
+}
+
 function pickTriggerTarget(state: GameState, ai: PlayerId): Action {
   const oppId = opponentOf(ai);
   const shots = legalActions(state, ai).filter(
     (a): a is Extract<Action, { type: 'resolveTrigger' }> => a.type === 'resolveTrigger',
   );
   if (!shots.length) return { type: 'advance' }; // no legal target (shouldn't happen)
+
+  // A bounce: send the enemy's dearest creature home (a token is simply removed); with no enemy creature to bounce we must still pick one
+  // of our own, so give up the one that costs least to replay.
+  if (state.pending?.kind === 'enter' && getDef(state.pending.def).onEnter?.type === 'bounce') {
+    const value = (iid: string) => {
+      const c = findCreature(state, iid)!.card;
+      return isToken(c.def) ? power(c) * 10 : getDef(c.def).cost * 20 + power(c);
+    };
+    const enemy = shots.filter((a) => findCreature(state, a.target)?.controller === oppId);
+    if (enemy.length) return enemy.sort((x, y) => value(y.target) - value(x.target))[0];
+    return shots.sort((x, y) => value(x.target) - value(y.target))[0];
+  }
 
   // Prefer to kill an enemy, else hit the weakest enemy, else the weakest thing.
   let best: { action: Action; s: number } | null = null;

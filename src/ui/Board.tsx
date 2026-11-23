@@ -31,6 +31,13 @@ import { ActionLog } from './ActionLog';
 import { ChatDock } from './ChatDock';
 import { humanize } from './boardLog';
 
+/** What a pending enter effect does to the creature you tap, in words (Whipflash hits it, a bounce sends it home). */
+function enterVerbFor(defId: string): string {
+  const eff = getDef(defId).onEnter;
+  if (eff?.type === 'bounce') return "to return it to its owner's hand";
+  return `to deal ${eff?.type === 'damage' ? eff.amount : 1} damage to it`;
+}
+
 export function Board() {
   const live = useGame((s) => s.game)!;
   // A phase change plays its banner first: the board keeps showing the state from BEFORE the change
@@ -68,6 +75,7 @@ export function Board() {
   const setGuided = useGame((s) => s.setGuided);
   const [hushed, setHushed] = useState<Set<string>>(new Set()); // per-session dismissed tips
   const [sorceryIid, setSorceryIid] = useState<string | null>(null);
+  const [cycleMode, setCycleMode] = useState(false); // choosing a card to cycle (Cycling)
   const [attackers, setAttackers] = useState<Set<string>>(new Set());
   const autoAttack = useRef<string | null>(null); // dragged to the enemy board in Main: pick it once combat starts
   const [atkDrag, setAtkDrag] = useState<string | null>(null); // the creature being dragged toward the enemy
@@ -362,17 +370,28 @@ export function Board() {
 
   // Block step, you defending: the live attackers drive the "who can block what" cues.
   const inBlock = game.phase === 'combat_block' && myTurnToAct && !game.winner;
+  // cycle mode ends as soon as it cannot apply (the phase moved on, something is pending, or it is not my move)
+  useEffect(() => {
+    if (cycleMode && (game.phase !== 'main1' || game.pending || !myTurnToAct)) setCycleMode(false);
+  }, [cycleMode, game.phase, game.pending, myTurnToAct]);
   const liveAtk = inBlock ? liveAttackers(game) : [];
 
   // Guided mode: pick the ONE tip that matches the current situation (priority order).
   // Teaches core MTG-style flow: lands -> mana -> creatures -> attack -> block.
   function coachTip(): Tip | null {
     if (!guided || game.winner || forfeit) return null;
+    if (game.pending?.kind === 'sacrifice' && myTurnToAct)
+      return {
+        key: 'sacrifice',
+        sel: '.player-zone.me .row.creatures',
+        text: `✦ ${triggerName}! You must sacrifice a creature. Tap one of yours to give it up.`,
+        place: 'above',
+      };
     if (game.pending?.kind === 'enter' && myTurnToAct)
       return {
         key: 'trigger',
         sel: '.player-zone.opp .row.creatures',
-        text: `✦ ${triggerName} triggered! Tap an enemy creature to deal 1 damage to it.`,
+        text: `✦ ${triggerName} triggered! Tap a creature ${game.pending ? enterVerbFor(game.pending.def) : ''}.`,
         place: 'below',
       };
     if (sorceryIid)
@@ -485,6 +504,7 @@ export function Board() {
         return me.battlefield.some(isCreature) || opp.battlefield.some(isCreature);
       }
       if (def.effect?.type === 'ramp') return me.hand.some(isLand); // needs a land to ramp
+      if (def.effect?.type === 'bounce') return me.battlefield.concat(opp.battlefield).some(isCreature); // needs a creature in play
       if (def.effect?.type === 'destroy') {
         return me.battlefield.concat(opp.battlefield).some((c) => isCreature(c) && c.tapped);
       }
@@ -492,6 +512,13 @@ export function Board() {
     }
     return false;
   }
+
+  // Cycling: in your own main phase, with nothing pending, if you can pay the card's cycling cost
+  function canCycle(c: CardInstance): boolean {
+    const cost = getDef(c.def).cycling;
+    return myTurnToAct && !game.pending && !game.winner && game.phase === 'main1' && cost !== undefined && cost <= availableMana(me);
+  }
+  const anyCyclable = me.hand.some(canCycle);
 
   // Can this graveyard card be cast from here right now (flashback: right timing, enough mana, untargeted)?
   function canFlashback(c: CardInstance): boolean {
@@ -511,6 +538,12 @@ export function Board() {
   }
 
   function handHclick(c: CardInstance) {
+    if (cycleMode) {
+      // the next card you tap is cycled (if it can be); either way the mode ends
+      if (!cardsLocked && canCycle(c)) act({ type: 'cycle', iid: c.iid });
+      setCycleMode(false);
+      return;
+    }
     if (cardsLocked || !canPlay(c)) return; // greyed/unplayable cards are fully disabled
     const def = getDef(c.def);
     if (def.type === 'land') dispatch({ type: 'playLand', iid: c.iid });
@@ -523,6 +556,11 @@ export function Board() {
 
   function creatureClick(c: CardInstance, side: PlayerId) {
     if (cardsLocked) return; // the Attack phase banner is still playing
+    // An Edict is waiting on ME: only my own creatures can be sacrificed
+    if (game.pending?.kind === 'sacrifice' && myTurnToAct) {
+      if (side === localId) dispatch({ type: 'resolveTrigger', target: c.iid });
+      return;
+    }
     // Resolving a pending Whipflash takes priority.
     if (game.pending?.kind === 'enter' && myTurnToAct) {
       if (c.iid !== game.pending.source) dispatch({ type: 'resolveTrigger', target: c.iid });
@@ -667,7 +705,8 @@ export function Board() {
                   selected={attackers.has(c.iid) || pendingBlocker === c.iid || !!blocks[c.iid]}
                   targetable={
                     sorceryTargetable(c) ||
-                    (game.pending?.kind === 'enter' && c.iid !== game.pending.source)
+                    (game.pending?.kind === 'enter' && c.iid !== game.pending.source) ||
+                    (game.pending?.kind === 'sacrifice' && myTurnToAct && side === localId)
                   }
                   // With a blocker waiting for its target, dim the attackers it cannot legally
                   // block (e.g. a flyer vs a ground creature) so that is clear BEFORE the tap.
@@ -754,16 +793,32 @@ export function Board() {
 
   // The name of the enter-the-battlefield skill waiting on a target ("Whipflash"), for the prompts.
   const triggerName = game.pending ? (getDef(game.pending.def).skill ?? getDef(game.pending.def).name) : '';
+  // what the pending enter effect does to the creature you pick, in words (Whipflash hits it, a bounce sends it home)
+  const enterVerb = game.pending?.kind === 'enter' ? enterVerbFor(game.pending.def) : '';
+  const cycleBtn = anyCyclable ? (
+    <button onClick={() => setCycleMode(true)} title="Pay a card's cycling cost and discard it from your hand to draw a card">
+      ⟳ Cycle
+    </button>
+  ) : null;
 
   // The damage readout (attack: what the chosen attackers could deal; block: what is coming and what is left).
   const attackTotals = game.phase === 'combat_attack' && myTurnToAct ? attackTally(game, attackers) : null;
   const blockTotals = game.phase === 'combat_block' && myTurnToAct ? blockTally(game, blocks) : null;
 
   function actionButtons() {
+    if (game.pending?.kind === 'sacrifice') {
+      return myTurnToAct ? (
+        <div className="actions">
+          <span className="prompt">✦ {triggerName} — choose one of your creatures to sacrifice</span>
+        </div>
+      ) : (
+        <div className="waiting">Opponent is choosing a creature to sacrifice…</div>
+      );
+    }
     if (game.pending?.kind === 'enter') {
       return myTurnToAct ? (
         <div className="actions">
-          <span className="prompt">✦ {triggerName} — click a creature to deal 1 damage</span>
+          <span className="prompt">✦ {triggerName} — click a creature {enterVerb}</span>
         </div>
       ) : (
         <div className="waiting">Opponent resolving {triggerName}…</div>
@@ -779,6 +834,14 @@ export function Board() {
         <div className="actions">
           <span className="prompt">Choose a target…</span>
           <button onClick={() => setSorceryIid(null)}>Cancel</button>
+        </div>
+      );
+    }
+    if (cycleMode) {
+      return (
+        <div className="actions">
+          <span className="prompt">⟳ Choose a card to cycle…</span>
+          <button onClick={() => setCycleMode(false)}>Cancel</button>
         </div>
       );
     }
@@ -811,10 +874,11 @@ export function Board() {
         if (!canAnyAttack) {
           // Nothing castable, no flashback, nothing to attack with: say so, and make
           // End Turn pulse straight away (no 5s wait) — it is the only thing left to do.
-          const noMovesLeft = !me.hand.some(canPlay) && !me.graveyard.some(canFlashback);
+          const noMovesLeft = !me.hand.some(canPlay) && !me.graveyard.some(canFlashback) && !anyCyclable;
           return (
             <div className="actions">
               {noMovesLeft && <span className="prompt nomoves">No more moves</span>}
+              {cycleBtn}
               <button className={'primary' + (noMovesLeft ? ' urgent' : '')} onClick={endTurn}>
                 End Turn
               </button>
@@ -827,6 +891,7 @@ export function Board() {
             <button className="primary" onClick={() => act({ type: 'advance' })}>
               Go to Combat
             </button>
+            {cycleBtn}
             <button className="primary" onClick={endTurn}>End Turn</button>
           </div>
         );
@@ -980,8 +1045,8 @@ export function Board() {
                       key={c.iid}
                       inst={c}
                       onClick={() => handHclick(c)}
-                      dim={cardsLocked || !canPlay(c)}
-                      greenGlow={game.phase === 'combat_block' && (getDef(c.def).type === 'instant' || hasKeyword(c, 'flash')) && canPlay(c)}
+                      dim={cardsLocked || (cycleMode ? !canCycle(c) : !canPlay(c))}
+                      greenGlow={(cycleMode && canCycle(c)) || (game.phase === 'combat_block' && (getDef(c.def).type === 'instant' || hasKeyword(c, 'flash')) && canPlay(c))}
                       draggable={!cardsLocked && canPlay(c) && getDef(c.def).type !== 'sorcery' && getDef(c.def).type !== 'instant'}
                       onDragChange={setDragActive}
                       onDrop={(point) => dropPlay(c, point)}

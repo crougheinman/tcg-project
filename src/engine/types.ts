@@ -43,11 +43,14 @@ export type Effect =
   | { type: 'tapAll'; maxToughness: number } // tap all opponent creatures with toughness <= N
   | { type: 'destroy'; targets: 'creature' } // destroy target (tapped) creature
   | { type: 'discard'; amount: number } // the opponent discards N cards chosen at random (deterministic, from the game's rng)
-  | { type: 'recall' }; // return the creature card that died most recently from your graveyard to your hand
+  | { type: 'recall' } // return the creature card that died most recently from your graveyard to your hand
+  | { type: 'rally'; power: number; toughness: number } // all your creatures get +P/+T until end of turn (untargeted)
+  | { type: 'bounce' } // return target creature to its owner's hand (a token just ceases to exist); needs a target
+  | { type: 'edict' }; // the opponent sacrifices a creature of THEIR choice (a `pending` decision made by them; automatic when they have one)
 
 /** Which effects need the player to pick a target. */
 export function needsTarget(effect: Effect): boolean {
-  return effect.type === 'damage' || effect.type === 'buff' || effect.type === 'destroy';
+  return effect.type === 'damage' || effect.type === 'buff' || effect.type === 'destroy' || effect.type === 'bounce';
 }
 
 /**
@@ -77,6 +80,7 @@ export interface CardDef {
   spellTriggerInstant?: boolean; // creature: its spellTrigger also fires on instant casts
   landTrigger?: Effect; // creature: Landfall, resolves whenever a land enters under its controller's control (untargeted effects only)
   onAttack?: Effect; // creature: resolves whenever it attacks (untargeted effects only)
+  cycling?: number; // creature or spell: in your main phase, pay this much and discard it from hand to draw a card
   /** Resolves in addition to the card's own effect when the condition holds: a creature when it enters, a spell after its effect. Untargeted effects only. */
   bonus?: { when: 'morbid' | 'secondSpell'; effect: Effect };
   blockOnly?: boolean; // instant that can be cast only during the block step (combat_block)
@@ -100,6 +104,7 @@ export interface CardInstance {
   // Until-end-of-turn buff (prowess). Optional so older fixtures need no change; cleared when the next turn begins.
   tempP?: number;
   tempT?: number;
+  doomed?: boolean; // sacrificed: dies at the next death check even if indestructible
 }
 
 export interface PlayerState {
@@ -127,10 +132,10 @@ export interface CombatState {
 
 /** A triggered ability waiting on the controller to choose a target. */
 export interface PendingTrigger {
-  kind: 'enter'; // an enter-the-battlefield effect that needs a target
-  source: string; // iid of the creature whose trigger this is
-  def: string; // its card, so the effect is still known if the source has left play
-  controller: PlayerId; // who chooses the target (the defender, when a flash creature enters in the block step)
+  kind: 'enter' | 'sacrifice'; // an enter effect that needs a target, or an Edict waiting on the victim's choice of creature
+  source: string; // 'enter': iid of the creature whose trigger this is ('sacrifice': unused)
+  def: string; // the card (creature or spell) behind it, so the effect is still known if the source has left play
+  controller: PlayerId; // who chooses: the trigger's controller ('enter'), or the player who must sacrifice ('sacrifice')
 }
 
 /** The opening-hand decision, while `phase` is 'mulligan'. */
@@ -163,7 +168,8 @@ export type Action =
   | { type: 'castSorcery'; iid: string; target?: Target }
   | { type: 'declareAttackers'; attackers: string[] }
   | { type: 'declareBlockers'; blocks: Record<string, string> }
-  | { type: 'resolveTrigger'; target: string } // choose the target of a pending enter-the-battlefield effect (e.g. Whipflash)
+  | { type: 'resolveTrigger'; target: string } // choose the target of a pending enter effect (Whipflash), or the creature to sacrifice (Edict)
+  | { type: 'cycle'; iid: string } // Cycling: pay the card's cycling cost, discard it from hand, draw a card
   | { type: 'keepHand' } // mulligan phase: keep this opening hand
   | { type: 'mulligan' } // mulligan phase: shuffle the hand back and draw one card fewer
   | { type: 'advance' }; // main1 -> combat, or end -> next turn

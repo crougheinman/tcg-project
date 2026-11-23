@@ -67,6 +67,7 @@ const SECTIONS: { title: string; items: string[] }[] = [
       'Watch the activity log (bottom-right) to follow every action.',
       'Flashback: a spell with Flashback can be cast again from your graveyard (tap the graveyard counter), for its flashback cost. It is then exiled.',
       'Landfall triggers when a land enters under your control (played or ramped). An attack trigger fires when its creature attacks, even if it is then blocked. Morbid is true once a creature has died this turn, and a second-spell bonus once you have cast two spells this turn (creature spells count); both are on the card that carries them.',
+      'Cycling: in your main phase you may pay a card\'s cycling cost and discard it from your hand to draw a card (tap Cycle, then the card). Edict: the opponent sacrifices a creature of THEIR choice, and a sacrificed creature dies even if indestructible. Bounce sends a creature back to its owner\'s hand (a token just vanishes). Rally gives all your creatures a bonus until end of turn.',
       'Last breath triggers when a creature dies (tokens too). Rot makes the opponent discard at random. Grave Call returns your most recently fallen creature.',
     ],
   },

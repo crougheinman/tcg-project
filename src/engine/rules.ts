@@ -240,7 +240,12 @@ export function legalActions(state: GameState, player: PlayerId): Action[] {
 
   // A pending trigger must be resolved before anything else is legal.
   if (state.pending) {
-    if (state.pending.kind !== 'enter') return [];
+    if (state.pending.kind === 'sacrifice') {
+      // Edict: the victim's own creatures
+      return state.players[state.pending.controller].battlefield
+        .filter(isCreature)
+        .map((c): Action => ({ type: 'resolveTrigger', target: c.iid }));
+    }
     const src = state.pending.source;
     const out: Action[] = [];
     for (const pid of ['A', 'B'] as PlayerId[]) {
@@ -269,6 +274,10 @@ export function legalActions(state: GameState, player: PlayerId): Action[] {
       } else if (def.type === 'creature' && def.cost <= mana) {
         actions.push({ type: 'castCreature', iid: c.iid });
       }
+    }
+    for (const c of p.hand) {
+      const cost = getDef(c.def).cycling;
+      if (cost !== undefined && cost <= mana) actions.push({ type: 'cycle', iid: c.iid });
     }
     actions.push(...spellActions(state, player));
     actions.push({ type: 'advance' }); // move to combat
@@ -328,6 +337,8 @@ function spellActions(state: GameState, caster: PlayerId): Action[] {
       for (const t of legalTargets(state, caster, eff.targets)) {
         out.push({ type: 'castSorcery', iid: c.iid, target: t });
       }
+    } else if (eff.type === 'bounce') {
+      for (const t of legalTargets(state, caster, 'creature')) out.push({ type: 'castSorcery', iid: c.iid, target: t });
     } else if (eff.type === 'destroy') {
       // Only tapped creatures are valid targets.
       for (const pid of ['A', 'B'] as PlayerId[]) {
@@ -386,10 +397,24 @@ export function validateAction(state: GameState, action: Action): void {
 
   switch (action.type) {
     case 'resolveTrigger': {
-      if (state.pending?.kind !== 'enter') throw new Error('no trigger pending');
-      if (action.target === state.pending.source) throw new Error('cannot target the source');
+      const pend = state.pending;
       const found = findCreature(state, action.target);
+      if (pend?.kind === 'sacrifice') {
+        // Edict: the victim picks one of THEIR OWN creatures
+        if (!found || found.controller !== pend.controller) throw new Error('choose one of your own creatures to sacrifice');
+        return;
+      }
+      if (pend?.kind !== 'enter') throw new Error('no trigger pending');
+      if (action.target === pend.source) throw new Error('cannot target the source');
       if (!found) throw new Error('target creature not found');
+      return;
+    }
+    case 'cycle': {
+      requirePhase(state, 'main1');
+      const c = inHand(active, action.iid);
+      const cost = c ? getDef(c.def).cycling : undefined;
+      if (!c || cost === undefined) throw new Error('that card has no cycling');
+      if (cost > availableMana(active)) throw new Error('not enough mana');
       return;
     }
     case 'playLand': {
@@ -434,6 +459,8 @@ export function validateAction(state: GameState, action: Action): void {
         if (!action.target) throw new Error('target required');
         if (def.effect.type === 'damage' || def.effect.type === 'buff') {
           validateTarget(state, def.effect.targets, action.target);
+        } else if (def.effect.type === 'bounce') {
+          if (action.target.kind !== 'creature' || !findCreature(state, action.target.iid)) throw new Error('must target a creature in play');
         } else if (def.effect.type === 'destroy') {
           if (action.target.kind !== 'creature') throw new Error('must target a creature');
           const found = findCreature(state, action.target.iid);
