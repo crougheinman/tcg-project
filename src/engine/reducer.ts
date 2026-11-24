@@ -224,6 +224,19 @@ export function applyAction(state: GameState, action: Action): GameState {
       resolveCombat(s);
       break;
     }
+    case 'unearth': {
+      // Unearth: it comes back from the graveyard with haste for its unearth cost; it is not a cast (no spell triggers, no enter effects) and it is exiled at the end step or if it would die.
+      const c = takeFromGraveyard(active, action.iid);
+      const d = getDef(c.def);
+      payMana(active, d.unearth!);
+      c.tapped = false;
+      c.damage = 0;
+      c.summoningSick = false; // haste for the turn
+      c.unearthed = true;
+      active.battlefield.push(c);
+      s.log.push(`${s.active} unearths ${d.name}`);
+      break;
+    }
     case 'activate': {
       // An activated ability: pay the cost (tap, mana), then its untargeted effect resolves at once. It is not a cast: no spell triggers, no spell count.
       const c = active.battlefield.find((x) => x.iid === action.iid)!;
@@ -378,7 +391,7 @@ function applyEffect(s: GameState, controller: PlayerId, effect: Effect, target?
       const side = s.players[found.controller];
       side.battlefield = side.battlefield.filter((x) => x.iid !== c.iid);
       // it leaves play like a dead creature does: every buff, mark and aura is gone, and it is summoning sick if recast
-      c.tapped = false; c.damage = 0; c.buffP = 0; c.buffT = 0; c.tempP = 0; c.tempT = 0; c.auraP = 0; c.auraT = 0; c.blitz = false; c.summoningSick = true;
+      c.tapped = false; c.damage = 0; c.buffP = 0; c.buffT = 0; c.tempP = 0; c.tempT = 0; c.auraP = 0; c.auraT = 0; c.blitz = false; c.revived = false; c.unearthed = false; c.summoningSick = true;
       if (!isToken(c.def)) s.players[c.owner].hand.push(c); // a token just ceases to exist
       // it is no longer attacking or blocking
       if (s.combat) {
@@ -556,12 +569,13 @@ function resolveCombat(s: GameState): void {
   const blockerOf: Record<string, string> = {};
   for (const [blk, atk] of Object.entries(combat.blocks)) blockerOf[atk] = blk;
 
+  const died = new Set<string>(); // everything that died in the first step
   for (const step of [1, 2] as const) {
     for (const atkIid of attackers) {
       const atk = findCreature(s, atkIid)?.card;
-      if (!atk) continue; // died in an earlier step (or was removed before damage)
+      if (!atk || died.has(atkIid)) continue; // died in an earlier step (or was removed before damage); an Undying creature that came back is a new arrival and takes no further part
       const blkIid = blockerOf[atkIid];
-      const blk = blkIid ? (findCreature(s, blkIid)?.card ?? null) : null;
+      const blk = blkIid && !died.has(blkIid) ? (findCreature(s, blkIid)?.card ?? null) : null;
 
       if (strikesIn(atk, step)) {
         const { toBlocker, toFace } = splitDamage(atk, blk, !!blkIid);
@@ -574,7 +588,7 @@ function resolveCombat(s: GameState): void {
         if (hasKeyword(blk, 'lifelink')) defender.life += power(blk);
       }
     }
-    checkDeaths(s); // lethal damage resolves between the steps (first strike), and before cleanup
+    for (const iid of checkDeaths(s)) died.add(iid); // lethal damage resolves between the steps (first strike), and before cleanup
     if (s.winner) break;
   }
   toEnd(s);
@@ -584,7 +598,18 @@ function resolveCombat(s: GameState): void {
 function toEnd(s: GameState): void {
   s.combat = null;
   for (const pid of ['A', 'B'] as PlayerId[]) {
-    for (const c of s.players[pid].battlefield) c.damage = 0;
+    const side = s.players[pid];
+    for (const c of side.battlefield) c.damage = 0;
+    // Unearth: at the end step the creature is exiled (it leaves quietly: no death, no triggers)
+    const gone = side.battlefield.filter((c) => c.unearthed);
+    if (gone.length) {
+      side.battlefield = side.battlefield.filter((c) => !c.unearthed);
+      for (const c of gone) {
+        c.unearthed = false; c.buffP = 0; c.buffT = 0; c.tempP = 0; c.tempT = 0; c.auraP = 0; c.auraT = 0; c.blitz = false; c.tapped = false; c.damage = 0;
+        (s.players[c.owner].exile ??= []).push(c);
+        s.log.push(`${getDef(c.def).name} is exiled`);
+      }
+    }
   }
   s.phase = 'end';
 }
@@ -679,7 +704,8 @@ function attackTriggers(s: GameState, attackers: string[]): void {
   }
 }
 
-function checkDeaths(s: GameState): void {
+/** Resolves lethal damage and sacrifices; returns the iids of everything that died this call (an Undying creature is in it even though it came back). */
+function checkDeaths(s: GameState): Set<string> {
   const gone = new Set<string>();
   // Dies triggers can change the board (a token appears), so deaths are processed in rounds until the
   // board is stable. The cap is a safety net: today's triggers cannot kill anything, so it never binds.
@@ -708,7 +734,11 @@ function checkDeaths(s: GameState): void {
         c.summoningSick = true;
         // A token that dies simply ceases to exist. It is not a card, so it must not
         // pad the graveyard (the count, the viewer and the result screen all read it).
-        if (!isToken(c.def)) s.players[c.owner].graveyard.push(c);
+        // An unearthed creature is exiled instead of going to the graveyard.
+        if (c.unearthed) {
+          c.unearthed = false;
+          (s.players[c.owner].exile ??= []).push(c);
+        } else if (!isToken(c.def)) s.players[c.owner].graveyard.push(c);
         s.log.push(`${getDef(c.def).name} dies`);
         const skill = getDef(c.def).static?.mark === 'blitz' ? getDef(c.def).skill : undefined;
         if (skill && !p.battlefield.some((x) => getDef(x.def).static?.mark === 'blitz')) s.log.push(`${skill} fades.`);
@@ -722,6 +752,21 @@ function checkDeaths(s: GameState): void {
       if (!trig) continue;
       s.log.push(`✦ ${getDef(c.def).name} — last breath`);
       applyEffect(s, c.owner, trig, { kind: 'player', player: opponentOf(c.owner) });
+    }
+    // Undying: a creature that died WITHOUT its counter comes back with a +1/+1 counter (once), after its dies trigger. It is a new arrival: summoning sick.
+    for (const c of fallen) {
+      const wasRevived = !!c.revived;
+      c.revived = false;
+      if (!hasKeyword(c, 'undying') || wasRevived || s.players[c.owner].exile?.some((x) => x.iid === c.iid)) continue;
+      const side = s.players[c.owner];
+      const gi = side.graveyard.findIndex((x) => x.iid === c.iid);
+      if (gi >= 0) side.graveyard.splice(gi, 1); // (a token never reached the graveyard)
+      c.revived = true;
+      c.buffP = 1;
+      c.buffT = 1;
+      c.summoningSick = true;
+      side.battlefield.push(c);
+      s.log.push(`${getDef(c.def).name} rises again (Undying)`);
     }
   }
   // Combat bookkeeping may only name creatures that are still in play. An instant cast
@@ -738,6 +783,7 @@ function checkDeaths(s: GameState): void {
   if (aDead && bDead) s.winner = 'draw';
   else if (aDead) s.winner = 'B';
   else if (bDead) s.winner = 'A';
+  return gone;
 }
 
 // re-export for convenience

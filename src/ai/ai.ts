@@ -83,6 +83,7 @@ const BAND = {
   ramp: 58,
   heal: 56, // only when genuinely low
   buff: 50,
+  unearth: 44, // a one-turn hasty attacker from the graveyard, with mana to spare after the casts
   ability: 45, // a utility creature's tap / mana ability (ping, heal, draw, token), after the casts that outrank it
   draw: 40,
   cycle: 3, // swap a card we cannot cast soon for a fresh one, when nothing better is left to do
@@ -131,6 +132,11 @@ function scoreAction(state: GameState, ai: PlayerId, a: Action): number {
     }
     case 'activate':
       return scoreActivate(state, ai, a.iid);
+    case 'unearth': {
+      // worth the mana for a body that hits hard; it is gone at the end of the turn, so a weak one is not
+      const card = state.players[ai].graveyard.find((c) => c.iid === a.iid);
+      return card && getDef(card.def).power! >= 2 ? score(BAND.unearth, getDef(card.def).power! * 10) : score(BAND.never);
+    }
     case 'advance':
       return score(BAND.advance);
     default:

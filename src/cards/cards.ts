@@ -162,9 +162,9 @@ export const CARDS: Record<string, CardDef> = {
     cost: 6,
     power: 7,
     toughness: 7,
-    keywords: ['trample'],
+    keywords: ['trample', 'undying'],
     cycling: 2,
-    text: 'Trample. Cycling 2 — pay 2, discard this card: draw a card.',
+    text: 'Trample. Undying. Cycling 2 — pay 2, discard this card: draw a card.',
     art: '/cards/ancient_treant.webp', // 520x285 WebP; other cards auto-wire to <id>.png
     flavor: 'Older than the kingdoms that fear it.',
   },
@@ -213,7 +213,8 @@ export const CARDS: Record<string, CardDef> = {
     power: 2,
     toughness: 2,
     keywords: ['haste'],
-    text: 'Haste.',
+    unearth: 2,
+    text: 'Haste. Unearth {2}.',
     art: '/cards/ronin_blade.webp', // 420x415 WebP; other cards auto-wire to <id>.png
     flavor: 'A masterless sword, restless even in the fray.',
   },

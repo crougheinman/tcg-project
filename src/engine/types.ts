@@ -23,6 +23,7 @@ export type Keyword =
   | 'bushido' // +1/+1 until end of turn when it blocks or becomes blocked
   | 'indestructible' // lethal damage and destroy effects do not kill it (only 0 toughness does)
   | 'battleCry' // when it attacks, each other attacking creature gets +1/+0 until end of turn
+  | 'undying' // when it dies without a +1/+1 counter, it returns to the battlefield with one (once: a returned creature that dies again stays dead)
   | 'hexproof' // its opponents' spells and abilities cannot target it (its controller's can)
   | 'exalted'; // when a creature its controller controls attacks alone, it gets +1/+1 until end of turn for each exalted creature
 
@@ -116,6 +117,7 @@ export interface CardDef {
   x?: boolean; // an X spell: its damage / heal / draw effect scales with the X chosen (amount * X) and X is paid on top of the cost
   kicker?: { cost: number; effect: Effect }; // optional extra cost; when paid, this untargeted effect resolves too
   modes?: Effect[]; // modal: choose one (the cast names its index); `effect` must equal modes[0]
+  unearth?: number; // creature: cost to return it from your graveyard to the battlefield with haste, in your main phase; it is exiled at the end step, or instead of dying
   ward?: number; // creature: spells your opponent casts that TARGET it cost this much more
   activated?: ActivatedAbility; // creature: an ability its controller can use in their main phase (pingers, mana creatures)
   static?: StaticAbility; // creature: a static ability (Beast Blitz, Lords, Threshold)
@@ -147,6 +149,8 @@ export interface CardInstance {
   tempT?: number;
   doomed?: boolean; // sacrificed: dies at the next death check even if indestructible
   // The bonus from static abilities (Beast Blitz, Lords, Threshold), recomputed from scratch after every action. Optional so older fixtures need nothing.
+  revived?: boolean; // returned by Undying: it carries its +1/+1 counter, so it cannot return again
+  unearthed?: boolean; // returned by Unearth: exiled at the end step, or instead of dying
   auraP?: number;
   auraT?: number;
 }
@@ -218,6 +222,7 @@ export type Action =
   | { type: 'resolveTrigger'; target: string } // choose the target of a pending enter effect (Whipflash), or the creature to sacrifice (Edict)
   | { type: 'activate'; iid: string } // use a creature's activated ability (its cost is paid, its effect resolves at once)
   | { type: 'scry'; bottom: boolean } // answer a pending Scry for the next card: put it on the bottom, or leave it on top
+  | { type: 'unearth'; iid: string } // Unearth: pay a graveyard creature's unearth cost; it returns with haste and is exiled at the end step
   | { type: 'cycle'; iid: string } // Cycling: pay the card's cycling cost, discard it from hand, draw a card
   | { type: 'keepHand' } // mulligan phase: keep this opening hand
   | { type: 'mulligan' } // mulligan phase: shuffle the hand back and draw one card fewer

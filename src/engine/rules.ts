@@ -352,6 +352,10 @@ export function legalActions(state: GameState, player: PlayerId): Action[] {
       const cost = getDef(c.def).cycling;
       if (cost !== undefined && cost <= mana) actions.push({ type: 'cycle', iid: c.iid });
     }
+    for (const c of p.graveyard) {
+      const cost = getDef(c.def).unearth;
+      if (cost !== undefined && getDef(c.def).type === 'creature' && cost <= mana) actions.push({ type: 'unearth', iid: c.iid });
+    }
     for (const c of p.battlefield) {
       if (isCreature(c) && getDef(c.def).activated && !activateError(state, p, c)) actions.push({ type: 'activate', iid: c.iid });
     }
@@ -515,6 +519,14 @@ export function validateAction(state: GameState, action: Action): void {
     }
     case 'scry': {
       if (state.pending?.kind !== 'scry') throw new Error('no Scry pending');
+      return;
+    }
+    case 'unearth': {
+      requirePhase(state, 'main1');
+      const c = active.graveyard.find((x) => x.iid === action.iid);
+      const cost = c ? getDef(c.def).unearth : undefined;
+      if (!c || cost === undefined || getDef(c.def).type !== 'creature') throw new Error('that card has no unearth');
+      if (cost > availableMana(active)) throw new Error('not enough mana');
       return;
     }
     case 'activate': {
