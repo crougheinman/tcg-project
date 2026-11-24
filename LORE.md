@@ -225,7 +225,7 @@ win without its creatures ever attacking.
 The school's most promising student and its most dangerous argument. Sorae can feel the record
 thinning when she casts. She has never been able to demonstrate this to anyone, and has stopped
 trying; she now simply casts more, faster, and the Pyre has quietly stopped asking her to explain.
-(*Prowess — every spell she casts makes her bolder for the rest of the turn.*)
+(*Prowess — every spell she casts makes her bolder for the rest of the turn. Threshold — when the Pyre's record of the fallen runs to seven, she stops flinching and burns brighter: +1/+1.*)
 
 **Her brother, Sael — see *Grave Tide*.**
 They trained together. They reached opposite conclusions about the same evidence. This is the
@@ -335,7 +335,7 @@ The mechanics are the theology. **Plague Priest** drains a life with every sorce
 spreading. **Grave Necromancer** raises a Zombie on *any* spell, instants included, because the
 dead do not care what kind of magic woke them — and *calls back* the last of the fallen when
 he arrives (*Grave Call*). **Plague Priest** reads your hand aloud and what he reads is gone
-(*Rot*). **Rotting Hulk** leaves a Zombie where it fell (*Last breath*). **Raise Horde** — which can be cast a second time from the grave, for a price (*Flashback*) — and the Zombie's own line — *"It
+(*Rot*). **Rotting Hulk** leaves a Zombie where it fell (*Last breath*), and while it stands the Zombies around it are bigger, as if the dead remember how to stand taller beside it (*your Zombies get +1/+1*). **Raise Horde** — which can be cast a second time from the grave, for a price (*Flashback*) — and the Zombie's own line — *"It
 rises again, and again, and again"* — are the creed stated plainly. **Soul Siphon** turns an
 enemy's last breath into your first. And **Grasp from the Grave** is the ground itself collecting:
 cold hands closing on the ankles of something that overcommitted.

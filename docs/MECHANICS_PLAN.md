@@ -11,8 +11,8 @@ grounded in the code as of `main` after the Beast Blitz / cast-spotlight work.
 - Combat is strictly **1 blocker per attacker**, validated by `blockError` / `canBlock`
   (`src/engine/rules.ts`), shared by the validator, the block-planning UI and the tests.
 - Combat damage is one simultaneous pass in `resolveCombat` (`src/engine/reducer.ts`).
-- Non-data card mechanics are hardcoded in the reducer: Beast Blitz (`BLITZ_TARGETS`, `recomputeAura`),
-  Thornwood Brute's Whipflash (a `pending` choice), `spellTrigger` creatures (Pyre Adept...).
+- Non-data card mechanics were hardcoded in the reducer (Beast Blitz's `BLITZ_TARGETS` / `recomputeAura`, now data: Part 4d);
+  Thornwood Brute's Whipflash (a `pending` choice) and `spellTrigger` creatures (Pyre Adept...) are the rest.
 - `SKILL_CREATURES` in `src/ui/fxTiming.ts` lists the creatures that get the cast spotlight.
 
 ## 2. Hard constraints (apply to every mechanic below)
@@ -104,8 +104,7 @@ Done: data-driven `onEnter` (Whipflash migrated; `resolveTrigger` replaces `whip
 `onDeath` (active player first; tokens trigger, as decided), prowess (`tempP`/`tempT`, expires as the next turn begins)
 and flash creatures (attack step and block step; AI holds and ambushes). Cards, tuned with the win-rate sim (all decks
 46.8%-55.5% at N=80): Rotting Hulk raises a Zombie when it dies (the plan's Shambling Ghoul took Gravetide to 58.9%),
-Pyre Adept has prowess, Bulwark has flash. Not done: Kunoichi's Beast Blitz aura is still the hardcoded `BLITZ_TARGETS`
-(a static effect, not an enter trigger); no keyword badges on board cards; no full 56-match browser pass (skipped on
+Pyre Adept has prowess, Bulwark has flash. Beast Blitz was still the hardcoded `BLITZ_TARGETS` then (data since Part 4d); no keyword badges on board cards; no full 56-match browser pass (skipped on
 request: fuzz 22,400 games, 36 scenarios and the 8-match smoke batch are clean).
 
 Original scope, kept for reference:
@@ -204,7 +203,7 @@ visible keywords first and the two engine keystones (statics, activated abilitie
 | 4a | **Combat keywords II**: Skulk (cannot be blocked by a creature with greater power), Bushido (+1/+1 when it blocks or is blocked), Indestructible | S | **done** (see below) |
 | 4b | **More triggers**: Landfall, Morbid / spells-this-turn conditions, attack triggers (Battle cry, Exalted, "whenever it attacks") | M | **done** (see below) |
 | 4c | **Spells**: Bounce, Edict (opponent sacrifices a creature of their choice), Rally (team buff), Cycling | S-M | **done** (see below) |
-| 4d | **Data-driven static abilities**: Beast Blitz moves onto data; Lords ("other Wolves +1/+1"); Threshold ("7+ cards in your graveyard") | M | planned |
+| 4d | **Data-driven static abilities**: Beast Blitz moves onto data; Lords ("other Wolves +1/+1"); Threshold ("7+ cards in your graveyard") | M | **done** (see below) |
 | 4e | **Activated abilities** (`{T}: ...`): mana creatures, pingers, a Treasure token | M-L | planned |
 | 4f | **Choices**: Scry, Loot, Modal ("choose one"), X spells, Kicker / Buyback, Fight / bite, Hexproof / Ward | M | planned |
 | 4g | **Graveyard**: Undying, Unearth | M | planned |
@@ -260,3 +259,22 @@ Cards (all decks 45.7%-54.6% at N=80, 46.5%-55.5% at N=120): **Carrion Colossus*
 Drake that bounces on entering (Skyward 57.5%, Pyromancer 43.8%, Wildblitz 44.8%) and a Dread Maw with Cycling (Pyromancer 42.7%, Wildwood 57.3%). Bounce and Rally as SPELLS wait for art:
 `card-art.md` has prompts for **Windrush**, **War Drums** and **Grave Toll**; once the art exists they become real cards after a win-rate check.
 
+
+### Part 4d: done
+
+Static abilities are data: `CardDef.static` (a `StaticAbility`: `affects` = `ids` / `others` / `self`, `power`, `toughness`, optional `when: 'threshold'` (7 or more cards in the
+controller's OWN graveyard), optional `unique` (several copies do not stack: Beast Blitz) and `mark: 'blitz'` (the lightning and the "Beast Blitz activated" announcement)). Every creature's
+bonus lives in two new instance fields, `auraP` / `auraT`, which `power()` / `toughness()` add and the engine REBUILDS FROM SCRATCH after every action (`staticBonus` in `rules.ts`,
+`recomputeStatics` and `settle` in `reducer.ts`), instead of the old add-and-remove bookkeeping: idempotent, so any number of statics stack and none can leak. `settle` recomputes first
+(so a creature a static is keeping alive is not judged without it), then alternates death checks and recomputes until nothing moves: a lord dying takes its bonus away, which can kill the
+creature it was keeping alive; a death trigger can make a creature a static lifts. The `blitz` flag stays as a derived display flag, `BLITZ_BEASTS` is read from Kunoichi's static, and
+"Beast Blitz fades." is now logged from the card's `skill`. Aura fields are cleared when a creature dies or is bounced. The board's buff crown shows for aura bonuses too.
+Verified without changing behaviour: a step-by-step differential trace of 56,000 AI-vs-AI steps (old engine vs new) came out identical after `unique` was added (it found that two Kunoichi
+would otherwise have stacked).
+
+Tested (`statics.test.ts`, 13 tests, each rule mutation-checked: Threshold ignored, `others` including itself, no stacking, no settle loop, no initial recompute); the fuzz oracle works out the
+expected bonus of every creature on its own (own loop, own threshold literal 7, own `unique` handling) after every action (`AURA_WRONG`), and the stress mode sprinkles lords, self-buffs and
+Threshold statics over random creatures (breaking Threshold to 6 or letting `others` include itself makes it report thousands of findings).
+
+Cards (all decks 45.0%-54.6% at N=80, 46.7%-55.4% at N=120): **Pyre Adept** Threshold (+1/+1; Pyromancer 46.1% -> 48.2%; +2/+2 made it 50.7% but pushed Wildblitz to 44.5%) and **Rotting Hulk**
+"your Zombies get +1/+1" (a tiny effect: Gravetide +0.3). Not used: a Kensei Duelist Ashigaru lord (her text and flavour are Hana's alone).

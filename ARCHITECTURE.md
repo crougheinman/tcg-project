@@ -132,9 +132,9 @@ Key subtleties:
 before cloning, then `structuredClone`s and switches on action type. Combat resolves inside
 `declareBlockers` → `resolveCombat` (`reducer.ts:277`), which skips dead attackers with
 `findCreature(...)?.card; if (!atk) continue` (`reducer.ts:289`). `checkDeaths` (`reducer.ts:333`)
-is the state-based-action engine: damage ≥ toughness dies, life ≤ 0 sets the winner. The `blitz`
-flag separates the Beast Blitz aura from permanent buffs (`recomputeAura`, `reducer.ts:133`) so a
-Wild-Growth-style buff survives when the aura ends. Types live in `types.ts` (the `Action` union
+is the state-based-action engine: damage ≥ toughness dies, life ≤ 0 sets the winner. Static
+bonuses (Beast Blitz, Lords, Threshold) live in `auraP` / `auraT`, rebuilt from scratch after every action (`recomputeStatics` / `settle`, see (o)),
+so a Wild-Growth-style permanent buff is untouched when an aura ends. Types live in `types.ts` (the `Action` union
 is at `types.ts:107`).
 
 **AI — `src/ai/ai.ts`.** A stateless, greedy, no-look-ahead heuristic returning one `Action` per
@@ -523,8 +523,8 @@ on `state.pending` (`kind: 'enter'`, with the creature's card, and its **control
 resolved by the `resolveTrigger` action (formerly `whipflash`). Everything else resolves at once (damage aimed at the
 player goes to the opponent without asking). `needsCreatureChoice` (types.ts) is the one definition of "needs a
 pick", and a test fixes what card data may use it. `CardDef.skill` names a skill that fires on entering and drives the
-cast spotlight, so `SKILL_CREATURES` is derived from the data instead of a hand-kept list. (Beast Blitz itself is
-still the hardcoded `BLITZ_TARGETS` aura: it is a static effect, not an enter trigger.)
+cast spotlight, so `SKILL_CREATURES` is derived from the data instead of a hand-kept list. (Beast Blitz was a hardcoded aura at that point;
+it is a data-driven static ability since Phase 4d, see (o).)
 
 `CardDef.onDeath` runs from `checkDeaths`: deaths resolve in rounds (a trigger may change the board), simultaneous
 deaths go **active player first, then the other player, each in battlefield order**, and **tokens trigger too** (they
@@ -599,6 +599,15 @@ a pick like Whipflash) and removes the creature from combat the way a death does
 died-this-turn counter). **Rally** is an untargeted `tempP`/`tempT` effect, so triggers can use it as well as spells. **Cycling** is a `cycle` action (main phase, `CardDef.cycling`), kept out of
 the cast path on purpose: no spell trigger, no prowess, no spell count, and a log line that does not say "discards". The sim kept an Edict Colossus, a cycling Treant and a rallying Shogun and
 rejected a bouncing Storm Drake and a cycling Dread Maw (burn decks cannot answer a tempo creature that also replays itself): the spell versions of Bounce and Rally wait for new card art.
+
+### (o) Static abilities as data (Phase 4d)
+The old Beast Blitz was an incremental aura: `recomputeAura` added +1/+1 to `buffP`/`buffT` when Kunoichi arrived and subtracted it when she left, with a `blitz` flag as the memory. That works for
+one aura and fails for several (two lords, a Threshold that flips with the graveyard, a lord that is itself buffed). The replacement keeps no memory: `staticBonus(player, creature)` (pure, in `rules.ts`) sums
+every static on the battlefield that applies to the creature, and `recomputeStatics` writes the result to `auraP`/`auraT` (and the derived `blitz` display flag) after each action. The one subtle part
+is the loop in `settle`: statics and deaths feed each other (a lord that dies can take the toughness that kept a neighbour alive), so it recomputes, checks deaths, and recomputes again until stable.
+Recomputing BEFORE the first death check matters: a creature kept alive by a static must not be judged without it (the fuzz stress mode and a unit test both cover it). `unique` exists because the
+old behaviour (a second Kunoichi adds nothing) is a design choice we kept: the differential trace between the old and new engines found the difference at once. Lords, by contrast, stack.
+The fuzz oracle recomputes the expected aura itself, from card data only, and compares after every action.
 
 ## 8. Run it
 
