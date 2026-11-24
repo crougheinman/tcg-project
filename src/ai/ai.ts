@@ -3,7 +3,9 @@ import type { Action, CardInstance, GameState, PlayerId } from '../engine/types'
 import { opponentOf } from '../engine/types';
 import { MAX_MULLIGANS } from '../engine/state';
 import {
+  activateError,
   actorOf,
+  availableMana,
   canAttack,
   canBlock,
   duel,
@@ -70,12 +72,14 @@ const BAND = {
   edict: 77, // the opponent sacrifices: strongest against a thin board, where they cannot give up their worst
   tapAll: 76, // Topple, when it actually catches something
   bounce: 74, // tempo removal on their best creature
+  manaAbility: 72, // a mana creature, when its mana lets us cast something we otherwise could not
   creature: 70, // biggest body we can afford
   rally: 62, // a team pump, worth it when two or more creatures can attack
   token: 60,
   ramp: 58,
   heal: 56, // only when genuinely low
   buff: 50,
+  ability: 45, // a utility creature's tap / mana ability (ping, heal, draw, token), after the casts that outrank it
   draw: 40,
   cycle: 3, // swap a card we cannot cast soon for a fresh one, when nothing better is left to do
   advance: 0, // the floor: do nothing else
@@ -121,11 +125,42 @@ function scoreAction(state: GameState, ai: PlayerId, a: Action): number {
       const reach = me.battlefield.filter(isLand).length + (me.hand.some(isLand) ? 1 : 0);
       return getDef(card.def).cost > reach ? score(BAND.cycle, getDef(card.def).cost) : score(BAND.never);
     }
+    case 'activate':
+      return scoreActivate(state, ai, a.iid);
     case 'advance':
       return score(BAND.advance);
     default:
       return score(BAND.never);
   }
+}
+
+/**
+ * Activated abilities. A mana creature is used only when its mana (with the other mana creatures that can still tap) lets us cast a card we
+ * could not afford. Anything else with a tap cost is used only by a creature we would not attack with anyway (a 1-power body or a defender):
+ * tapping it also takes it out of the next blocking step, so a real fighter keeps its job.
+ */
+function scoreActivate(state: GameState, ai: PlayerId, iid: string): number {
+  const me = state.players[ai];
+  const c = me.battlefield.find((x) => x.iid === iid);
+  const ab = c ? getDef(c.def).activated : undefined;
+  if (!c || !ab) return score(BAND.never);
+  const eff = ab.effect;
+  if (eff.type === 'mana') {
+    const have = availableMana(me);
+    const extra = me.battlefield.reduce((n, x) => {
+      const e = getDef(x.def).activated;
+      return n + (e && e.effect.type === 'mana' && !activateError(state, me, x) ? e.effect.amount : 0);
+    }, 0);
+    const wanted = me.hand.some((h) => {
+      const d = getDef(h.def);
+      return (d.type === 'creature' || d.type === 'sorcery' || d.type === 'instant') && d.cost > have && d.cost <= have + extra;
+    });
+    return wanted ? score(BAND.manaAbility) : score(BAND.never);
+  }
+  if (ab.cost.tap && !(power(c) <= 1 || hasKeyword(c, 'defender'))) return score(BAND.never); // a real attacker attacks
+  if (eff.type === 'heal') return me.life <= 20 - eff.amount ? score(BAND.ability) : score(BAND.never);
+  if (eff.type === 'damage' || eff.type === 'draw' || eff.type === 'token') return score(BAND.ability);
+  return score(BAND.never);
 }
 
 function scoreSpell(
