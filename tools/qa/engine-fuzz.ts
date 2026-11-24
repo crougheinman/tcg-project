@@ -84,6 +84,15 @@ function updateTrack(t: Track, before: GameState, a: Action, after: GameState): 
   for (const c of creatures(before)) if (!stillThere.has(c.iid) && !lv.bounced.has(c.iid)) t.died = true;
 }
 
+/** Mana a player can spend right now: untapped lands plus floating mana (re-derived here, not the engine's helper). */
+const manaOf = (st: GameState, pid: PlayerId) => st.players[pid].battlefield.filter((c) => getDef(c.def).type === 'land' && !c.tapped).length + (st.players[pid].pool ?? 0);
+
+/** Mana SPENT by a player in a transition: lands newly tapped plus floating mana used. (Not manaOf: a ramp spell puts new untapped lands in play.) */
+const spentMana = (b: GameState, a: GameState, pid: PlayerId) => {
+  const tapped = (st: GameState) => st.players[pid].battlefield.filter((c) => c.tapped && getDef(c.def).type === 'land').length;
+  return tapped(a) - tapped(b) + ((b.players[pid].pool ?? 0) - (a.players[pid].pool ?? 0));
+};
+
 function expectedLife(before: GameState, a: Action, t: Track): Record<PlayerId, number> {
   const life = { A: before.players.A.life, B: before.players.B.life };
   const caster = before.phase === 'combat_block' ? opponentOf(before.active) : before.active;
@@ -102,6 +111,7 @@ function expectedLife(before: GameState, a: Action, t: Track): Record<PlayerId, 
     for (const cr of before.players[who].battlefield) if (isCreature(cr)) for (let i = 0; i < lands; i++) eff(getDef(cr.def).landTrigger, who);
   };
   if (a.type === 'playLand') landfalls(before.active, 1);
+  if (a.type === 'activate') eff(getDef(before.players[before.active].battlefield.find((c) => c.iid === a.iid)!.def).activated!.effect, before.active);
   if (a.type === 'castCreature') bonus(getDef(before.players[actorOf(before)].hand.find((c) => c.iid === a.iid)!.def), actorOf(before));
   if (a.type === 'declareAttackers') for (const iid of a.attackers) eff(getDef(before.players[before.active].battlefield.find((c) => c.iid === iid)!.def).onAttack, before.active);
   if (a.type === 'castSorcery') {
@@ -320,8 +330,7 @@ function check(
       const fb = getDef(fromGrave.def).flashback;
       if (fb === undefined) R('FLASHBACK_WITHOUT_KEYWORD', `${fromGrave.def} was cast from the graveyard`);
       else {
-        const tapped = (st: GameState) => st.players[casterId].battlefield.filter((c) => c.tapped && getDef(c.def).type === 'land').length;
-        if (tapped(after) - tapped(before) !== fb) R('FLASHBACK_COST', `${fromGrave.def}: paid ${tapped(after) - tapped(before)}, flashback costs ${fb}`);
+        if (spentMana(before, after, casterId) !== fb) R('FLASHBACK_COST', `${fromGrave.def}: paid ${spentMana(before, after, casterId)}, flashback costs ${fb}`);
         if (!(after.players[casterId].exile ?? []).some((x) => x.iid === a.iid)) R('FLASHBACK_NOT_EXILED', `${fromGrave.def} is not in exile`);
         if (after.players[casterId].graveyard.some((x) => x.iid === a.iid)) R('FLASHBACK_BACK_IN_GRAVEYARD', `${fromGrave.def} returned to the graveyard`);
       }
@@ -349,14 +358,37 @@ function check(
     const who = before.active;
     const was = before.players[who].hand.find((c) => c.iid === a.iid)!;
     const cost = getDef(was.def).cycling!;
-    const tappedLands = (st: GameState) => st.players[who].battlefield.filter((c) => c.tapped && getDef(c.def).type === 'land').length;
     if (after.players[who].hand.some((c) => c.iid === a.iid)) R('CYCLE_STILL_IN_HAND', `${was.def} is still in hand`);
     if (!after.players[who].graveyard.some((c) => c.iid === a.iid)) R('CYCLE_NOT_IN_GRAVEYARD', `${was.def} is not in the graveyard`);
-    if (tappedLands(after) - tappedLands(before) !== cost) R('CYCLE_COST', `${was.def}: paid ${tappedLands(after) - tappedLands(before)}, cycling costs ${cost}`);
+    if (spentMana(before, after, who) !== cost) R('CYCLE_COST', `${was.def}: paid ${spentMana(before, after, who)}, cycling costs ${cost}`);
     if (!after.winner && after.players[who].hand.length !== before.players[who].hand.length) R('CYCLE_HAND_SIZE', `hand ${before.players[who].hand.length} -> ${after.players[who].hand.length}: one card out, one drawn`);
     if (!after.winner && after.players[who].library.length !== before.players[who].library.length - 1) R('CYCLE_NO_DRAW', 'the library did not shrink by exactly one');
     if ((after.spellsThisTurn?.[who] ?? 0) !== (before.spellsThisTurn?.[who] ?? 0)) R('CYCLE_COUNTED_AS_SPELL', 'cycling is not a cast');
     if (after.players.A.life !== before.players.A.life || after.players.B.life !== before.players.B.life) R('CYCLE_CHANGED_LIFE', 'cycling changed a life total');
+  }
+  // 3d. Part 4e: activated abilities, from the rule text: the cost is paid (tap, mana), the effect resolves, and it is not a cast
+  if (a.type === 'activate') {
+    const who = before.active;
+    const was = before.players[who].battlefield.find((c) => c.iid === a.iid)!;
+    const ab = getDef(was.def).activated!;
+    const now = after.players[who].battlefield.find((c) => c.iid === a.iid);
+    if (ab.cost.tap && (was.tapped || was.summoningSick)) R('ACTIVATE_ILLEGAL_TAP', `${was.def} used a tap ability while tapped=${was.tapped} sick=${was.summoningSick}`);
+    if (ab.cost.tap && !now?.tapped) R('ACTIVATE_NOT_TAPPED', `${was.def} used a tap ability and is not tapped`);
+    const gain = ab.effect.type === 'mana' ? ab.effect.amount : 0;
+    if (manaOf(after, who) !== manaOf(before, who) - (ab.cost.mana ?? 0) + gain) R('ACTIVATE_MANA', `${was.def}: mana ${manaOf(before, who)} -> ${manaOf(after, who)}, cost ${ab.cost.mana ?? 0}, adds ${gain}`);
+    if ((after.spellsThisTurn?.[who] ?? 0) !== (before.spellsThisTurn?.[who] ?? 0)) R('ACTIVATE_COUNTED_AS_SPELL', 'an ability is not a cast');
+    if (ab.effect.type === 'draw' && !after.winner && after.players[who].hand.length !== before.players[who].hand.length + ab.effect.amount) R('ACTIVATE_DRAW', `${was.def}: hand ${before.players[who].hand.length} -> ${after.players[who].hand.length}`);
+    if (ab.effect.type === 'token') {
+      const tok = ab.effect.token;
+      const nowN = after.players[who].battlefield.filter((c) => c.def === tok).length, wasN = before.players[who].battlefield.filter((c) => c.def === tok).length;
+      if (nowN !== wasN + ab.effect.count) R('ACTIVATE_TOKENS', `${was.def}: ${tok} ${wasN} -> ${nowN}, expected +${ab.effect.count}`);
+    }
+  }
+  // floating mana: never negative, and gone whenever the phase has changed
+  for (const pid of ['A', 'B'] as PlayerId[]) {
+    const pool = after.players[pid].pool ?? 0;
+    if (pool < 0) R('POOL_NEGATIVE', `${pid} pool ${pool}`);
+    if (before.phase !== after.phase && pool !== 0) R('POOL_NOT_EMPTIED', `${pid} still has ${pool} floating mana after ${before.phase} -> ${after.phase}`);
   }
   for (const iid of leavers(before, a).bounced) {
     const was = all(before).find((c) => c.iid === iid);
@@ -537,13 +569,13 @@ const t0 = Date.now();
 // the shipped cards happen to carry). Keywords are restored after each game.
 const STRESS_KW = ['reach', 'vigilance', 'firstStrike', 'doubleStrike', 'trample', 'deathtouch', 'lifelink', 'flash', 'prowess', 'skulk', 'bushido', 'indestructible', 'battleCry', 'exalted'] as const;
 type CardDefDeath = (typeof CARDS)[string]['onDeath'];
-type Sprinkled = { kw: string[] | undefined; death: CardDefDeath; enter: CardDefDeath; land: CardDefDeath; attack: CardDefDeath; bonus: (typeof CARDS)[string]['bonus']; cycling: number | undefined; static: (typeof CARDS)[string]['static'] };
+type Sprinkled = { kw: string[] | undefined; death: CardDefDeath; enter: CardDefDeath; land: CardDefDeath; attack: CardDefDeath; bonus: (typeof CARDS)[string]['bonus']; cycling: number | undefined; static: (typeof CARDS)[string]['static']; activated: (typeof CARDS)[string]['activated'] };
 function sprinkleKeywords(r: () => number): () => void {
   const saved = new Map<string, Sprinkled>();
   const flashed: string[] = [];
   for (const def of Object.values(CARDS)) {
     if (def.type !== 'creature') continue;
-    saved.set(def.id, { kw: def.keywords as string[] | undefined, death: def.onDeath, enter: def.onEnter, land: def.landTrigger, attack: def.onAttack, bonus: def.bonus, cycling: def.cycling, static: def.static });
+    saved.set(def.id, { kw: def.keywords as string[] | undefined, death: def.onDeath, enter: def.onEnter, land: def.landTrigger, attack: def.onAttack, bonus: def.bonus, cycling: def.cycling, static: def.static, activated: def.activated });
     const extra = STRESS_KW.filter(() => r() < 0.25);
     if (extra.length) def.keywords = [...(def.keywords ?? []), ...extra];
     // some creatures raise a token when they die (tokens included, so triggers can chain through them)
@@ -562,6 +594,14 @@ function sprinkleKeywords(r: () => number): () => void {
       const roll = r();
       const affects = roll < 0.4 ? { others: true } : roll < 0.7 ? { self: true } : { ids: ['wolf_token', 'zombie_token', 'ashigaru'] };
       def.static = { affects, power: r() < 0.5 ? 1 : 0, toughness: r() < 0.5 ? 1 : 0, ...(r() < 0.4 ? { when: 'threshold' as const } : {}) };
+    }
+    // Phase 4e activated abilities: mana, pings, healing, a card, a token (some need mana too)
+    if (!def.activated && r() < 0.18) {
+      const roll = r();
+      const eff = roll < 0.3 ? { type: 'mana' as const, amount: 1 } : roll < 0.5 ? { type: 'damage' as const, amount: 1, targets: 'player' as const } : roll < 0.65 ? { type: 'heal' as const, amount: 1 } : roll < 0.85 ? { type: 'draw' as const, amount: 1 } : { type: 'token' as const, token: 'zombie_token', count: 1 };
+      const cost: { tap?: boolean; mana?: number } = { ...(r() < 0.85 ? { tap: true } : {}), ...(eff.type !== 'mana' && r() < 0.4 ? { mana: 1 + Math.floor(r() * 2) } : {}) };
+      if (!cost.tap && (!cost.mana || eff.type === 'mana')) cost.tap = true; // an ability always costs something, or it could be used without limit
+      def.activated = { cost, effect: eff };
     }
     // Cycling on some creatures
     if (def.cycling === undefined && r() < 0.15) def.cycling = 1 + Math.floor(r() * 2);
@@ -593,7 +633,7 @@ function sprinkleKeywords(r: () => number): () => void {
       flashed.push(def.id);
     }
   }
-  return () => { for (const [id, v] of saved) { CARDS[id].keywords = v.kw as never; CARDS[id].onDeath = v.death; CARDS[id].onEnter = v.enter; CARDS[id].landTrigger = v.land; CARDS[id].onAttack = v.attack; CARDS[id].bonus = v.bonus; CARDS[id].cycling = v.cycling; CARDS[id].static = v.static; } for (const [id, b] of spellBonus) CARDS[id].bonus = b as never; for (const [id, e] of spellEffect) CARDS[id].effect = e; for (const [id, c] of spellCycling) CARDS[id].cycling = c; for (const id of flashed) delete CARDS[id].flashback; };
+  return () => { for (const [id, v] of saved) { CARDS[id].keywords = v.kw as never; CARDS[id].onDeath = v.death; CARDS[id].onEnter = v.enter; CARDS[id].landTrigger = v.land; CARDS[id].onAttack = v.attack; CARDS[id].bonus = v.bonus; CARDS[id].cycling = v.cycling; CARDS[id].static = v.static; CARDS[id].activated = v.activated; } for (const [id, b] of spellBonus) CARDS[id].bonus = b as never; for (const [id, e] of spellEffect) CARDS[id].effect = e; for (const [id, c] of spellCycling) CARDS[id].cycling = c; for (const id of flashed) delete CARDS[id].flashback; };
 }
 
 for (const policyName of ['ai', 'chaos', 'ai+kw', 'chaos+kw'] as const) {
