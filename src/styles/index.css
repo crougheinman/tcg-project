@@ -2403,6 +2403,14 @@ button.count-chip:hover:not(:disabled) { color: var(--vs-ink); background: var(-
 }
 .zone-flash:hover { background: #8cf1ff; }
 
+/* Scry prompt: one card and the two places it can go */
+.scry-modal { width: min(420px, 94vw); }
+.scry-body { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 18px 18px 22px; }
+.scry-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+.scry-actions .zone-flash { margin-top: 0; padding: 9px 16px; font-size: 16px; min-height: 44px; }
+.scry-bottom { background: var(--vs-yellow, #ffd24a); box-shadow: 0 0 14px rgba(255, 210, 74, 0.45); }
+.scry-bottom:hover { background: #ffe58a; }
+
 /* ---- Combat death: crack (0.3s) -> pulverize (0.2s). See ShatterFx.tsx ---- */
 .crackfx { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
 .dustfx { position: fixed; z-index: 71; pointer-events: none; }

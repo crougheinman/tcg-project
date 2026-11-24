@@ -4,7 +4,7 @@ import { DEATH_CRACK_MS, DEATH_DUST_MS } from './fxTiming';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { getDef } from '../cards/cards';
-import { activateError, actorOf, availableMana, canAttack, canBlock, hasKeyword, isCreature, isLand } from '../engine/rules';
+import { activateError, actorOf, availableMana, canAttack, canBlock, canTargetCreature, hasKeyword, isCreature, isLand } from '../engine/rules';
 import type { Action, CardInstance, GameState, PlayerId } from '../engine/types';
 import { needsTarget, opponentOf } from '../engine/types';
 import { CardView } from './CardView';
@@ -15,6 +15,7 @@ import { HoverCtx } from './hover';
 import { PhaseBar } from './PhaseBar';
 import { Rulebook } from './Rulebook';
 import { ZoneViewer } from './ZoneViewer';
+import { ScryPrompt } from './ScryPrompt';
 import { BoardFx } from './BoardFx';
 import { CastSpotlight } from './CastSpotlight';
 import { warmIaijutsuClip } from './cinematics';
@@ -483,8 +484,14 @@ export function Board() {
     if (!sorceryIid) return false;
     const card = me.hand.find((h) => h.iid === sorceryIid);
     const eff = card ? getDef(card.def).effect : undefined;
+    if (!canTargetCreature(localId, c, controllerOf(c.iid))) return false; // hexproof: not by the opponent's spells
     if (eff?.type === 'destroy') return c.tapped; // Take Counter: tapped only
+    if (eff?.type === 'bite') return controllerOf(c.iid) !== localId; // a bite needs an opposing creature
     return true; // damage / buff: any creature
+  }
+  // which side a creature on the battlefield belongs to
+  function controllerOf(iid: string): PlayerId {
+    return me.battlefield.some((x) => x.iid === iid) ? localId : opponentOf(localId);
   }
 
   // Is this hand card playable right now (turn, phase, mana, land-drop, targets)?
@@ -547,7 +554,13 @@ export function Board() {
     return r.left + r.width / 2 < window.innerWidth / 2 ? 'right' : 'left';
   }
 
+  // Loot: a card of mine must go; any card in my hand will do
+  const lootPick = game.pending?.kind === 'discard' && myTurnToAct;
   function handHclick(c: CardInstance) {
+    if (lootPick) {
+      if (!cardsLocked) dispatch({ type: 'resolveTrigger', target: c.iid });
+      return;
+    }
     if (cycleMode) {
       // the next card you tap is cycled (if it can be); either way the mode ends
       if (!cardsLocked && canCycle(c)) act({ type: 'cycle', iid: c.iid });
@@ -573,7 +586,8 @@ export function Board() {
     }
     // Resolving a pending Whipflash takes priority.
     if (game.pending?.kind === 'enter' && myTurnToAct) {
-      if (c.iid !== game.pending.source) dispatch({ type: 'resolveTrigger', target: c.iid });
+      if (c.iid !== game.pending.source && canTargetCreature(localId, c, side)) dispatch({ type: 'resolveTrigger', target: c.iid });
+      else if (c.iid !== game.pending.source) setAnnounce({ id: announceId.current++, text: '⚠ That creature has hexproof', ms: 2000 });
       return;
     }
     // Ability mode: the next creature of mine that can use its ability does; either way the mode ends
@@ -721,7 +735,7 @@ export function Board() {
                   selected={attackers.has(c.iid) || pendingBlocker === c.iid || !!blocks[c.iid]}
                   targetable={
                     sorceryTargetable(c) ||
-                    (game.pending?.kind === 'enter' && c.iid !== game.pending.source) ||
+                    (game.pending?.kind === 'enter' && c.iid !== game.pending.source && canTargetCreature(localId, c, side)) ||
                     (game.pending?.kind === 'sacrifice' && myTurnToAct && side === localId) ||
                     (abilityMode && side === localId && canActivate(c))
                   }
@@ -844,6 +858,24 @@ export function Board() {
         </div>
       ) : (
         <div className="waiting">Opponent resolving {triggerName}…</div>
+      );
+    }
+    if (game.pending?.kind === 'scry') {
+      return myTurnToAct ? (
+        <div className="actions">
+          <span className="prompt">✦ Scry — keep the top card or put it on the bottom</span>
+        </div>
+      ) : (
+        <div className="waiting">Opponent is scrying…</div>
+      );
+    }
+    if (game.pending?.kind === 'discard') {
+      return myTurnToAct ? (
+        <div className="actions">
+          <span className="prompt">✦ Loot — tap a card in your hand to discard</span>
+        </div>
+      ) : (
+        <div className="waiting">Opponent is looting…</div>
       );
     }
     if (!myTurnToAct) {
@@ -1077,8 +1109,8 @@ export function Board() {
                       key={c.iid}
                       inst={c}
                       onClick={() => handHclick(c)}
-                      dim={cardsLocked || (cycleMode ? !canCycle(c) : !canPlay(c))}
-                      greenGlow={(cycleMode && canCycle(c)) || (game.phase === 'combat_block' && (getDef(c.def).type === 'instant' || hasKeyword(c, 'flash')) && canPlay(c))}
+                      dim={cardsLocked || (lootPick ? false : cycleMode ? !canCycle(c) : !canPlay(c))}
+                      greenGlow={lootPick || (cycleMode && canCycle(c)) || (game.phase === 'combat_block' && (getDef(c.def).type === 'instant' || hasKeyword(c, 'flash')) && canPlay(c))}
                       draggable={!cardsLocked && canPlay(c) && getDef(c.def).type !== 'sorcery' && getDef(c.def).type !== 'instant'}
                       onDragChange={setDragActive}
                       onDrop={(point) => dropPlay(c, point)}
@@ -1163,6 +1195,16 @@ export function Board() {
             />
           )}
         </AnimatePresence>
+
+        {game.pending?.kind === 'scry' && myTurnToAct && me.library[game.pending.seen ?? 0] && (
+          <ScryPrompt
+            card={me.library[game.pending.seen ?? 0]}
+            index={(game.pending.seen ?? 0)}
+            total={(game.pending.seen ?? 0) + (game.pending.left ?? 1)}
+            onKeep={() => dispatch({ type: 'scry', bottom: false })}
+            onBottom={() => dispatch({ type: 'scry', bottom: true })}
+          />
+        )}
 
         {/* Guided-mode coach bubble (one at a time, anchored to the relevant UI) */}
         <AnimatePresence>
