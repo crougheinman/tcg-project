@@ -206,7 +206,7 @@ visible keywords first and the two engine keystones (statics, activated abilitie
 | 4d | **Data-driven static abilities**: Beast Blitz moves onto data; Lords ("other Wolves +1/+1"); Threshold ("7+ cards in your graveyard") | M | **done** (see below) |
 | 4e | **Activated abilities** (`{T}: ...`): mana creatures, pingers, a Treasure token | M-L | **done** (see below; targeted abilities and a Treasure token wait) |
 | 4f | **Choices I**: Scry, Loot, Fight / bite, Hexproof | M | **done** (see below) |
-| 4f2 | **Choices II**: Modal ("choose one"), X spells, Kicker / Buyback, Ward (these need extra fields on the cast action and a UI to fill them) | M | planned |
+| 4f2 | **Choices II**: Modal ("choose one"), X spells, Kicker, Ward (extra fields on the cast action and a UI to fill them; Buyback not done) | M | **done** (see below) |
 | 4g | **Graveyard**: Undying, Unearth | M | planned |
 | 4h | **Showpiece**: Ninjutsu for Kunoichi / Hana (a short window between blocks and damage), later Equipment | L | planned |
 
@@ -315,3 +315,17 @@ bite damage independently, and stress-sprinkles scry, loot, bite and hexproof (e
 Cards (all decks 46.5%-55.6% at N=120, 46.6%-55.4% at N=80): **Sky Talon** "when it enters, scry 1", **Shambling Ghoul** "when it enters, draw a card, then discard a card" (Gravetide 53.2% -> 55.4%), **Storm Drake**
 Hexproof (Pyromancer 50.9% -> 46.8%: burn no longer answers it). Rejected: a hexproof Kunoichi (Wildblitz +5.5 points but Skyward 44.6%, Stonewall 45.0% against the burn decks). Bite waits for art: `card-art.md` has a
 prompt for **Savage Bite**; once it exists the sim decides its numbers. Not done: Ward, and Modal / X / Kicker (4f2).
+
+### Part 4f2: done (Modal, X, Kicker, Ward)
+
+All four are cast options, so they share one seam in `rules.ts`: `spellEffect(def, { x, mode })` (the chosen mode of a modal spell, with X applied to a damage / heal / draw amount) and `castCost(state, caster, def, { x, kicked, target }, fromGrave)` (cost or flashback cost, plus X,
+plus the kicker if paid, plus the ward of an opposing creature the spell targets). Validation, `legalActions`, payment in the reducer, the AI and the UI all call these two functions, so no side can disagree about what a cast does or costs. The `castSorcery` action gained
+optional `x`, `kicked` and `mode`; a card must offer an option for the action to name it, X is REQUIRED on an X spell, a missing mode means the first (so saved casts from before a card became modal still replay), and a flashback cast takes none. New `CardDef` data: `x: true` (amount * X, X paid on top), `kicker: { cost, effect }`
+(the effect is untargeted and resolves after the main effect), `modes: Effect[]` (`effect` must equal `modes[0]`, so everything that still reads `effect` stays right), and `ward: N` on creatures (spells only; enter effects and a spell at a player are not taxed). `legalActions` enumerates every
+mode x kicker x X (from 1: an X of 0 is legal but a blank) x target that the mana covers. The AI scores the chosen effect, pays a kicker when it can (a tie-break), picks the smallest X that kills or finishes, and the biggest draw / heal X. The Board opens a
+`CastOptions` modal (mode radios, a kicker checkbox, an X stepper, the total cost, Cast / Cancel) before the target is chosen, and says up front when a ward makes the cast too dear. Tested (`castoptions.test.ts`, 15 tests, ten rules mutation-checked; one mutant, skipping the
+cost check in validation, is equivalent because the reducer's payment refuses it too); the fuzz oracle re-derives the chosen effect and every spell's cost (`SPELL_COST`, including ward) independently and stress-sprinkles modes, X, kickers and ward (six rule breaks each detected). It also found
+its own imprecision once more: a kicker that draws makes a Loot draw two cards, so that check skips such casts. An earlier "zero findings" mutation run proved nothing because the oracle edit had never been saved to disk; the real mutation run is what is recorded here.
+
+Cards (all decks 46.0%-55.5% at N=120, 45.9%-55.7% at N=80): **Soothe** modal (gain 6 life, or draw 2: Stonewall 47.5% -> 53.8%), **Pyroblast** Kicker {3} (also 3 damage to the opponent) and **Pyre Adept** Ward {1} (Pyromancer 46.8% -> 48.2%). Rejected by the sim: a Cinderbolt kicker
+(draw: no effect; 2 damage: Pyromancer 44.3%, because every burn deck gets it). No X spell is printed (an X Pyroblast is strictly worse than the 4-mana 6 damage at its sizes); the mechanic is engine-ready and stress-tested. Not done: Buyback.

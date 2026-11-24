@@ -625,6 +625,12 @@ enumerates the answers, and the lockstep rules need nothing new. Scry got its ow
 `castCreature` checks for a legal target first and fizzles otherwise (a test pins it). The fuzz stress mode now also gives random creatures hexproof, scry and loot enter effects and gives random spells scry, loot and bite, which is how
 the oracle's own imprecision showed up once: a Morbid draw bonus on a looting creature draws a second card, so the oracle's "a Loot draws exactly one" check skips cards with a draw bonus.
 
+### (r) Cast options: Modal, X, Kicker, Ward (Phase 4f2)
+Four mechanics, one seam. The danger with cast options is the two sides of the engine disagreeing about what a cast does or costs (the validator, `legalActions`, the reducer and the AI each used to read `def.cost` and `def.effect` directly), so they all go through
+`spellEffect` and `castCost`; the card-data rule that a modal spell's `effect` equals `modes[0]` keeps every remaining reader of `effect` valid. The options travel on the existing `castSorcery` action (optional `x`, `kicked`, `mode`), so replay and lockstep are untouched.
+Ward is a cost tax decided at cast time by the TARGET, which is why `castCost` takes the target and why the UI cannot show a final price until the target is picked (it says so instead of failing). Combinatorics are bounded: X is enumerated 1..min(mana, 12), modes and the kicker
+multiply that by at most 2x2. The one process lesson is in the fuzz oracle: an oracle edit that is never written to disk produces "zero findings" and a mutation run with no detections, which looks like a rule that cannot be broken; the mutants must be seen to fail before the zero means anything.
+
 ## 8. Run it
 
 ```bash

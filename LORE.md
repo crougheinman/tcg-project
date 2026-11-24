@@ -217,7 +217,7 @@ Nobody outside the Pyre believes this. The Pyre's answer is that nobody outside 
 **In play.** Four Pyre Adepts and a deck built to cast, cast, cast. Each sorcery through an Adept
 costs the opponent a life directly — the ledger burning, in the fiction; reach, in the rules. Low
 on bodies, heavy on Cinderbolt, Scorch and Pyroblast. Pyromancer is the only tradition that can
-win without its creatures ever attacking.
+win without its creatures ever attacking. (*The Pyroblast has a Kicker: pay three more and the Pyre takes a second, smaller toll from the opponent. A Pyre Adept has Ward {1}: anyone who spells at her pays a coin for the privilege.*)
 
 ### Faces of the Pyre
 
@@ -260,7 +260,7 @@ Reach — the line closes behind an attack that thought it had found a gap.*)
 **Sister Anwe of the Quiet House** — *Soothe · "Rest now. The walls will hold."*
 Stonewall's healers do not use the Wells. Anwe's order holds that healing drawn from borrowed
 light merely moves the debt from body to ledger — so they heal the slow way, with water, time and
-a voice, and a Stonewall army recovers between assaults rather than during them.
+a voice, and a Stonewall army recovers between assaults rather than during them. (*Choose one: gain 6 life, or draw 2 cards — the same rest, spent on the body or on the mind.*)
 
 **The Counter-Stroke** — *Take Counter · "Strike when its guard is down."*
 A discipline, not a person: the trained patience to stand still while a thing commits, and kill it
