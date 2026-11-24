@@ -4,7 +4,7 @@ import { DEATH_CRACK_MS, DEATH_DUST_MS } from './fxTiming';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { getDef } from '../cards/cards';
-import { activateError, actorOf, availableMana, canAttack, canBlock, canTargetCreature, castCost, spellEffect, hasKeyword, isCreature, isLand } from '../engine/rules';
+import { activateError, actorOf, availableMana, canAttack, canBlock, canTargetCreature, castCost, ninjutsuOptions, spellEffect, hasKeyword, isCreature, isLand } from '../engine/rules';
 import type { Action, CardInstance, GameState, PlayerId, Target } from '../engine/types';
 import { needsTarget, opponentOf } from '../engine/types';
 import { CardView } from './CardView';
@@ -81,6 +81,7 @@ export function Board() {
   const [sorceryOpts, setSorceryOpts] = useState<CastOpts>({}); // the mode / kicker / X chosen for the spell awaiting its target
   const [castOptsIid, setCastOptsIid] = useState<string | null>(null); // a modal / kicker / X spell choosing its options
   const [cycleMode, setCycleMode] = useState(false); // choosing a card to cycle (Cycling)
+  const [ninjaIid, setNinjaIid] = useState<string | null>(null); // Ninjutsu window: the ninja picked from my hand, waiting for an unblocked attacker
   const [abilityMode, setAbilityMode] = useState(false); // choosing one of my creatures to use its activated ability
   const [attackers, setAttackers] = useState<Set<string>>(new Set());
   const autoAttack = useRef<string | null>(null); // dragged to the enemy board in Main: pick it once combat starts
@@ -375,7 +376,7 @@ export function Board() {
   );
 
   // Block step, you defending: the live attackers drive the "who can block what" cues.
-  const inBlock = game.phase === 'combat_block' && myTurnToAct && !game.winner;
+  const inBlock = game.phase === 'combat_block' && myTurnToAct && !game.winner && !game.pending; // (a paused Ninjutsu window belongs to the ATTACKER, who is not planning blocks)
   // cycle mode ends as soon as it cannot apply (the phase moved on, something is pending, or it is not my move)
   useEffect(() => {
     if (cycleMode && (game.phase !== 'main1' || game.pending || !myTurnToAct)) setCycleMode(false);
@@ -566,7 +567,20 @@ export function Board() {
 
   // Loot: a card of mine must go; any card in my hand will do
   const lootPick = game.pending?.kind === 'discard' && myTurnToAct;
+  // Ninjutsu: the window between blocks and damage, answered by me (the attacker): a ninja from my hand, then an unblocked attacker
+  const ninjaPick = game.pending?.kind === 'ninjutsu' && myTurnToAct;
+  const ninjaOpts = ninjaPick ? ninjutsuOptions(game) : [];
+  const isNinja = (c: CardInstance) => ninjaOpts.some((o) => o.ninja === c.iid);
+  useEffect(() => {
+    if (!ninjaPick) setNinjaIid(null);
+  }, [ninjaPick]);
   function handHclick(c: CardInstance) {
+    if (ninjaPick) {
+      if (cardsLocked) return;
+      if (isNinja(c)) setNinjaIid((cur) => (cur === c.iid ? null : c.iid));
+      else setAnnounce({ id: announceId.current++, text: '⚠ Pick a ninja you can pay for', ms: 1800 });
+      return;
+    }
     if (lootPick) {
       if (!cardsLocked) dispatch({ type: 'resolveTrigger', target: c.iid });
       return;
@@ -614,6 +628,15 @@ export function Board() {
     // An Edict is waiting on ME: only my own creatures can be sacrificed
     if (game.pending?.kind === 'sacrifice' && myTurnToAct) {
       if (side === localId) dispatch({ type: 'resolveTrigger', target: c.iid });
+      return;
+    }
+    // The Ninjutsu window: an unblocked attacker of mine is swapped for the ninja picked from my hand
+    if (game.pending?.kind === 'ninjutsu' && myTurnToAct) {
+      if (!ninjaIid) setAnnounce({ id: announceId.current++, text: '⚠ Pick a ninja in your hand first', ms: 1800 });
+      else if (side === localId && ninjaOpts.some((o) => o.ninja === ninjaIid && o.attacker === c.iid)) {
+        dispatch({ type: 'ninjutsu', ninja: ninjaIid, attacker: c.iid });
+        setNinjaIid(null);
+      } else setAnnounce({ id: announceId.current++, text: '⚠ Pick one of your UNBLOCKED attackers', ms: 1800 });
       return;
     }
     // Resolving a pending Whipflash takes priority.
@@ -767,7 +790,8 @@ export function Board() {
                     sorceryTargetable(c) ||
                     (game.pending?.kind === 'enter' && c.iid !== game.pending.source && canTargetCreature(localId, c, side)) ||
                     (game.pending?.kind === 'sacrifice' && myTurnToAct && side === localId) ||
-                    (abilityMode && side === localId && canActivate(c))
+                    (abilityMode && side === localId && canActivate(c)) ||
+                    (ninjaPick && !!ninjaIid && side === localId && ninjaOpts.some((o) => o.ninja === ninjaIid && o.attacker === c.iid))
                   }
                   // With a blocker waiting for its target, dim the attackers it cannot legally
                   // block (e.g. a flyer vs a ground creature) so that is clear BEFORE the tap.
@@ -854,7 +878,8 @@ export function Board() {
   }
 
   // The name of the enter-the-battlefield skill waiting on a target ("Whipflash"), for the prompts.
-  const triggerName = game.pending ? (getDef(game.pending.def).skill ?? getDef(game.pending.def).name) : '';
+  // (a Scry / Loot / Ninjutsu decision may have no card behind it: its `def` is empty)
+  const triggerName = game.pending?.def ? (getDef(game.pending.def).skill ?? getDef(game.pending.def).name) : '';
   // what the pending enter effect does to the creature you pick, in words (Whipflash hits it, a bounce sends it home)
   const enterVerb = game.pending?.kind === 'enter' ? enterVerbFor(game.pending.def) : '';
   const abilityBtn = anyActivatable ? (
@@ -870,7 +895,7 @@ export function Board() {
 
   // The damage readout (attack: what the chosen attackers could deal; block: what is coming and what is left).
   const attackTotals = game.phase === 'combat_attack' && myTurnToAct ? attackTally(game, attackers) : null;
-  const blockTotals = game.phase === 'combat_block' && myTurnToAct ? blockTally(game, blocks) : null;
+  const blockTotals = game.phase === 'combat_block' && myTurnToAct && !game.pending ? blockTally(game, blocks) : null;
 
   function actionButtons() {
     if (game.pending?.kind === 'sacrifice') {
@@ -889,6 +914,23 @@ export function Board() {
         </div>
       ) : (
         <div className="waiting">Opponent resolving {triggerName}…</div>
+      );
+    }
+    if (game.pending?.kind === 'ninjutsu') {
+      return myTurnToAct ? (
+        <div className="actions">
+          <span className="prompt">✦ Ninjutsu — {ninjaIid ? 'tap one of your unblocked attackers to swap it out' : 'tap a ninja in your hand, or skip'}</span>
+          <button
+            onClick={() => {
+              setNinjaIid(null);
+              dispatch({ type: 'skipNinjutsu' });
+            }}
+          >
+            No ninjutsu
+          </button>
+        </div>
+      ) : (
+        <div className="waiting">Opponent is deciding on ninjutsu…</div>
       );
     }
     if (game.pending?.kind === 'scry') {
@@ -1140,8 +1182,8 @@ export function Board() {
                       key={c.iid}
                       inst={c}
                       onClick={() => handHclick(c)}
-                      dim={cardsLocked || (lootPick ? false : cycleMode ? !canCycle(c) : !canPlay(c))}
-                      greenGlow={lootPick || (cycleMode && canCycle(c)) || (game.phase === 'combat_block' && (getDef(c.def).type === 'instant' || hasKeyword(c, 'flash')) && canPlay(c))}
+                      dim={cardsLocked || (ninjaPick ? !isNinja(c) : lootPick ? false : cycleMode ? !canCycle(c) : !canPlay(c))}
+                      greenGlow={lootPick || (ninjaPick && isNinja(c)) || ninjaIid === c.iid || (cycleMode && canCycle(c)) || (game.phase === 'combat_block' && (getDef(c.def).type === 'instant' || hasKeyword(c, 'flash')) && canPlay(c))}
                       draggable={!cardsLocked && canPlay(c) && getDef(c.def).type !== 'sorcery' && getDef(c.def).type !== 'instant'}
                       onDragChange={setDragActive}
                       onDrop={(point) => dropPlay(c, point)}
