@@ -50,7 +50,8 @@ export function PlayerBar({
   // Current chat bubble for this side (PvP only; null otherwise).
   const bubble = useGame((s) => s.chat[side]);
   const who = self ? 'You' : 'Opponent';
-  const usePips = mana.total > 0 && mana.total <= MAX_PIPS;
+  const slots = Math.max(mana.total, mana.avail); // floating mana from a mana ability can lift what you can spend above your land count
+  const usePips = mana.total > 0 && slots <= MAX_PIPS;
 
   return (
     <div className={'playerbar' + (self ? ' me' : '') + (acting ? ' acting' : '')}>
@@ -86,18 +87,18 @@ export function PlayerBar({
         <span className="pmeta">
           <span
             className={'mana' + (usePips ? ' pips' : '') + (manaPulse ? ' pulse' : '')}
-            title={`Mana — ${mana.avail} of ${mana.total} available. Lands tap to pay card costs`}
-            aria-label={`${who}: ${mana.avail} of ${mana.total} mana available`}
+            title={`Mana — ${mana.avail} of ${slots} available. Lands tap to pay card costs; a mana ability adds floating mana until the phase ends`}
+            aria-label={`${who}: ${mana.avail} of ${slots} mana available`}
           >
-            {/* One crystal per land: lit while it can still pay, hollow once spent. */}
+            {/* One crystal per land (plus one per floating mana beyond them): lit while it can still pay, hollow once spent. */}
             {usePips &&
-              Array.from({ length: mana.total }, (_, i) => (
+              Array.from({ length: slots }, (_, i) => (
                 <i key={i} className={'pip' + (i < mana.avail ? ' full' : '')} aria-hidden />
               ))}
             {/* The same reading as a number. Shown instead of crystals when there
                 are too many lands to fit, and on the phone's compact opponent row. */}
             <span className="mana-num" aria-hidden>
-              ◈ {mana.avail}/{mana.total}
+              ◈ {mana.avail}/{slots}
             </span>
           </span>
           {!self && (

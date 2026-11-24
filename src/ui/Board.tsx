@@ -4,7 +4,7 @@ import { DEATH_CRACK_MS, DEATH_DUST_MS } from './fxTiming';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { getDef } from '../cards/cards';
-import { actorOf, availableMana, canAttack, canBlock, hasKeyword, isCreature, isLand } from '../engine/rules';
+import { activateError, actorOf, availableMana, canAttack, canBlock, hasKeyword, isCreature, isLand } from '../engine/rules';
 import type { Action, CardInstance, GameState, PlayerId } from '../engine/types';
 import { needsTarget, opponentOf } from '../engine/types';
 import { CardView } from './CardView';
@@ -76,6 +76,7 @@ export function Board() {
   const [hushed, setHushed] = useState<Set<string>>(new Set()); // per-session dismissed tips
   const [sorceryIid, setSorceryIid] = useState<string | null>(null);
   const [cycleMode, setCycleMode] = useState(false); // choosing a card to cycle (Cycling)
+  const [abilityMode, setAbilityMode] = useState(false); // choosing one of my creatures to use its activated ability
   const [attackers, setAttackers] = useState<Set<string>>(new Set());
   const autoAttack = useRef<string | null>(null); // dragged to the enemy board in Main: pick it once combat starts
   const [atkDrag, setAtkDrag] = useState<string | null>(null); // the creature being dragged toward the enemy
@@ -374,6 +375,9 @@ export function Board() {
   useEffect(() => {
     if (cycleMode && (game.phase !== 'main1' || game.pending || !myTurnToAct)) setCycleMode(false);
   }, [cycleMode, game.phase, game.pending, myTurnToAct]);
+  useEffect(() => {
+    if (abilityMode && (game.phase !== 'main1' || game.pending || !myTurnToAct)) setAbilityMode(false);
+  }, [abilityMode, game.phase, game.pending, myTurnToAct]);
   const liveAtk = inBlock ? liveAttackers(game) : [];
 
   // Guided mode: pick the ONE tip that matches the current situation (priority order).
@@ -520,6 +524,12 @@ export function Board() {
   }
   const anyCyclable = me.hand.some(canCycle);
 
+  // Activated abilities: one of my creatures, in my own main phase, whose cost I can pay now (the engine's own `activateError` decides)
+  function canActivate(c: CardInstance): boolean {
+    return myTurnToAct && !game.pending && !game.winner && isCreature(c) && !!getDef(c.def).activated && !activateError(game, me, c);
+  }
+  const anyActivatable = me.battlefield.some(canActivate);
+
   // Can this graveyard card be cast from here right now (flashback: right timing, enough mana, untargeted)?
   function canFlashback(c: CardInstance): boolean {
     const def = getDef(c.def);
@@ -564,6 +574,12 @@ export function Board() {
     // Resolving a pending Whipflash takes priority.
     if (game.pending?.kind === 'enter' && myTurnToAct) {
       if (c.iid !== game.pending.source) dispatch({ type: 'resolveTrigger', target: c.iid });
+      return;
+    }
+    // Ability mode: the next creature of mine that can use its ability does; either way the mode ends
+    if (abilityMode) {
+      if (side === localId && canActivate(c)) act({ type: 'activate', iid: c.iid });
+      setAbilityMode(false);
       return;
     }
     // Targeting a spell next.
@@ -706,7 +722,8 @@ export function Board() {
                   targetable={
                     sorceryTargetable(c) ||
                     (game.pending?.kind === 'enter' && c.iid !== game.pending.source) ||
-                    (game.pending?.kind === 'sacrifice' && myTurnToAct && side === localId)
+                    (game.pending?.kind === 'sacrifice' && myTurnToAct && side === localId) ||
+                    (abilityMode && side === localId && canActivate(c))
                   }
                   // With a blocker waiting for its target, dim the attackers it cannot legally
                   // block (e.g. a flyer vs a ground creature) so that is clear BEFORE the tap.
@@ -795,6 +812,11 @@ export function Board() {
   const triggerName = game.pending ? (getDef(game.pending.def).skill ?? getDef(game.pending.def).name) : '';
   // what the pending enter effect does to the creature you pick, in words (Whipflash hits it, a bounce sends it home)
   const enterVerb = game.pending?.kind === 'enter' ? enterVerbFor(game.pending.def) : '';
+  const abilityBtn = anyActivatable ? (
+    <button onClick={() => setAbilityMode(true)} title="Use a creature's ability (mana, ping, heal...): tap this, then the creature">
+      ✦ Ability
+    </button>
+  ) : null;
   const cycleBtn = anyCyclable ? (
     <button onClick={() => setCycleMode(true)} title="Pay a card's cycling cost and discard it from your hand to draw a card">
       ⟳ Cycle
@@ -845,6 +867,14 @@ export function Board() {
         </div>
       );
     }
+    if (abilityMode) {
+      return (
+        <div className="actions">
+          <span className="prompt">✦ Choose a creature to use its ability…</span>
+          <button onClick={() => setAbilityMode(false)}>Cancel</button>
+        </div>
+      );
+    }
     switch (game.phase) {
       case 'mulligan': {
         // The opening hand is on the table below; this is the keep-or-mulligan decision about it.
@@ -874,10 +904,11 @@ export function Board() {
         if (!canAnyAttack) {
           // Nothing castable, no flashback, nothing to attack with: say so, and make
           // End Turn pulse straight away (no 5s wait) — it is the only thing left to do.
-          const noMovesLeft = !me.hand.some(canPlay) && !me.graveyard.some(canFlashback) && !anyCyclable;
+          const noMovesLeft = !me.hand.some(canPlay) && !me.graveyard.some(canFlashback) && !anyCyclable && !anyActivatable;
           return (
             <div className="actions">
               {noMovesLeft && <span className="prompt nomoves">No more moves</span>}
+              {abilityBtn}
               {cycleBtn}
               <button className={'primary' + (noMovesLeft ? ' urgent' : '')} onClick={endTurn}>
                 End Turn
@@ -891,7 +922,8 @@ export function Board() {
             <button className="primary" onClick={() => act({ type: 'advance' })}>
               Go to Combat
             </button>
-            {cycleBtn}
+            {abilityBtn}
+              {cycleBtn}
             <button className="primary" onClick={endTurn}>End Turn</button>
           </div>
         );

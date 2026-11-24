@@ -117,9 +117,9 @@ const INSTALL = async () => {
       for (const c of P.battlefield.filter(rules.isCreature)) persist(`TAPPED_DESYNC|${c.iid}`, dom.has(c.iid) && tappedDom.has(c.iid) !== c.tapped, 1400, `${side}: ${c.def} tapped=${c.tapped} but DOM says ${tappedDom.has(c.iid)}`);
       // HUD
       persist(`HUD_LIFE|${pid}`, num(q(`.player-zone.${side} .playerbar .life`)) !== P.life, 1800, `${side}: HUD life ${num(q(`.player-zone.${side} .playerbar .life`))} vs state ${P.life}`);
-      const lands = P.battlefield.filter(rules.isLand), avail = lands.filter((c) => !c.tapped).length;
+      const lands = P.battlefield.filter(rules.isLand), avail = rules.availableMana(P), slots = Math.max(lands.length, avail); // avail counts floating mana (a mana ability) too
       const pips = qa(`.player-zone.${side} .playerbar .pip`);
-      if (lands.length <= 10 && pips.length) persist(`HUD_MANA|${pid}`, qa(`.player-zone.${side} .playerbar .pip.full`).length !== avail || pips.length !== lands.length, 1800, `${side}: pips ${qa(`.player-zone.${side} .playerbar .pip.full`).length}/${pips.length} vs mana ${avail}/${lands.length}`);
+      if (slots <= 10 && pips.length) persist(`HUD_MANA|${pid}`, qa(`.player-zone.${side} .playerbar .pip.full`).length !== avail || pips.length !== slots, 1800, `${side}: pips ${qa(`.player-zone.${side} .playerbar .pip.full`).length}/${pips.length} vs mana ${avail}/${lands.length}`);
       persist(`ACTING_RING|${pid}`, !!q(`.player-zone.${side} .playerbar.acting`) !== (!g.winner && rules.actorOf(g) === pid), 1500, `${side}: acting ring ${!!q(`.player-zone.${side} .playerbar.acting`)} but actor is ${rules.actorOf(g)}`);
     }
     const chips = qa('.player-zone.opp .counts .count-chip').map(num);
@@ -287,6 +287,11 @@ async function playMatch(browser, A, B, idx) {
           bump('cycle'); await page.evaluate((a) => window.__H.setExpect([a]), action);
           ok = await clickEl(btn(/Cycle/), 'Cycle');
           if (ok) { await sleep(150); ok = await clickEl(cardLoc(action.iid, scopeHand), 'cycle card'); }
+          break;
+        case 'activate': // Activated ability: tap the Ability button, then the creature (two steps, like Cycle)
+          bump('activate'); await page.evaluate((a) => window.__H.setExpect([a]), action);
+          ok = await clickEl(btn(/Ability/), 'Ability');
+          if (ok) { await sleep(150); ok = await clickEl(cardLoc(action.iid, '.player-zone.me .row.creatures'), 'ability creature'); }
           break;
         case 'keepHand':
           bump('keepHand'); await page.evaluate((a) => window.__H.setExpect([a]), action);
