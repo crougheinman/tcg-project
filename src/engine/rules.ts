@@ -1,7 +1,9 @@
 import { BLITZ_BEASTS, getDef } from '../cards/cards';
 import type {
   Action,
+  CardDef,
   CardInstance,
+  Effect,
   GameState,
   PlayerId,
   Keyword,
@@ -223,6 +225,31 @@ export function canAttack(c: CardInstance): boolean {
 }
 
 /** Find a creature on either battlefield by instance id. */
+/** The effect a cast resolves: the chosen mode of a modal spell, with X applied to an X spell's amount. */
+export function spellEffect(def: CardDef, o: { x?: number; mode?: number }): Effect | undefined {
+  const base = def.modes ? def.modes[o.mode ?? 0] : def.effect;
+  if (!base) return undefined;
+  if (def.x && (base.type === 'damage' || base.type === 'heal' || base.type === 'draw')) return { ...base, amount: base.amount * (o.x ?? 0) };
+  return base;
+}
+/** What a spell costs to cast with these options: its cost (or flashback cost), plus X, plus the kicker if paid, plus the ward of an opposing creature it targets. The one cost definition (validation, legalActions, payment, AI, UI). */
+export function castCost(
+  state: GameState,
+  caster: PlayerId,
+  def: CardDef,
+  o: { x?: number; kicked?: boolean; target?: Target },
+  fromGrave = false,
+): number {
+  let cost = fromGrave ? def.flashback! : def.cost;
+  if (def.x) cost += o.x ?? 0;
+  if (o.kicked && def.kicker) cost += def.kicker.cost;
+  if (o.target?.kind === 'creature') {
+    const f = findCreature(state, o.target.iid);
+    if (f && f.controller !== caster) cost += getDef(f.card.def).ward ?? 0;
+  }
+  return cost;
+}
+
 /** May `caster` target this creature with a spell or ability? Hexproof stops the OPPONENT of its controller; its controller may still target it. */
 export function canTargetCreature(caster: PlayerId, card: CardInstance, controller: PlayerId): boolean {
   return controller === caster || !hasKeyword(card, 'hexproof');
@@ -368,38 +395,53 @@ function spellActions(state: GameState, caster: PlayerId): Action[] {
 
   // A spell can be cast from the hand, or from the graveyard if it has flashback (at its flashback cost).
   const castable = [
-    ...p.hand.map((c) => ({ c, cost: getDef(c.def).cost })),
-    ...p.graveyard.filter((c) => getDef(c.def).flashback !== undefined).map((c) => ({ c, cost: getDef(c.def).flashback! })),
+    ...p.hand.map((c) => ({ c, fromGrave: false })),
+    ...p.graveyard.filter((c) => getDef(c.def).flashback !== undefined).map((c) => ({ c, fromGrave: true })),
   ];
-  for (const { c, cost } of castable) {
+  for (const { c, fromGrave } of castable) {
     const def = getDef(c.def);
     if (def.type !== 'sorcery' && def.type !== 'instant') continue;
     if (def.type === 'sorcery' && state.phase !== 'main1') continue;
     if (def.blockOnly && state.phase !== 'combat_block') continue;
-    if (cost > mana || !def.effect) continue;
+    if (!def.effect) continue;
+    const base = fromGrave ? def.flashback! : def.cost;
+    if (base > mana) continue;
 
-    const eff = def.effect;
-    if (!needsTarget(eff)) {
-      // Ramp with no land in hand is a legal cast but a guaranteed blank.
-      if (eff.type !== 'ramp' || p.hand.some(isLand)) out.push({ type: 'castSorcery', iid: c.iid });
-    } else if (eff.type === 'damage' || eff.type === 'buff') {
-      for (const t of legalTargets(state, caster, eff.targets)) {
-        out.push({ type: 'castSorcery', iid: c.iid, target: t });
-      }
-    } else if (eff.type === 'bounce') {
-      for (const t of legalTargets(state, caster, 'creature')) out.push({ type: 'castSorcery', iid: c.iid, target: t });
-    } else if (eff.type === 'bite') {
-      // an opposing creature to bite, and one of ours to do the biting
-      if (!p.battlefield.some(isCreature)) continue;
-      for (const t of legalTargets(state, caster, 'creature')) {
-        if (t.kind === 'creature' && state.players[opponentOf(caster)].battlefield.some((x) => x.iid === t.iid)) out.push({ type: 'castSorcery', iid: c.iid, target: t });
-      }
-    } else if (eff.type === 'destroy') {
-      // Only tapped creatures are valid targets.
-      for (const pid of ['A', 'B'] as PlayerId[]) {
-        for (const cc of state.players[pid].battlefield) {
-          if (isCreature(cc) && cc.tapped && canTargetCreature(caster, cc, pid)) {
-            out.push({ type: 'castSorcery', iid: c.iid, target: { kind: 'creature', iid: cc.iid } });
+    // every combination of cast options: a mode, the kicker, an X (from 1: an X of 0 is legal but a blank, so it is not offered)
+    const modes: (number | undefined)[] = def.modes ? def.modes.map((_, i) => i) : [undefined];
+    const kicks = def.kicker && !fromGrave ? [false, true] : [false];
+    for (const mode of modes) {
+      for (const kicked of kicks) {
+        const afterKick = base + (kicked && def.kicker ? def.kicker.cost : 0);
+        if (afterKick > mana) continue;
+        const xs: (number | undefined)[] = def.x ? Array.from({ length: Math.min(mana - afterKick, 12) }, (_, i) => i + 1) : [undefined];
+        for (const x of xs) {
+          const opts = { ...(mode !== undefined ? { mode } : {}), ...(kicked ? { kicked: true } : {}), ...(x !== undefined ? { x } : {}) };
+          const eff = spellEffect(def, opts);
+          if (!eff) continue;
+          const push = (target?: Target) => {
+            if (castCost(state, caster, def, { ...opts, target }, fromGrave) <= mana) out.push({ type: 'castSorcery', iid: c.iid, ...(target ? { target } : {}), ...opts });
+          };
+          if (!needsTarget(eff)) {
+            // Ramp with no land in hand is a legal cast but a guaranteed blank.
+            if (eff.type !== 'ramp' || p.hand.some(isLand)) push();
+          } else if (eff.type === 'damage' || eff.type === 'buff') {
+            for (const t of legalTargets(state, caster, eff.targets)) push(t);
+          } else if (eff.type === 'bounce') {
+            for (const t of legalTargets(state, caster, 'creature')) push(t);
+          } else if (eff.type === 'bite') {
+            // an opposing creature to bite, and one of ours to do the biting
+            if (!p.battlefield.some(isCreature)) continue;
+            for (const t of legalTargets(state, caster, 'creature')) {
+              if (t.kind === 'creature' && state.players[opponentOf(caster)].battlefield.some((x) => x.iid === t.iid)) push(t);
+            }
+          } else if (eff.type === 'destroy') {
+            // Only tapped creatures are valid targets.
+            for (const pid of ['A', 'B'] as PlayerId[]) {
+              for (const cc of state.players[pid].battlefield) {
+                if (isCreature(cc) && cc.tapped && canTargetCreature(caster, cc, pid)) push({ kind: 'creature', iid: cc.iid });
+              }
+            }
           }
         }
       }
@@ -527,22 +569,28 @@ export function validateAction(state: GameState, action: Action): void {
         throw new Error('can only be cast while blocking');
       const def = getDef(c.def);
       if (!def.effect) throw new Error('spell has no effect');
-      if (fromGrave && needsTarget(def.effect)) throw new Error('only untargeted spells have flashback');
-      if ((fromGrave ? def.flashback! : def.cost) > availableMana(caster)) throw new Error('not enough mana');
-      if (needsTarget(def.effect)) {
+      // cast options must belong to the card, and flashback casts take none
+      if (action.x !== undefined && (!def.x || !Number.isInteger(action.x) || action.x < 0)) throw new Error('this spell has no X');
+      if (action.kicked && !def.kicker) throw new Error('this spell has no kicker');
+      if (action.mode !== undefined && (!def.modes || !Number.isInteger(action.mode) || action.mode < 0 || action.mode >= def.modes.length)) throw new Error('not a mode of this spell');
+      if (def.x && action.x === undefined) throw new Error('choose a value for X');
+      if (fromGrave && (def.x || def.kicker || def.modes)) throw new Error('a flashback spell takes no cast options');
+      const eff = spellEffect(def, action)!;
+      if (fromGrave && needsTarget(eff)) throw new Error('only untargeted spells have flashback');
+      if (needsTarget(eff)) {
         if (!action.target) throw new Error('target required');
-        if (def.effect.type === 'damage' || def.effect.type === 'buff') {
-          validateTarget(state, def.effect.targets, action.target, casterId);
-        } else if (def.effect.type === 'bounce') {
+        if (eff.type === 'damage' || eff.type === 'buff') {
+          validateTarget(state, eff.targets, action.target, casterId);
+        } else if (eff.type === 'bounce') {
           const fb = action.target.kind === 'creature' ? findCreature(state, action.target.iid) : null;
           if (!fb) throw new Error('must target a creature in play');
           if (!canTargetCreature(casterId, fb.card, fb.controller)) throw new Error('that creature has hexproof');
-        } else if (def.effect.type === 'bite') {
+        } else if (eff.type === 'bite') {
           const fb = action.target.kind === 'creature' ? findCreature(state, action.target.iid) : null;
           if (!fb || fb.controller === casterId) throw new Error('must target an opposing creature');
           if (!canTargetCreature(casterId, fb.card, fb.controller)) throw new Error('that creature has hexproof');
           if (!caster.battlefield.some(isCreature)) throw new Error('you need a creature to do the biting');
-        } else if (def.effect.type === 'destroy') {
+        } else if (eff.type === 'destroy') {
           if (action.target.kind !== 'creature') throw new Error('must target a creature');
           const found = findCreature(state, action.target.iid);
           if (!found) throw new Error('creature not found');
@@ -550,6 +598,7 @@ export function validateAction(state: GameState, action: Action): void {
           if (!canTargetCreature(casterId, found.card, found.controller)) throw new Error('that creature has hexproof');
         }
       }
+      if (castCost(state, casterId, def, action, fromGrave) > availableMana(caster)) throw new Error('not enough mana');
       return;
     }
     case 'declareAttackers': {

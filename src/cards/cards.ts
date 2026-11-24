@@ -149,9 +149,10 @@ export const CARDS: Record<string, CardDef> = {
     power: 1,
     toughness: 2,
     keywords: ['prowess'],
+    ward: 1,
     spellTrigger: { type: 'damage', amount: 1, targets: 'player' },
     static: { affects: { self: true }, power: 1, toughness: 1, when: 'threshold' },
-    text: 'Prowess. Whenever you cast a sorcery, deal 1 damage to your opponent. Threshold — with 7 or more cards in your graveyard, it gets +1/+1.',
+    text: 'Prowess. Ward {1}. Whenever you cast a sorcery, deal 1 damage to your opponent. Threshold — with 7 or more cards in your graveyard, it gets +1/+1.',
     flavor: 'Every spell feeds the fire within.',
   },
   ancient_treant: {
@@ -391,7 +392,8 @@ export const CARDS: Record<string, CardDef> = {
     type: 'sorcery',
     cost: 4,
     effect: { type: 'damage', amount: 6, targets: 'any' },
-    text: 'Deal 6 damage to any target.',
+    kicker: { cost: 3, effect: { type: 'damage', amount: 3, targets: 'player' } },
+    text: 'Deal 6 damage to any target. Kicker {3}: also deal 3 damage to your opponent.',
     art: '/cards/pyroblast.webp', // 520x287 WebP; other cards auto-wire to <id>.png
     flavor: 'The sky itself catches fire.',
   },
@@ -432,7 +434,8 @@ export const CARDS: Record<string, CardDef> = {
     type: 'instant',
     cost: 2,
     effect: { type: 'heal', amount: 6 },
-    text: 'Instant — Gain 6 life.',
+    modes: [{ type: 'heal', amount: 6 }, { type: 'draw', amount: 2 }],
+    text: 'Instant — Choose one: gain 6 life; or draw 2 cards.',
     art: '/cards/soothe.webp', // 420x421 WebP; other cards auto-wire to <id>.png
     flavor: 'Rest now. The walls will hold.',
   },

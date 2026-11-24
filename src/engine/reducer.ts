@@ -8,6 +8,8 @@ import {
   availableMana,
   blitzCue,
   canTargetCreature,
+  castCost,
+  spellEffect,
   findCreature,
   hasKeyword,
   isCreature,
@@ -162,13 +164,14 @@ export function applyAction(state: GameState, action: Action): GameState {
       const fromGrave = !caster.hand.some((x) => x.iid === action.iid);
       const c = fromGrave ? takeFromGraveyard(caster, action.iid) : takeFromHand(caster, action.iid);
       const def = getDef(c.def);
-      payMana(caster, fromGrave ? def.flashback! : def.cost);
+      payMana(caster, castCost(state, casterId, def, action, fromGrave)); // (state, not s: the ward of the target is read before anything moves)
       if (fromGrave) (caster.exile ??= []).push(c);
       else caster.graveyard.push(c);
-      s.log.push(`${casterId} casts ${def.name}${fromGrave ? ' (flashback)' : ''}`);
+      s.log.push(`${casterId} casts ${def.name}${fromGrave ? ' (flashback)' : ''}${action.kicked ? ' (kicked)' : ''}${action.x !== undefined ? ` (X=${action.x})` : ''}`);
       countSpell(s, casterId);
       const blitz = blitzCue(caster, c); // a token spell (Call Wolves) making beasts next to Kunoichi
-      applyEffect(s, casterId, def.effect!, action.target);
+      applyEffect(s, casterId, spellEffect(def, action)!, action.target);
+      if (action.kicked && def.kicker) applyEffect(s, casterId, def.kicker.effect, { kind: 'player', player: opponentOf(casterId) }); // the kicker's extra effect
       if (blitz) s.log.push('✦ Beast Blitz activated!');
       resolveBonus(s, casterId, def);
       if (s.pending && !s.pending.def) s.pending.def = def.id; // an Edict spell: name the card behind the choice

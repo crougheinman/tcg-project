@@ -16,6 +16,8 @@ import {
   legalActions,
   power,
   toughness,
+  spellEffect,
+  castCost,
 } from '../engine/rules';
 
 // Heuristic in-browser AI. One decision per call; the driver applies it and
@@ -176,10 +178,12 @@ function scoreSpell(
   const card = handCard(state, ai, a.iid);
   if (!card) return score(BAND.never);
   const def = getDef(card.def);
-  const eff = def.effect;
+  const eff = spellEffect(def, a); // the chosen mode, with X applied
   if (!eff) return score(BAND.never);
-  // Within a band, spend the cheapest card that does the job.
-  const thrift = Math.max(0, 20 - def.cost);
+  // Within a band, spend the cheapest card that does the job (X and ward make a cast dearer). A paid kicker is worth its extra mana, so it wins
+  // the tie; for an X spell whose size is the point (draw, heal) bigger is better, for burn the smallest X that does the job.
+  const cost = castCost(state, ai, def, a, !me.hand.some((h) => h.iid === a.iid));
+  const thrift = Math.max(0, 20 - cost) + (a.kicked ? 15 : 0) + (a.x && (eff.type === 'draw' || eff.type === 'heal') ? a.x * 5 : 0);
 
   switch (eff.type) {
     case 'damage': {

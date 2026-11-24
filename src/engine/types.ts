@@ -112,6 +112,11 @@ export interface CardDef {
   onDeath?: Effect; // creature: resolves when it dies (token creation, draw, heal, or damage to the opponent)
   spellTrigger?: Effect; // creature: fires whenever its controller casts a sorcery
   spellTriggerInstant?: boolean; // creature: its spellTrigger also fires on instant casts
+  // Cast options (Part 4f2), all chosen with the cast and all costing mana, so they are checked and enumerated through `castCost` / `spellEffect` in rules.ts:
+  x?: boolean; // an X spell: its damage / heal / draw effect scales with the X chosen (amount * X) and X is paid on top of the cost
+  kicker?: { cost: number; effect: Effect }; // optional extra cost; when paid, this untargeted effect resolves too
+  modes?: Effect[]; // modal: choose one (the cast names its index); `effect` must equal modes[0]
+  ward?: number; // creature: spells your opponent casts that TARGET it cost this much more
   activated?: ActivatedAbility; // creature: an ability its controller can use in their main phase (pingers, mana creatures)
   static?: StaticAbility; // creature: a static ability (Beast Blitz, Lords, Threshold)
   landTrigger?: Effect; // creature: Landfall, resolves whenever a land enters under its controller's control (untargeted effects only)
@@ -207,7 +212,7 @@ export interface GameState {
 export type Action =
   | { type: 'playLand'; iid: string }
   | { type: 'castCreature'; iid: string }
-  | { type: 'castSorcery'; iid: string; target?: Target }
+  | { type: 'castSorcery'; iid: string; target?: Target; x?: number; kicked?: boolean; mode?: number } // x / kicked / mode: the cast options of an X, kicker or modal spell
   | { type: 'declareAttackers'; attackers: string[] }
   | { type: 'declareBlockers'; blocks: Record<string, string> }
   | { type: 'resolveTrigger'; target: string } // choose the target of a pending enter effect (Whipflash), or the creature to sacrifice (Edict)
