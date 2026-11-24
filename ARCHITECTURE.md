@@ -609,6 +609,14 @@ Recomputing BEFORE the first death check matters: a creature kept alive by a sta
 old behaviour (a second Kunoichi adds nothing) is a design choice we kept: the differential trace between the old and new engines found the difference at once. Lords, by contrast, stack.
 The fuzz oracle recomputes the expected aura itself, from card data only, and compares after every action.
 
+### (p) Activated abilities (Phase 4e)
+A creature's ability is data (`CardDef.activated`: a cost and an untargeted effect) used through ONE new action, `activate`, so the lockstep rules need nothing new: it is the active player's move in main1, deterministic, and
+carries no choice. Mana needed a pool: `PlayerState.pool` is spent before lands and cleared in `applyAction` whenever the phase changes, which also makes "mana empties at end of phase" true for every path. The one
+trap was infinite loops: an ability with no cost, or a mana ability that does not tap, can be used without limit, so card-data tests forbid both and the fuzz stress mode never generates one (a mutation that
+dropped the tap hung the fuzz run, which is how the loop shows up). Untap happens at the start of its owner's turn, so a creature tapped in your main phase also cannot block on the opponent's turn: that
+is the price of a tap ability and the reason the AI keeps real attackers out of it. The fuzz oracle accounts for mana by what was spent (newly tapped lands plus pool used), not by what is available, because a ramp spell
+adds untapped lands.
+
 ## 8. Run it
 
 ```bash

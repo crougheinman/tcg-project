@@ -204,7 +204,7 @@ visible keywords first and the two engine keystones (statics, activated abilitie
 | 4b | **More triggers**: Landfall, Morbid / spells-this-turn conditions, attack triggers (Battle cry, Exalted, "whenever it attacks") | M | **done** (see below) |
 | 4c | **Spells**: Bounce, Edict (opponent sacrifices a creature of their choice), Rally (team buff), Cycling | S-M | **done** (see below) |
 | 4d | **Data-driven static abilities**: Beast Blitz moves onto data; Lords ("other Wolves +1/+1"); Threshold ("7+ cards in your graveyard") | M | **done** (see below) |
-| 4e | **Activated abilities** (`{T}: ...`): mana creatures, pingers, a Treasure token | M-L | planned |
+| 4e | **Activated abilities** (`{T}: ...`): mana creatures, pingers, a Treasure token | M-L | **done** (see below; targeted abilities and a Treasure token wait) |
 | 4f | **Choices**: Scry, Loot, Modal ("choose one"), X spells, Kicker / Buyback, Fight / bite, Hexproof / Ward | M | planned |
 | 4g | **Graveyard**: Undying, Unearth | M | planned |
 | 4h | **Showpiece**: Ninjutsu for Kunoichi / Hana (a short window between blocks and damage), later Equipment | L | planned |
@@ -277,3 +277,21 @@ Threshold statics over random creatures (breaking Threshold to 6 or letting `oth
 
 Cards (all decks 45.0%-54.6% at N=80, 46.7%-55.4% at N=120): **Pyre Adept** Threshold (+1/+1; Pyromancer 46.1% -> 48.2%; +2/+2 made it 50.7% but pushed Wildblitz to 44.5%) and **Rotting Hulk**
 "your Zombies get +1/+1" (a tiny effect: Gravetide +0.3). Not used: a Kensei Duelist Ashigaru lord (her text and flavour are Hana's alone).
+
+### Part 4e: done
+
+`CardDef.activated` (`ActivatedAbility`: `cost: { tap?, mana? }`, an UNTARGETED `effect`) and the `activate` action: in your main phase, with nothing pending, a creature you control pays its cost
+and the effect resolves at once (`validateAction`, `legalActions`, the shared `activateError`, `reducer.ts` `activate`). `tap` needs the creature untapped and not summoning sick, and it stays tapped
+through the opponent's turn (untap is at the start of its owner's turn), so using it costs the creature its blocking job; a `mana` cost is paid from lands and pool. It is not a cast: no spell trigger,
+no prowess, no spell count, and the log reads "adds N mana" / "✦ X — ability". A new effect `mana` adds to `PlayerState.pool` (floating mana): `availableMana` counts it, `payMana` spends it before
+lands, and it empties whenever the phase changes (`applyAction`). Card-data tests: an activated effect must be untargeted, every ability must cost something (a free one would repeat without limit), and a
+mana ability must tap. The AI (`scoreActivate`) taps a mana creature only when the mana lets it cast something it could not afford, and uses any other tap ability only with a 1-power body or a
+defender (a real attacker attacks). The Board has an Ability mode like Cycle (tap Ability, then the creature; legal creatures glow). Tested (`activated.test.ts`, 14 tests, eight rules mutation-checked, three
+for the AI); the fuzz oracle re-derives tap / mana / effect / not-a-spell for every activation, checks the pool is never negative and empty after a phase change, accounts for mana by what was SPENT (lands
+tapped plus pool used, so a ramp spell does not confuse it), and stress-sprinkles abilities over random creatures (breaking pool clearing, tapping, mana payment or summoning sickness each makes it report;
+a missing tap makes it hang, since the ability repeats forever).
+
+Card (all decks 46.1%-53.3% at N=120, 45.7%-52.9% at N=80): **Kunoichi** gains "{T}: Add one mana". Rejected / moved by the sim: the same ability on Ember Sprite (Pyromancer 54.2% and Wildblitz 53.9%
+but Skyward 45.0%, Iron Blossom 46.1%) and on Ashigaru (Iron Blossom 57.3% at N=80, too near the ceiling). Not done: targeted abilities (a pinger that picks its victim; needs a target in the action and a UI
+mode), instant-speed use, a sacrifice cost and a Treasure token (the battlefield only holds creatures and lands, so a Treasure would be a 0/1 creature); non-mana abilities (ping, heal, draw, token) are
+engine-ready and stress-tested but have no printed card yet.
