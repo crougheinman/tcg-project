@@ -225,7 +225,7 @@ function check(
     }
     if (real !== sizes[pid]) R('CARD_CONSERVATION', `${pid} has ${real} real cards, started with ${sizes[pid]}`);
     for (const c of p.graveyard) {
-      if (isCreature(c) && (c.damage || c.buffP || c.buffT || c.tempP || c.tempT || c.blitz || c.tapped)) R('DEAD_CARD_KEEPS_STATE', `${c.def} in graveyard with damage=${c.damage} buff=${c.buffP}/${c.buffT} temp=${c.tempP ?? 0}/${c.tempT ?? 0} blitz=${c.blitz} tapped=${c.tapped}`);
+      if (isCreature(c) && (c.damage || c.buffP || c.buffT || c.tempP || c.tempT || c.auraP || c.auraT || c.blitz || c.tapped)) R('DEAD_CARD_KEEPS_STATE', `${c.def} in graveyard with damage=${c.damage} buff=${c.buffP}/${c.buffT} temp=${c.tempP ?? 0}/${c.tempT ?? 0} blitz=${c.blitz} tapped=${c.tapped}`);
     }
   }
 
@@ -365,7 +365,7 @@ function check(
     const inHand = after.players[was.owner].hand.find((c) => c.iid === iid);
     if (!TOKENS.has(was.def) !== !!inHand) R('BOUNCE_ZONE', `${was.def}: ${TOKENS.has(was.def) ? 'a token must vanish' : "must be in its owner's hand"}`);
     if ((after.combat?.attackers ?? []).includes(iid) || Object.entries(after.combat?.blocks ?? {}).some(([b, at]) => b === iid || at === iid)) R('BOUNCE_STILL_IN_COMBAT', `${was.def} is still named in combat`);
-    if (inHand && (inHand.buffP || inHand.buffT || inHand.damage || inHand.tempP || inHand.tempT || inHand.blitz || inHand.tapped)) R('BOUNCE_KEEPS_STATE', `${was.def} came back with its marks, buffs or aura`);
+    if (inHand && (inHand.buffP || inHand.buffT || inHand.damage || inHand.tempP || inHand.tempT || inHand.auraP || inHand.auraT || inHand.blitz || inHand.tapped)) R('BOUNCE_KEEPS_STATE', `${was.def} came back with its marks, buffs or aura`);
   }
   if (a.type === 'castSorcery' || a.type === 'castCreature') {
     const who = actorOf(before);
@@ -424,11 +424,11 @@ function check(
       if (bl && at && hasKeyword(at, 'skulk') && power(bl) > power(at)) R('SKULK_BLOCKED_BY_GREATER', `${at.def} (power ${power(at)}) blocked by ${bl.def} (power ${power(bl)})`);
     }
   }
-  // indestructible: no damage, deathtouch or destroy takes a creature with it off the battlefield. (Creatures wearing the Kunoichi
-  // aura are skipped: losing the aura can take a point of toughness away, which is the one thing that does kill it.)
+  // indestructible: no damage, deathtouch or destroy takes a creature with it off the battlefield. (Creatures wearing any static bonus
+  // are skipped: losing it can take a point of toughness away, which is the one thing that does kill it.)
   const lv = leavers(before, a);
   for (const c of creatures(before)) {
-    if (!hasKeyword(c, 'indestructible') || c.blitz || toughness(c) <= 0 || lv.bounced.has(c.iid) || lv.sacrificed.has(c.iid)) continue;
+    if (!hasKeyword(c, 'indestructible') || c.blitz || c.auraT || toughness(c) <= 0 || lv.bounced.has(c.iid) || lv.sacrificed.has(c.iid)) continue;
     if (!after.players[c.owner].battlefield.some((x) => x.iid === c.iid)) R('INDESTRUCTIBLE_DIED', `${c.def} (toughness ${toughness(c)}) left the battlefield`);
   }
   // damage must never survive into a new turn
@@ -441,6 +441,30 @@ function check(
       const should = has && BLITZ.includes(c.def);
       if (c.blitz !== should) R('BLITZ_FLAG', `${c.def} blitz=${c.blitz}, expected ${should}`);
       if (c.buffT < -3 || c.buffP < -3) R('NEGATIVE_BUFF', `${c.def} buff ${c.buffP}/${c.buffT}`);
+    }
+  }
+  // 5a. static abilities (Beast Blitz, Lords, Threshold): every creature's aura must equal what the battlefield says it should be, worked
+  // out here from the card data with its own loop and its own threshold literal (never the engine's helper).
+  for (const pid of ['A', 'B'] as PlayerId[]) {
+    const side = after.players[pid];
+    const expP: Record<string, number> = {}, expT: Record<string, number> = {};
+    const crea = side.battlefield.filter((c) => CARDS[c.def].type === 'creature');
+    for (const c of crea) { expP[c.iid] = 0; expT[c.iid] = 0; }
+    const once = new Set<string>(); // `${creature}|${source card id}` of unique statics already counted
+    for (const src of side.battlefield) {
+      const st = CARDS[src.def].static;
+      if (!st) continue;
+      if (st.when === 'threshold' && side.graveyard.length < 7) continue;
+      for (const c of crea) {
+        const hit = (st.affects.self && c.iid === src.iid) || (st.affects.others && c.iid !== src.iid) || (st.affects.ids ?? []).includes(c.def);
+        if (!hit) continue;
+        if (st.unique) { if (once.has(`${c.iid}|${src.def}`)) continue; once.add(`${c.iid}|${src.def}`); }
+        expP[c.iid] += st.power;
+        expT[c.iid] += st.toughness;
+      }
+    }
+    for (const c of crea) {
+      if ((c.auraP ?? 0) !== expP[c.iid] || (c.auraT ?? 0) !== expT[c.iid]) R('AURA_WRONG', `${c.def} has aura ${c.auraP ?? 0}/${c.auraT ?? 0}, the battlefield says ${expP[c.iid]}/${expT[c.iid]} (graveyard ${side.graveyard.length})`);
     }
   }
 
@@ -513,13 +537,13 @@ const t0 = Date.now();
 // the shipped cards happen to carry). Keywords are restored after each game.
 const STRESS_KW = ['reach', 'vigilance', 'firstStrike', 'doubleStrike', 'trample', 'deathtouch', 'lifelink', 'flash', 'prowess', 'skulk', 'bushido', 'indestructible', 'battleCry', 'exalted'] as const;
 type CardDefDeath = (typeof CARDS)[string]['onDeath'];
-type Sprinkled = { kw: string[] | undefined; death: CardDefDeath; enter: CardDefDeath; land: CardDefDeath; attack: CardDefDeath; bonus: (typeof CARDS)[string]['bonus']; cycling: number | undefined };
+type Sprinkled = { kw: string[] | undefined; death: CardDefDeath; enter: CardDefDeath; land: CardDefDeath; attack: CardDefDeath; bonus: (typeof CARDS)[string]['bonus']; cycling: number | undefined; static: (typeof CARDS)[string]['static'] };
 function sprinkleKeywords(r: () => number): () => void {
   const saved = new Map<string, Sprinkled>();
   const flashed: string[] = [];
   for (const def of Object.values(CARDS)) {
     if (def.type !== 'creature') continue;
-    saved.set(def.id, { kw: def.keywords as string[] | undefined, death: def.onDeath, enter: def.onEnter, land: def.landTrigger, attack: def.onAttack, bonus: def.bonus, cycling: def.cycling });
+    saved.set(def.id, { kw: def.keywords as string[] | undefined, death: def.onDeath, enter: def.onEnter, land: def.landTrigger, attack: def.onAttack, bonus: def.bonus, cycling: def.cycling, static: def.static });
     const extra = STRESS_KW.filter(() => r() < 0.25);
     if (extra.length) def.keywords = [...(def.keywords ?? []), ...extra];
     // some creatures raise a token when they die (tokens included, so triggers can chain through them)
@@ -532,6 +556,12 @@ function sprinkleKeywords(r: () => number): () => void {
     if (!def.onEnter && r() < 0.18) {
       const roll = r();
       def.onEnter = roll < 0.2 ? { type: 'discard', amount: 1 } : roll < 0.4 ? { type: 'recall' } : roll < 0.6 ? { type: 'edict' } : roll < 0.8 ? { type: 'rally', power: 1, toughness: 1 } : { type: 'bounce' };
+    }
+    // Phase 4d static abilities: a lord for the rest of its side, a self-buff, or a Threshold bonus (never marked 'blitz')
+    if (!def.static && r() < 0.15) {
+      const roll = r();
+      const affects = roll < 0.4 ? { others: true } : roll < 0.7 ? { self: true } : { ids: ['wolf_token', 'zombie_token', 'ashigaru'] };
+      def.static = { affects, power: r() < 0.5 ? 1 : 0, toughness: r() < 0.5 ? 1 : 0, ...(r() < 0.4 ? { when: 'threshold' as const } : {}) };
     }
     // Cycling on some creatures
     if (def.cycling === undefined && r() < 0.15) def.cycling = 1 + Math.floor(r() * 2);
@@ -563,7 +593,7 @@ function sprinkleKeywords(r: () => number): () => void {
       flashed.push(def.id);
     }
   }
-  return () => { for (const [id, v] of saved) { CARDS[id].keywords = v.kw as never; CARDS[id].onDeath = v.death; CARDS[id].onEnter = v.enter; CARDS[id].landTrigger = v.land; CARDS[id].onAttack = v.attack; CARDS[id].bonus = v.bonus; CARDS[id].cycling = v.cycling; } for (const [id, b] of spellBonus) CARDS[id].bonus = b as never; for (const [id, e] of spellEffect) CARDS[id].effect = e; for (const [id, c] of spellCycling) CARDS[id].cycling = c; for (const id of flashed) delete CARDS[id].flashback; };
+  return () => { for (const [id, v] of saved) { CARDS[id].keywords = v.kw as never; CARDS[id].onDeath = v.death; CARDS[id].onEnter = v.enter; CARDS[id].landTrigger = v.land; CARDS[id].onAttack = v.attack; CARDS[id].bonus = v.bonus; CARDS[id].cycling = v.cycling; CARDS[id].static = v.static; } for (const [id, b] of spellBonus) CARDS[id].bonus = b as never; for (const [id, e] of spellEffect) CARDS[id].effect = e; for (const [id, c] of spellCycling) CARDS[id].cycling = c; for (const id of flashed) delete CARDS[id].flashback; };
 }
 
 for (const policyName of ['ai', 'chaos', 'ai+kw', 'chaos+kw'] as const) {
