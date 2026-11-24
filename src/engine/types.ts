@@ -63,6 +63,25 @@ export function needsCreatureChoice(effect: Effect): boolean {
   return needsTarget(effect);
 }
 
+/**
+ * A static ability: while the creature carrying it is on the battlefield (and `when` holds), the creatures it affects, among those its
+ * controller controls, get +power/+toughness. The engine recomputes every creature's bonus from scratch after each action (auraP / auraT),
+ * so any number of statics stack and nothing is ever added or removed incrementally. Beast Blitz is Kunoichi's static; a Lord is
+ * `{ others: true }` or an id list; Threshold is `when: 'threshold'`.
+ */
+export interface StaticAbility {
+  affects: {
+    ids?: string[]; // creatures with one of these card ids (including the source itself if its id is listed)
+    others?: boolean; // every OTHER creature its controller controls
+    self?: boolean; // the source itself
+  };
+  power: number;
+  toughness: number;
+  when?: 'threshold'; // only while its controller has THRESHOLD (7) or more cards in their graveyard
+  unique?: boolean; // several copies of the same card do not stack: a creature gets the bonus once (Beast Blitz); lords leave it off and do stack
+  mark?: 'blitz'; // creatures it lifts wear the Beast Blitz lightning, and its meeting an affected creature is announced
+}
+
 /** Static card definition (the "printed" card). */
 export interface CardDef {
   id: string;
@@ -78,6 +97,7 @@ export interface CardDef {
   onDeath?: Effect; // creature: resolves when it dies (token creation, draw, heal, or damage to the opponent)
   spellTrigger?: Effect; // creature: fires whenever its controller casts a sorcery
   spellTriggerInstant?: boolean; // creature: its spellTrigger also fires on instant casts
+  static?: StaticAbility; // creature: a static ability (Beast Blitz, Lords, Threshold)
   landTrigger?: Effect; // creature: Landfall, resolves whenever a land enters under its controller's control (untargeted effects only)
   onAttack?: Effect; // creature: resolves whenever it attacks (untargeted effects only)
   cycling?: number; // creature or spell: in your main phase, pay this much and discard it from hand to draw a card
@@ -100,11 +120,14 @@ export interface CardInstance {
   damage: number; // damage marked this turn (cleared at cleanup)
   buffP: number; // +power from buffs (Wild Growth counters AND active auras)
   buffT: number; // +toughness from buffs
-  blitz: boolean; // currently receiving the Beast Blitz aura (+1/+1)
+  blitz: boolean; // currently lifted by a static marked 'blitz' (Beast Blitz): drives the lightning and the announcement
   // Until-end-of-turn buff (prowess). Optional so older fixtures need no change; cleared when the next turn begins.
   tempP?: number;
   tempT?: number;
   doomed?: boolean; // sacrificed: dies at the next death check even if indestructible
+  // The bonus from static abilities (Beast Blitz, Lords, Threshold), recomputed from scratch after every action. Optional so older fixtures need nothing.
+  auraP?: number;
+  auraT?: number;
 }
 
 export interface PlayerState {

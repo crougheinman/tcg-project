@@ -126,6 +126,13 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 1,
     keywords: ['skulk'],
     skill: 'Beast Blitz',
+    static: {
+      affects: { ids: ['swift_lancer', 'sky_talon', 'stoneback_cub', 'wolf_token', 'thornwood_brute', 'dread_maw'] },
+      power: 1,
+      toughness: 1,
+      unique: true, // a second Kunoichi adds nothing
+      mark: 'blitz',
+    },
     art: '/cards/kunoichi.webp', // 420x564 WebP; other cards auto-wire to <id>.png
     text: 'Skulk. Beast Blitz — your Swift Lancer, Sky Talon, Stoneback Cub, Thornwood Brute, Dread Maw, and Wolves get +1/+1.',
     flavor: 'One whistle, and the wild answers.',
@@ -141,7 +148,8 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 2,
     keywords: ['prowess'],
     spellTrigger: { type: 'damage', amount: 1, targets: 'player' },
-    text: 'Prowess. Whenever you cast a sorcery, deal 1 damage to your opponent.',
+    static: { affects: { self: true }, power: 1, toughness: 1, when: 'threshold' },
+    text: 'Prowess. Whenever you cast a sorcery, deal 1 damage to your opponent. Threshold — with 7 or more cards in your graveyard, it gets +1/+1.',
     flavor: 'Every spell feeds the fire within.',
   },
   ancient_treant: {
@@ -292,7 +300,8 @@ export const CARDS: Record<string, CardDef> = {
     power: 4,
     toughness: 5,
     onDeath: { type: 'token', token: 'zombie_token', count: 1 },
-    text: 'Last breath — when it dies, raise a 1/1 Zombie.',
+    static: { affects: { ids: ['zombie_token'] }, power: 1, toughness: 1 },
+    text: 'Your Zombies get +1/+1. Last breath — when it dies, raise a 1/1 Zombie.',
     art: '/cards/rotting_hulk.webp', // 420x422 WebP; other cards auto-wire to <id>.png
     flavor: 'A mound of grave-flesh stitched with spite.',
   },
@@ -521,12 +530,5 @@ export function isToken(defId: string): boolean {
   return TOKEN_IDS.has(defId);
 }
 
-/** The beasts Kunoichi's Beast Blitz lifts (+1/+1 each) while she is on the battlefield. */
-export const BLITZ_BEASTS: readonly string[] = [
-  'swift_lancer',
-  'sky_talon',
-  'stoneback_cub',
-  'wolf_token',
-  'thornwood_brute',
-  'dread_maw',
-];
+/** The beasts Kunoichi's Beast Blitz lifts (+1/+1 each) while she is on the battlefield: read from her static ability, so the data is the one source. */
+export const BLITZ_BEASTS: readonly string[] = CARDS.kunoichi.static?.affects.ids ?? [];

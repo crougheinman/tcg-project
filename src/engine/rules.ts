@@ -14,10 +14,37 @@ import { MAX_MULLIGANS } from './state';
 // ---- Stat helpers (effective power/toughness include permanent buffs) ----
 
 export function power(c: CardInstance): number {
-  return (getDef(c.def).power ?? 0) + c.buffP + (c.tempP ?? 0);
+  return (getDef(c.def).power ?? 0) + c.buffP + (c.auraP ?? 0) + (c.tempP ?? 0);
 }
 export function toughness(c: CardInstance): number {
-  return (getDef(c.def).toughness ?? 0) + c.buffT + (c.tempT ?? 0);
+  return (getDef(c.def).toughness ?? 0) + c.buffT + (c.auraT ?? 0) + (c.tempT ?? 0);
+}
+/** Threshold: cards in a graveyard that switch on a `when: 'threshold'` static ability. */
+export const THRESHOLD = 7;
+/**
+ * What the static abilities on `p`'s battlefield give creature `c` (one of p's creatures), worked out from scratch. `blitz` is true when a
+ * static marked 'blitz' (Beast Blitz) is among them. Pure: the engine writes the result to `auraP` / `auraT` / `blitz` after every action.
+ */
+export function staticBonus(p: PlayerState, c: CardInstance): { power: number; toughness: number; blitz: boolean } {
+  let power = 0;
+  let toughness = 0;
+  let blitz = false;
+  const counted = new Set<string>(); // `unique` statics already applied to this creature, by source card id
+  for (const src of p.battlefield) {
+    const st = getDef(src.def).static;
+    if (!st) continue;
+    if (st.when === 'threshold' && p.graveyard.length < THRESHOLD) continue;
+    const a = st.affects;
+    if (!((a.self && src === c) || (a.others && src !== c) || a.ids?.includes(c.def))) continue;
+    if (st.unique) {
+      if (counted.has(src.def)) continue;
+      counted.add(src.def);
+    }
+    power += st.power;
+    toughness += st.toughness;
+    if (st.mark === 'blitz') blitz = true;
+  }
+  return { power, toughness, blitz };
 }
 export function hasKeyword(c: CardInstance, kw: Keyword): boolean {
   return (getDef(c.def).keywords ?? []).includes(kw);
@@ -39,9 +66,9 @@ export function isCreature(c: CardInstance): boolean {
  * announcement features: Kunoichi herself, or the spell that made the beasts.
  */
 export function blitzCue(p: PlayerState, card: CardInstance): { show: CardInstance } | null {
-  const kunoichi = p.battlefield.find((c) => c.def === 'kunoichi');
+  const kunoichi = p.battlefield.find((c) => getDef(c.def).static?.mark === 'blitz');
   const def = getDef(card.def);
-  if (card.def === 'kunoichi') return p.battlefield.some((c) => BLITZ_BEASTS.includes(c.def)) ? { show: card } : null;
+  if (getDef(card.def).static?.mark === 'blitz') return p.battlefield.some((c) => BLITZ_BEASTS.includes(c.def)) ? { show: card } : null;
   if (!kunoichi) return null;
   if (def.type === 'creature') return BLITZ_BEASTS.includes(card.def) ? { show: kunoichi } : null;
   if (def.effect?.type === 'token' && BLITZ_BEASTS.includes(def.effect.token)) return { show: card };

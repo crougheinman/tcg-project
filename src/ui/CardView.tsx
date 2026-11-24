@@ -310,7 +310,7 @@ export function CardView({
           {def.art && (
             <img className="arena-art" src={def.art} alt="" draggable={false} onError={artFallback} />
           )}
-          {(inst.buffP > 0 || inst.buffT > 0 || (inst.tempP ?? 0) > 0 || (inst.tempT ?? 0) > 0) && (
+          {(inst.buffP > 0 || inst.buffT > 0 || (inst.auraP ?? 0) > 0 || (inst.auraT ?? 0) > 0 || (inst.tempP ?? 0) > 0 || (inst.tempT ?? 0) > 0) && (
             <motion.div
               className="buff-crown"
               title="Buffed"

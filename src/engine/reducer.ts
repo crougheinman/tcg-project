@@ -1,4 +1,4 @@
-import { BLITZ_BEASTS, getDef, isToken } from '../cards/cards';
+import { getDef, isToken } from '../cards/cards';
 import type { Action, CardDef, CardInstance, Effect, GameState, PlayerId, PlayerState, Target } from './types';
 import { needsCreatureChoice, opponentOf } from './types';
 import { nextRandom, shuffle } from './rng';
@@ -14,6 +14,7 @@ import {
   isLethal,
   markDamage,
   splitDamage,
+  staticBonus,
   strikesIn,
   toughness,
   untappedLands,
@@ -215,9 +216,7 @@ export function applyAction(state: GameState, action: Action): GameState {
     }
   }
 
-  checkDeaths(s);
-  recomputeAura(s); // (re)apply / remove Beast Blitz
-  checkDeaths(s); // aura toughness loss may make a creature lethal
+  settle(s); // deaths and static abilities (Beast Blitz, Lords, Threshold) until stable
   return s;
 }
 
@@ -227,25 +226,37 @@ function allCreatures(s: GameState) {
   return [...s.players.A.battlefield, ...s.players.B.battlefield].filter(isCreature);
 }
 
-// Beast Blitz: while a player controls Kunoichi, their beasts (BLITZ_BEASTS) get +1/+1.
-const BLITZ_TARGETS = BLITZ_BEASTS;
-
-function recomputeAura(s: GameState): void {
+/**
+ * Static abilities (Beast Blitz, Lords, Threshold): every creature's bonus is rebuilt from scratch from what is on the battlefield now
+ * (`staticBonus`), so it is idempotent and stacks without bookkeeping. Returns whether anything changed.
+ */
+function recomputeStatics(s: GameState): boolean {
+  let changed = false;
   for (const pid of ['A', 'B'] as PlayerId[]) {
     const p = s.players[pid];
-    const hasKunoichi = p.battlefield.some((c) => c.def === 'kunoichi');
     for (const c of p.battlefield) {
-      const should = hasKunoichi && BLITZ_TARGETS.includes(c.def);
-      if (should && !c.blitz) {
-        c.buffP += 1;
-        c.buffT += 1;
-        c.blitz = true;
-      } else if (!should && c.blitz) {
-        c.buffP -= 1;
-        c.buffT -= 1;
-        c.blitz = false;
+      if (!isCreature(c)) continue;
+      const b = staticBonus(p, c);
+      if ((c.auraP ?? 0) !== b.power || (c.auraT ?? 0) !== b.toughness || c.blitz !== b.blitz) {
+        c.auraP = b.power;
+        c.auraT = b.toughness;
+        c.blitz = b.blitz;
+        changed = true;
       }
     }
+  }
+  return changed;
+}
+
+/**
+ * Deaths and static abilities feed each other: a lord dying takes its bonus away (which can kill a creature it was keeping alive), a death
+ * trigger can make a creature that a static lifts. Settle both until nothing moves (the cap is a safety net).
+ */
+function settle(s: GameState): void {
+  recomputeStatics(s); // first, so a creature a static is keeping alive is not judged without it
+  for (let i = 0; i < 8; i++) {
+    checkDeaths(s);
+    if (!recomputeStatics(s)) break;
   }
 }
 
@@ -325,7 +336,7 @@ function applyEffect(s: GameState, controller: PlayerId, effect: Effect, target?
       const side = s.players[found.controller];
       side.battlefield = side.battlefield.filter((x) => x.iid !== c.iid);
       // it leaves play like a dead creature does: every buff, mark and aura is gone, and it is summoning sick if recast
-      c.tapped = false; c.damage = 0; c.buffP = 0; c.buffT = 0; c.tempP = 0; c.tempT = 0; c.blitz = false; c.summoningSick = true;
+      c.tapped = false; c.damage = 0; c.buffP = 0; c.buffT = 0; c.tempP = 0; c.tempT = 0; c.auraP = 0; c.auraT = 0; c.blitz = false; c.summoningSick = true;
       if (!isToken(c.def)) s.players[c.owner].hand.push(c); // a token just ceases to exist
       // it is no longer attacking or blocking
       if (s.combat) {
@@ -452,6 +463,8 @@ function makeToken(s: GameState, defId: string, owner: PlayerId): CardInstance {
     damage: 0,
     buffP: 0,
     buffT: 0,
+    auraP: 0,
+    auraT: 0,
     blitz: false,
   };
 }
@@ -614,6 +627,8 @@ function checkDeaths(s: GameState): void {
         c.buffT = 0;
         c.tempP = 0;
         c.tempT = 0;
+        c.auraP = 0;
+        c.auraT = 0;
         c.blitz = false;
         c.doomed = false;
         c.summoningSick = true;
@@ -621,9 +636,8 @@ function checkDeaths(s: GameState): void {
         // pad the graveyard (the count, the viewer and the result screen all read it).
         if (!isToken(c.def)) s.players[c.owner].graveyard.push(c);
         s.log.push(`${getDef(c.def).name} dies`);
-        if (c.def === 'kunoichi' && !p.battlefield.some((x) => x.def === 'kunoichi')) {
-          s.log.push(`Beast Blitz fades.`);
-        }
+        const skill = getDef(c.def).static?.mark === 'blitz' ? getDef(c.def).skill : undefined;
+        if (skill && !p.battlefield.some((x) => getDef(x.def).static?.mark === 'blitz')) s.log.push(`${skill} fades.`);
       }
     }
     if (!fallen.length) break;
