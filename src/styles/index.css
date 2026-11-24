@@ -2411,6 +2411,20 @@ button.count-chip:hover:not(:disabled) { color: var(--vs-ink); background: var(-
 .scry-bottom { background: var(--vs-yellow, #ffd24a); box-shadow: 0 0 14px rgba(255, 210, 74, 0.45); }
 .scry-bottom:hover { background: #ffe58a; }
 
+/* Cast options (modal / kicker / X) */
+.cast-opts { display: flex; flex-direction: column; gap: 12px; padding: 16px 18px 20px; }
+.cast-group { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.cast-group legend { color: var(--vs-mute); font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase; padding: 0 0 6px; }
+.cast-choice { display: flex; align-items: center; gap: 10px; padding: 9px 12px; min-height: 44px; border: 2px solid rgba(139, 147, 166, 0.5); cursor: pointer; font-size: 17px; }
+.cast-choice.on { border-color: var(--vs-yellow, #ffd24a); background: rgba(255, 210, 74, 0.08); }
+.cast-choice input { accent-color: var(--vs-yellow, #ffd24a); width: 18px; height: 18px; }
+.cast-x { flex-direction: row; align-items: center; gap: 14px; font-size: 20px; }
+.cast-x button { width: 44px; height: 44px; font: 700 22px / 1 'Barlow Condensed', sans-serif; color: var(--vs-ink, #0a0c13); background: var(--me); border: 2px solid var(--vs-ink, #0a0c13); cursor: pointer; }
+.cast-x button:disabled { opacity: 0.35; cursor: default; }
+.cast-x b { min-width: 2ch; text-align: center; font-size: 26px; }
+.cast-preview { margin: 0; color: var(--vs-paper); font-size: 16px; opacity: 0.85; }
+.scry-actions .zone-flash:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
+
 /* ---- Combat death: crack (0.3s) -> pulverize (0.2s). See ShatterFx.tsx ---- */
 .crackfx { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
 .dustfx { position: fixed; z-index: 71; pointer-events: none; }

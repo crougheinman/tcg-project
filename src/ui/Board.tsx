@@ -4,8 +4,8 @@ import { DEATH_CRACK_MS, DEATH_DUST_MS } from './fxTiming';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { getDef } from '../cards/cards';
-import { activateError, actorOf, availableMana, canAttack, canBlock, canTargetCreature, hasKeyword, isCreature, isLand } from '../engine/rules';
-import type { Action, CardInstance, GameState, PlayerId } from '../engine/types';
+import { activateError, actorOf, availableMana, canAttack, canBlock, canTargetCreature, castCost, spellEffect, hasKeyword, isCreature, isLand } from '../engine/rules';
+import type { Action, CardInstance, GameState, PlayerId, Target } from '../engine/types';
 import { needsTarget, opponentOf } from '../engine/types';
 import { CardView } from './CardView';
 import { liveAttackers, prune, tapAttacker, tapBlocker } from './blockSelection';
@@ -16,6 +16,8 @@ import { PhaseBar } from './PhaseBar';
 import { Rulebook } from './Rulebook';
 import { ZoneViewer } from './ZoneViewer';
 import { ScryPrompt } from './ScryPrompt';
+import { CastOptions } from './CastOptions';
+import type { CastOpts } from './CastOptions';
 import { BoardFx } from './BoardFx';
 import { CastSpotlight } from './CastSpotlight';
 import { warmIaijutsuClip } from './cinematics';
@@ -76,6 +78,8 @@ export function Board() {
   const setGuided = useGame((s) => s.setGuided);
   const [hushed, setHushed] = useState<Set<string>>(new Set()); // per-session dismissed tips
   const [sorceryIid, setSorceryIid] = useState<string | null>(null);
+  const [sorceryOpts, setSorceryOpts] = useState<CastOpts>({}); // the mode / kicker / X chosen for the spell awaiting its target
+  const [castOptsIid, setCastOptsIid] = useState<string | null>(null); // a modal / kicker / X spell choosing its options
   const [cycleMode, setCycleMode] = useState(false); // choosing a card to cycle (Cycling)
   const [abilityMode, setAbilityMode] = useState(false); // choosing one of my creatures to use its activated ability
   const [attackers, setAttackers] = useState<Set<string>>(new Set());
@@ -483,7 +487,7 @@ export function Board() {
   function sorceryTargetable(c: CardInstance): boolean {
     if (!sorceryIid) return false;
     const card = me.hand.find((h) => h.iid === sorceryIid);
-    const eff = card ? getDef(card.def).effect : undefined;
+    const eff = card ? spellEffect(getDef(card.def), sorceryOpts) : undefined;
     if (!canTargetCreature(localId, c, controllerOf(c.iid))) return false; // hexproof: not by the opponent's spells
     if (eff?.type === 'destroy') return c.tapped; // Take Counter: tapped only
     if (eff?.type === 'bite') return controllerOf(c.iid) !== localId; // a bite needs an opposing creature
@@ -572,9 +576,31 @@ export function Board() {
     if (def.type === 'land') dispatch({ type: 'playLand', iid: c.iid });
     else if (def.type === 'creature') dispatch({ type: 'castCreature', iid: c.iid });
     else if (def.type === 'sorcery' || def.type === 'instant') {
-      if (def.effect && !needsTarget(def.effect)) dispatch({ type: 'castSorcery', iid: c.iid });
-      else setSorceryIid(c.iid);
+      if (def.x || def.kicker || def.modes) setCastOptsIid(c.iid); // choose the options first
+      else startCast(c.iid, {});
     }
+  }
+  // Cast a spell with its options: straight away when its effect needs no target, else wait for one.
+  function startCast(iid: string, opts: CastOpts) {
+    const def = getDef(me.hand.find((h) => h.iid === iid)?.def ?? '');
+    const eff = spellEffect(def, opts);
+    if (eff && !needsTarget(eff)) dispatch({ type: 'castSorcery', iid, ...opts });
+    else {
+      setSorceryOpts(opts);
+      setSorceryIid(iid);
+    }
+  }
+  // The target is chosen: cast. A ward creature makes it dearer, which is said up front rather than failing.
+  function castAt(target: Target) {
+    const card = me.hand.find((h) => h.iid === sorceryIid);
+    if (!sorceryIid || !card) return;
+    const need = castCost(game, localId, getDef(card.def), { ...sorceryOpts, target });
+    if (need > availableMana(me)) {
+      setAnnounce({ id: announceId.current++, text: `⚠ Ward: that costs ${need} mana`, ms: 2200 });
+      return;
+    }
+    dispatch({ type: 'castSorcery', iid: sorceryIid, target, ...sorceryOpts });
+    setSorceryIid(null);
   }
 
   function creatureClick(c: CardInstance, side: PlayerId) {
@@ -599,8 +625,7 @@ export function Board() {
     // Targeting a spell next.
     if (sorceryIid) {
       if (!sorceryTargetable(c)) return; // e.g. Take Counter needs a tapped creature
-      dispatch({ type: 'castSorcery', iid: sorceryIid, target: { kind: 'creature', iid: c.iid } });
-      setSorceryIid(null);
+      castAt({ kind: 'creature', iid: c.iid });
       return;
     }
     if (!myTurnToAct) return;
@@ -633,8 +658,7 @@ export function Board() {
 
   function faceClick(side: PlayerId) {
     if (sorceryIid) {
-      dispatch({ type: 'castSorcery', iid: sorceryIid, target: { kind: 'player', player: side } });
-      setSorceryIid(null);
+      castAt({ kind: 'player', player: side });
     }
   }
 
@@ -1196,6 +1220,18 @@ export function Board() {
           )}
         </AnimatePresence>
 
+        {castOptsIid && me.hand.some((h) => h.iid === castOptsIid) && !game.pending && (
+          <CastOptions
+            def={getDef(me.hand.find((h) => h.iid === castOptsIid)!.def)}
+            mana={availableMana(me)}
+            onCancel={() => setCastOptsIid(null)}
+            onCast={(o) => {
+              const iid = castOptsIid;
+              setCastOptsIid(null);
+              startCast(iid, o);
+            }}
+          />
+        )}
         {game.pending?.kind === 'scry' && myTurnToAct && me.library[game.pending.seen ?? 0] && (
           <ScryPrompt
             card={me.library[game.pending.seen ?? 0]}
