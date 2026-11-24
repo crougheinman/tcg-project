@@ -9,12 +9,15 @@ export function ZoneViewer({
   cards,
   onClose,
   flashback,
+  unearth,
 }: {
   title: string;
   cards: CardInstance[];
   onClose: () => void;
   /** Your own graveyard: which spells can be cast from here right now, and how. */
   flashback?: { can: (c: CardInstance) => boolean; cast: (c: CardInstance) => void };
+  /** Your own graveyard: which creatures can be unearthed from here right now. */
+  unearth?: { can: (c: CardInstance) => boolean; cast: (c: CardInstance) => void };
 }) {
   const groups = new Map<string, { inst: CardInstance; count: number }>();
   for (const c of cards) {
@@ -51,6 +54,11 @@ export function ZoneViewer({
             <div key={g.inst.def} className="zone-card">
               <CardView inst={g.inst} />
               <span className="zone-x">×{g.count}</span>
+              {unearth?.can(g.inst) && (
+                <button className="zone-flash" onClick={() => unearth.cast(g.inst)}>
+                  Unearth ◈{getDef(g.inst.def).unearth}
+                </button>
+              )}
               {flashback?.can(g.inst) && (
                 <button className="zone-flash" onClick={() => flashback.cast(g.inst)}>
                   Flashback ◈{getDef(g.inst.def).flashback}

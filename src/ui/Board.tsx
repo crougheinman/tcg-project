@@ -541,6 +541,12 @@ export function Board() {
   }
   const anyActivatable = me.battlefield.some(canActivate);
 
+  // Unearth: a creature in my graveyard, in my own main phase, whose unearth cost I can pay
+  function canUnearth(c: CardInstance): boolean {
+    const cost = getDef(c.def).unearth;
+    return myTurnToAct && !game.pending && !game.winner && game.phase === 'main1' && cost !== undefined && getDef(c.def).type === 'creature' && cost <= availableMana(me);
+  }
+
   // Can this graveyard card be cast from here right now (flashback: right timing, enough mana, untargeted)?
   function canFlashback(c: CardInstance): boolean {
     const def = getDef(c.def);
@@ -776,7 +782,8 @@ export function Board() {
                     <i />
                   </span>
                 )}
-                {hasteIids.has(c.iid) && !attackingIids.has(c.iid) && <span className="haste-tag">Can Attack</span>}
+                {c.unearthed && <span className="haste-tag">Unearthed</span>}
+                {hasteIids.has(c.iid) && !c.unearthed && !attackingIids.has(c.iid) && <span className="haste-tag">Can Attack</span>}
                 {attackingIids.has(c.iid) && <span className="combat-tag atk">ATK</span>}
                 {side !== localId && flyMark(c)}
                 {blockerOf(c.iid) && <span className="combat-tag blk">blocked</span>}
@@ -960,7 +967,7 @@ export function Board() {
         if (!canAnyAttack) {
           // Nothing castable, no flashback, nothing to attack with: say so, and make
           // End Turn pulse straight away (no 5s wait) — it is the only thing left to do.
-          const noMovesLeft = !me.hand.some(canPlay) && !me.graveyard.some(canFlashback) && !anyCyclable && !anyActivatable;
+          const noMovesLeft = !me.hand.some(canPlay) && !me.graveyard.some(canFlashback) && !me.graveyard.some(canUnearth) && !anyCyclable && !anyActivatable;
           return (
             <div className="actions">
               {noMovesLeft && <span className="prompt nomoves">No more moves</span>}
@@ -1205,6 +1212,17 @@ export function Board() {
               }
               cards={zone === 'deck' ? me.library : zone === 'graveyard' ? me.graveyard : opp.graveyard}
               onClose={() => setZone(null)}
+              unearth={
+                zone === 'graveyard'
+                  ? {
+                      can: canUnearth,
+                      cast: (c) => {
+                        setZone(null);
+                        act({ type: 'unearth', iid: c.iid });
+                      },
+                    }
+                  : undefined
+              }
               flashback={
                 zone === 'graveyard'
                   ? {

@@ -10,6 +10,7 @@ describe('humanize (the activity log from the local player\'s seat)', () => {
     expect(humanize('A discards Insight', 'A')).toBe('You discard Insight');
     expect(humanize('A adds 1 mana', 'A')).toBe('You add 1 mana');
     expect(humanize('A scries 2', 'A')).toBe('You scry 2');
+    expect(humanize('A unearths Ashigaru', 'A')).toBe('You unearth Ashigaru');
     expect(humanize('B loots away Insight', 'A')).toBe('Opponent loots away Insight');
     expect(humanize('A puts a card on the bottom', 'A')).toBe('You put a card on the bottom');
     expect(humanize('B adds 1 mana', 'A')).toBe('Opponent adds 1 mana');
