@@ -306,7 +306,7 @@ you cannot see is a debt you will not pay.
 The finest blade of her generation, and the strictest reading of the creed: she will not strike
 twice at the same opponent. If the first cut does not settle it, she considers the account closed
 and walks away. She has walked away four times. All four are still alive, and all four regard it
-as the worst thing that has ever happened to them. (*Haste. First strike.*)
+as the worst thing that has ever happened to them. (*Haste. First strike. Ninjutsu {2} — when a Clan footman is already past the guard, unseen, Hana steps into the space where he was: the cut that lands is hers, and the footman is merely somewhere safer.*)
 
 **Juro, the Masterless** — *Ronin Blade · "A masterless sword, restless even in the fray."*
 Rode under Tadeo's banner at the Kettle and broke from it there — not from cowardice but from

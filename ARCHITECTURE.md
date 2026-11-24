@@ -638,6 +638,11 @@ is a new arrival (summoning sick, counter, `revived`), and `revived` is cleared 
 death), and the other exit, dying, is redirected to exile in the same place the graveyard push happens. Rule 6 in CLAUDE.md ("tokens never go to the graveyard") gained a sibling: an unearthed creature never does either. Lesson for the oracle: its old checks (SURVIVED_LETHAL, INDESTRUCTIBLE_DIED, the dies-trigger counts, the Edict and bite checks) each
 assumed deaths are final, so each needed a `wouldReturn` carve-out; the right default for a new mechanic that changes what death means is to run the oracle first and read every finding.
 
+### (t) Ninjutsu: splitting combat (Phase 4h)
+Everything else in Phase 4 hung on seams that already existed; Ninjutsu needed a new one, a decision between blocks and damage. The choice was to reuse `pending` (rule 3) rather than add a phase: the pause is a `pending` of kind `ninjutsu` owned by the attacker, opened only when `ninjutsuOptions` is non-empty, so the vast majority of combats are byte-for-byte what they were and the lockstep
+protocol is untouched. The costs of that choice are the places that assumed "actor in combat_block means blocker": the Board's `inBlock` and block tally now exclude a pending window, and the oracle (which assumed `declareBlockers` resolves combat) now reads a combat in two halves through a `combatView`. The one engine subtlety is ordering: statics are recomputed after the swap and BEFORE damage, because combat damage is dealt inside the action and
+the usual end-of-action `settle` would be too late (a ninja would hit without the bonuses it should have; the oracle found it as a life mismatch). The attacker's replacement is a bounce on purpose, reusing the semantics (no death, no trigger, buffs gone) rather than inventing a fourth way to leave play.
+
 ## 8. Run it
 
 ```bash

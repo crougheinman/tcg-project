@@ -208,7 +208,7 @@ visible keywords first and the two engine keystones (statics, activated abilitie
 | 4f | **Choices I**: Scry, Loot, Fight / bite, Hexproof | M | **done** (see below) |
 | 4f2 | **Choices II**: Modal ("choose one"), X spells, Kicker, Ward (extra fields on the cast action and a UI to fill them; Buyback not done) | M | **done** (see below) |
 | 4g | **Graveyard**: Undying, Unearth | M | **done** (see below) |
-| 4h | **Showpiece**: Ninjutsu for Kunoichi / Hana (a short window between blocks and damage), later Equipment | L | planned |
+| 4h | **Showpiece**: Ninjutsu for Kunoichi / Hana (a short window between blocks and damage), later Equipment | L | **Ninjutsu done** (see below); Equipment not done |
 
 Still out of scope: the stack and counterspells, steal effects (controller is tied to owner), hidden-information mechanics, coloured mana.
 
@@ -346,3 +346,15 @@ and stress-sprinkles both (eight rule breaks each detected, including the combat
 
 Cards (all decks 45.4%-54.5% at N=120, 45.5%-55.5% at N=80): **Ronin Blade** Unearth {2} (Iron Blossom 50.4% -> 55.5%) and **Ancient Treant** Undying (no measurable change: the AI rarely reaches six mana). Undying is very strong against this AI: on Swift Lancer it took Wildblitz to 74.6%,
 on Sky Talon Skyward to 60.0%, on Ashigaru Iron Blossom to 69.1%, so it is kept on a top-end body.
+
+### Part 4h: Ninjutsu done (Equipment not done)
+
+The hard part was the WINDOW: blocks and damage used to be one action (`declareBlockers` ran `resolveCombat` at once). Now, right after the blocks are set (and Bushido applied), `ninjutsuOptions(state)` in `rules.ts` (each ninja in the attacker's hand it can pay for x each UNBLOCKED attacker still in play) decides; only when it
+is non-empty does combat PAUSE: `pending` `{ kind: 'ninjutsu', controller: the attacker }`, phase still `combat_block`, `actorOf` hands the move to the attacker, and `legalActions` lists every swap plus `skipNinjutsu`. When nothing could be swapped combat resolves in the same action as before, so a game with no ninja in hand plays and
+times exactly as it did (including online: nothing new is asked of anyone). The answers are two new actions: `ninjutsu { ninja, attacker }` and `skipNinjutsu`; both finish combat. A swap pays the cost, returns the attacker to its owner's hand like a bounce (buffs gone; a token just vanishes), puts the ninja in tapped and
+attacking, replaces the attacker in the combat list, recomputes static bonuses (so the ninja's own bonuses and the loss of the returned attacker's count in THIS combat's damage: the oracle showed this matters) and then resolves combat. A ninja is not cast and has no enter effect (card-data test).
+
+The AI (`pickNinjutsu`) swaps when `(ninja power - attacker power) * 10 + the ninjutsu discount * 3 - the attacker's cost * 3` is at least 10. The Board shows a prompt with a "No ninjutsu" button; tap a ninja in hand (the payable ones glow), then an unblocked attacker (they glow). `inBlock` and the block tally are now off while the window waits, because the attacker's seat is "the actor in combat_block" too.
+Tested (`ninjutsu.test.ts`, 9 tests, 11 rules mutation-checked); the fuzz oracle was taught that combat can be split: it re-derives the window (`NINJUTSU_WINDOW_MISSING` / `_SPURIOUS`), checks nothing is dealt before the answer, and resolves the damage expectations from a "combat view" of the pause state (Bushido taken back, the swap applied, auras recomputed from card data); eight rule breaks each detected.
+
+Cards (all decks 45.0%-54.2% at N=120, 45.5%-55.4% at N=80): **Kunoichi** Ninjutsu {1} and **Kensei Duelist** Ninjutsu {2}. The window opens in about 8% of AI-vs-AI games and the AI uses it in about two thirds of those, so the effect on balance is small. Not done: Equipment (the battlefield only holds creatures and lands, so it would need a new permanent type and an attach rule).
