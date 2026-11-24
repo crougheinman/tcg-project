@@ -126,6 +126,7 @@ export const CARDS: Record<string, CardDef> = {
     toughness: 1,
     keywords: ['skulk'],
     skill: 'Beast Blitz',
+    activated: { cost: { tap: true }, effect: { type: 'mana', amount: 1 } },
     static: {
       affects: { ids: ['swift_lancer', 'sky_talon', 'stoneback_cub', 'wolf_token', 'thornwood_brute', 'dread_maw'] },
       power: 1,
@@ -134,7 +135,7 @@ export const CARDS: Record<string, CardDef> = {
       mark: 'blitz',
     },
     art: '/cards/kunoichi.webp', // 420x564 WebP; other cards auto-wire to <id>.png
-    text: 'Skulk. Beast Blitz — your Swift Lancer, Sky Talon, Stoneback Cub, Thornwood Brute, Dread Maw, and Wolves get +1/+1.',
+    text: 'Skulk. {T}: Add one mana. Beast Blitz — your Swift Lancer, Sky Talon, Stoneback Cub, Thornwood Brute, Dread Maw, and Wolves get +1/+1.',
     flavor: 'One whistle, and the wild answers.',
   },
 

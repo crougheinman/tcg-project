@@ -46,6 +46,7 @@ export type Effect =
   | { type: 'recall' } // return the creature card that died most recently from your graveyard to your hand
   | { type: 'rally'; power: number; toughness: number } // all your creatures get +P/+T until end of turn (untargeted)
   | { type: 'bounce' } // return target creature to its owner's hand (a token just ceases to exist); needs a target
+  | { type: 'mana'; amount: number } // add N mana to your pool until the phase ends (an activated ability's effect)
   | { type: 'edict' }; // the opponent sacrifices a creature of THEIR choice (a `pending` decision made by them; automatic when they have one)
 
 /** Which effects need the player to pick a target. */
@@ -61,6 +62,16 @@ export function needsTarget(effect: Effect): boolean {
 export function needsCreatureChoice(effect: Effect): boolean {
   if (effect.type === 'damage') return effect.targets === 'creature';
   return needsTarget(effect);
+}
+
+/**
+ * An activated ability: pay a cost at will in your main phase (`activate` action) to get an UNTARGETED effect. `tap` needs the creature
+ * untapped and not summoning sick (it stays tapped through the opponent's turn, so it cannot block then); `mana` is paid from lands and pool.
+ * Mana abilities add to `PlayerState.pool`, which empties when the phase changes.
+ */
+export interface ActivatedAbility {
+  cost: { tap?: boolean; mana?: number };
+  effect: Effect;
 }
 
 /**
@@ -97,6 +108,7 @@ export interface CardDef {
   onDeath?: Effect; // creature: resolves when it dies (token creation, draw, heal, or damage to the opponent)
   spellTrigger?: Effect; // creature: fires whenever its controller casts a sorcery
   spellTriggerInstant?: boolean; // creature: its spellTrigger also fires on instant casts
+  activated?: ActivatedAbility; // creature: an ability its controller can use in their main phase (pingers, mana creatures)
   static?: StaticAbility; // creature: a static ability (Beast Blitz, Lords, Threshold)
   landTrigger?: Effect; // creature: Landfall, resolves whenever a land enters under its controller's control (untargeted effects only)
   onAttack?: Effect; // creature: resolves whenever it attacks (untargeted effects only)
@@ -139,6 +151,7 @@ export interface PlayerState {
   graveyard: CardInstance[];
   exile?: CardInstance[]; // cards removed from the game (a flashbacked spell); optional so older fixtures need nothing
   landPlayedThisTurn: boolean;
+  pool?: number; // floating mana from mana abilities; empties when the phase changes
 }
 
 export type Phase =
@@ -192,6 +205,7 @@ export type Action =
   | { type: 'declareAttackers'; attackers: string[] }
   | { type: 'declareBlockers'; blocks: Record<string, string> }
   | { type: 'resolveTrigger'; target: string } // choose the target of a pending enter effect (Whipflash), or the creature to sacrifice (Edict)
+  | { type: 'activate'; iid: string } // use a creature's activated ability (its cost is paid, its effect resolves at once)
   | { type: 'cycle'; iid: string } // Cycling: pay the card's cycling cost, discard it from hand, draw a card
   | { type: 'keepHand' } // mulligan phase: keep this opening hand
   | { type: 'mulligan' } // mulligan phase: shuffle the hand back and draw one card fewer

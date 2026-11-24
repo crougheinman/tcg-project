@@ -89,7 +89,17 @@ export function untappedLands(p: PlayerState): CardInstance[] {
   return p.battlefield.filter((c) => isLand(c) && !c.tapped);
 }
 export function availableMana(p: PlayerState): number {
-  return untappedLands(p).length;
+  return untappedLands(p).length + (p.pool ?? 0);
+}
+/** Why `c` (one of `p`'s creatures) cannot use its activated ability now, or null if it can. The single definition, shared by the validator, `legalActions`, the AI and the UI. */
+export function activateError(state: GameState, p: PlayerState, c: CardInstance): string | null {
+  const ab = getDef(c.def).activated;
+  if (!ab) return 'that card has no ability';
+  if (state.phase !== 'main1') return 'abilities are used in your main phase';
+  if (ab.cost.tap && c.tapped) return 'it is tapped';
+  if (ab.cost.tap && c.summoningSick) return 'it is summoning sick';
+  if ((ab.cost.mana ?? 0) > availableMana(p)) return 'not enough mana';
+  return null;
 }
 
 /**
@@ -306,6 +316,9 @@ export function legalActions(state: GameState, player: PlayerId): Action[] {
       const cost = getDef(c.def).cycling;
       if (cost !== undefined && cost <= mana) actions.push({ type: 'cycle', iid: c.iid });
     }
+    for (const c of p.battlefield) {
+      if (isCreature(c) && getDef(c.def).activated && !activateError(state, p, c)) actions.push({ type: 'activate', iid: c.iid });
+    }
     actions.push(...spellActions(state, player));
     actions.push({ type: 'advance' }); // move to combat
   } else if (state.phase === 'combat_attack') {
@@ -434,6 +447,14 @@ export function validateAction(state: GameState, action: Action): void {
       if (pend?.kind !== 'enter') throw new Error('no trigger pending');
       if (action.target === pend.source) throw new Error('cannot target the source');
       if (!found) throw new Error('target creature not found');
+      return;
+    }
+    case 'activate': {
+      requirePhase(state, 'main1');
+      const c = active.battlefield.find((x) => x.iid === action.iid && isCreature(x));
+      if (!c) throw new Error('not your creature');
+      const why = activateError(state, active, c);
+      if (why) throw new Error(why);
       return;
     }
     case 'cycle': {

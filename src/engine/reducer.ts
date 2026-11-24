@@ -193,6 +193,17 @@ export function applyAction(state: GameState, action: Action): GameState {
       resolveCombat(s);
       break;
     }
+    case 'activate': {
+      // An activated ability: pay the cost (tap, mana), then its untargeted effect resolves at once. It is not a cast: no spell triggers, no spell count.
+      const c = active.battlefield.find((x) => x.iid === action.iid)!;
+      const d = getDef(c.def);
+      const ab = d.activated!;
+      if (ab.cost.mana) payMana(active, ab.cost.mana);
+      if (ab.cost.tap) c.tapped = true;
+      s.log.push(`✦ ${d.name} — ability`);
+      applyEffect(s, s.active, ab.effect, { kind: 'player', player: opponentOf(s.active) });
+      break;
+    }
     case 'cycle': {
       // Cycling: pay its cycling cost, discard it from hand, draw a card (it is a discard you choose, not a cast: no spell triggers)
       const c = takeFromHand(active, action.iid);
@@ -216,6 +227,7 @@ export function applyAction(state: GameState, action: Action): GameState {
     }
   }
 
+  if (s.phase !== state.phase) for (const pid of ['A', 'B'] as PlayerId[]) s.players[pid].pool = 0; // floating mana empties with the phase
   settle(s); // deaths and static abilities (Beast Blitz, Lords, Threshold) until stable
   return s;
 }
@@ -288,9 +300,11 @@ function takeFromGraveyard(p: PlayerState, iid: string) {
 }
 
 function payMana(p: PlayerState, cost: number): void {
+  if (availableMana(p) < cost) throw new Error('not enough mana');
+  const fromPool = Math.min(p.pool ?? 0, cost); // floating mana is spent first, so lands stay untapped
+  if (fromPool) p.pool = (p.pool ?? 0) - fromPool;
   const lands = untappedLands(p);
-  if (lands.length < cost) throw new Error('not enough mana');
-  for (let i = 0; i < cost; i++) lands[i].tapped = true;
+  for (let i = 0; i < cost - fromPool; i++) lands[i].tapped = true;
 }
 
 function drawCard(s: GameState, pid: PlayerId): void {
@@ -370,6 +384,12 @@ function applyEffect(s: GameState, controller: PlayerId, effect: Effect, target?
     }
     case 'heal': {
       s.players[controller].life += effect.amount;
+      break;
+    }
+    case 'mana': {
+      const p = s.players[controller];
+      p.pool = (p.pool ?? 0) + effect.amount;
+      s.log.push(`${controller} adds ${effect.amount} mana`);
       break;
     }
     case 'ramp': {
