@@ -81,7 +81,9 @@ function updateTrack(t: Track, before: GameState, a: Action, after: GameState): 
   if (a.type === 'castCreature' || a.type === 'castSorcery') t.spells[actorOf(before)] += 1;
   const stillThere = new Set(all(after).map((c) => c.iid));
   const lv = leavers(before, a);
-  for (const c of creatures(before)) if (!stillThere.has(c.iid) && !lv.bounced.has(c.iid)) t.died = true;
+  for (const c of creatures(before)) if (!stillThere.has(c.iid) && !lv.bounced.has(c.iid) && !c.unearthed) t.died = true; // (an unearthed creature leaving at the end step is exiled, not dead)
+  // an Undying creature that died and came back never left the battlefield, but it did die (Morbid): the log is the witness
+  if (after.log.slice(before.log.length).some((l) => l.endsWith(' dies'))) t.died = true;
 }
 
 /** Mana a player can spend right now: untapped lands plus floating mana (re-derived here, not the engine's helper). */
@@ -100,6 +102,9 @@ function chosen(d: ReturnType<typeof getDef>, a: { x?: number; mode?: number }):
   return e;
 }
 type CastOptsOf = { x?: number; mode?: number; kicked?: boolean };
+
+/** An Undying creature that would come back if it died now (it has no counter yet), and an unearthed one (exiled at the end step, or instead of dying): neither follows the plain die-and-stay-dead rules the older checks assume. */
+const wouldReturn = (c: CardInstance) => hasKeyword(c, 'undying') && !c.revived && !c.unearthed;
 
 function expectedLife(before: GameState, a: Action, t: Track): Record<PlayerId, number> {
   const life = { A: before.players.A.life, B: before.players.B.life };
@@ -244,7 +249,7 @@ function check(
     }
     if (real !== sizes[pid]) R('CARD_CONSERVATION', `${pid} has ${real} real cards, started with ${sizes[pid]}`);
     for (const c of p.graveyard) {
-      if (isCreature(c) && (c.damage || c.buffP || c.buffT || c.tempP || c.tempT || c.auraP || c.auraT || c.blitz || c.tapped)) R('DEAD_CARD_KEEPS_STATE', `${c.def} in graveyard with damage=${c.damage} buff=${c.buffP}/${c.buffT} temp=${c.tempP ?? 0}/${c.tempT ?? 0} blitz=${c.blitz} tapped=${c.tapped}`);
+      if (isCreature(c) && (c.damage || c.buffP || c.buffT || c.tempP || c.tempT || c.auraP || c.auraT || c.blitz || c.tapped || c.revived || c.unearthed)) R('DEAD_CARD_KEEPS_STATE', `${c.def} in graveyard with damage=${c.damage} buff=${c.buffP}/${c.buffT} temp=${c.tempP ?? 0}/${c.tempT ?? 0} blitz=${c.blitz} tapped=${c.tapped}`);
     }
   }
 
@@ -298,6 +303,7 @@ function check(
       if (!isCreature(c)) continue;
       const now = after.players[casterId].battlefield.find((x) => x.iid === c.iid);
       if (!now) continue; // died to the spell itself
+      if (hasKeyword(c, 'undying')) continue; // (a creature that died and came back has lost its temporary bonus)
       const pro = hasKeyword(c, 'prowess') ? 1 : 0;
       if ((now.tempP ?? 0) !== (c.tempP ?? 0) + pro + rally.power || (now.tempT ?? 0) !== (c.tempT ?? 0) + pro + rally.toughness) {
         R('PROWESS_WRONG', `${c.def} temp ${c.tempP ?? 0}/${c.tempT ?? 0} -> ${now.tempP ?? 0}/${now.tempT ?? 0} after a spell (prowess ${pro}, rally +${rally.power}/+${rally.toughness})`);
@@ -349,7 +355,7 @@ function check(
   if (a.type === 'declareBlockers') {
     // dies triggers: each token-making death adds exactly its tokens (tokens that died are replaced, not lost)
     const afterIds = new Set(all(after).map((c) => c.iid));
-    const died = creatures(before).filter((c) => !afterIds.has(c.iid));
+    const died = creatures(before).filter((c) => !afterIds.has(c.iid) && !c.unearthed);
     const defs = new Set<string>();
     for (const c of died) { const t = getDef(c.def).onDeath; if (t?.type === 'token') defs.add(t.token); }
     for (const pid of ['A', 'B'] as PlayerId[]) {
@@ -358,7 +364,7 @@ function check(
         const lostN = died.filter((c) => c.owner === pid && c.def === tok).length;
         const madeN = died.filter((c) => c.owner === pid).reduce((n, c) => { const t = getDef(c.def).onDeath; return n + (t?.type === 'token' && t.token === tok ? t.count : 0); }, 0);
         const nowN = after.players[pid].battlefield.filter((c) => c.def === tok).length;
-        if (nowN !== beforeN - lostN + madeN) R('DIES_TRIGGER_TOKENS', `${pid}: ${tok} count ${beforeN} -${lostN} +${madeN} expected ${beforeN - lostN + madeN}, got ${nowN}`);
+        if (nowN !== beforeN - lostN + madeN && !creatures(before).some((c) => hasKeyword(c, 'undying'))) R('DIES_TRIGGER_TOKENS', `${pid}: ${tok} count ${beforeN} -${lostN} +${madeN} expected ${beforeN - lostN + madeN}, got ${nowN}`);
       }
     }
   }
@@ -419,7 +425,7 @@ function check(
         const biter = mine.reduce((best, c) => (power(c) > power(best) ? c : best));
         const victimA = all(after).find((c) => c.iid === victimB.iid);
         const lethal = !hasKeyword(victimB, 'indestructible') && (victimB.damage + power(biter) >= toughness(victimB) || (hasKeyword(biter, 'deathtouch') && power(biter) > 0));
-        if (lethal && victimA && !after.pending) R('BITE_SURVIVED', `${biter.def} (power ${power(biter)}) bit ${victimB.def} (toughness ${toughness(victimB)}, damage ${victimB.damage}) and it lived`);
+        if (lethal && victimA && !after.pending && !wouldReturn(victimB)) R('BITE_SURVIVED', `${biter.def} (power ${power(biter)}) bit ${victimB.def} (toughness ${toughness(victimB)}, damage ${victimB.damage}) and it lived`);
         if (!lethal && victimA && power(biter) > 0 && victimA.damage - victimB.damage !== power(biter) && !hasKeyword(victimB, 'indestructible')) R('BITE_DAMAGE', `${victimB.def}: damage ${victimB.damage} -> ${victimA.damage}, expected +${power(biter)}`);
         const biterA = all(after).find((c) => c.iid === biter.iid);
         if (biterA && biterA.damage !== biter.damage && !after.winner) R('BITE_HURT_BITER', `${biter.def} took damage from its own bite`);
@@ -452,6 +458,41 @@ function check(
       if (spentMana(before, after, who) !== want) R('SPELL_COST', `${d.name}: paid ${spentMana(before, after, who)}, it costs ${want} (x=${a.x ?? '-'} kicked=${!!a.kicked} mode=${a.mode ?? '-'})`);
       if (a.x !== undefined && !d.x) R('X_WITHOUT_X', `${d.name} was cast with X`);
       if (a.kicked && !d.kicker) R('KICKED_WITHOUT_KICKER', `${d.name} was kicked`);
+    }
+  }
+
+  // 3g. Part 4g: Undying and Unearth, each re-derived from the rule text
+  {
+    const lvg = leavers(before, a);
+    const afterBf = new Set(creatures(after).map((c) => c.iid));
+    for (const c of creatures(before)) {
+      const now = creatures(after).find((x) => x.iid === c.iid);
+      // a first death of an Undying creature must bring it back (it is not on the battlefield only if it was bounced, exiled by Unearth's end step, or already carried its counter)
+      const newLog = after.log.slice(before.log.length);
+      const diedTwice = newLog.some((l) => l === `${getDef(c.def).name} rises again (Undying)`); // it came back and died again within the action: legitimately gone
+      if (hasKeyword(c, 'undying') && !afterBf.has(c.iid) && !lvg.bounced.has(c.iid) && !c.revived && !c.unearthed && !diedTwice) {
+        R('UNDYING_STAYED_DEAD', `${c.def} left the battlefield without its counter and did not return (after ${a.type})`);
+      }
+      if (now && c.revived && !c.summoningSick && now.summoningSick) R('UNDYING_TWICE', `${c.def} returned a second time`);
+      if (now?.revived && (!hasKeyword(now, 'undying') || now.buffP < 1)) R('UNDYING_NO_COUNTER', `${now.def} is marked as returned but lacks the +1/+1 counter`);
+      // an unearthed creature that leaves must be exiled, never in the graveyard
+      if (c.unearthed && !afterBf.has(c.iid) && !lvg.bounced.has(c.iid)) {
+        if (after.players[c.owner].graveyard.some((x) => x.iid === c.iid)) R('UNEARTH_TO_GRAVEYARD', `${c.def} was unearthed and ended in the graveyard`);
+        if (!TOKENS.has(c.def) && !(after.players[c.owner].exile ?? []).some((x) => x.iid === c.iid)) R('UNEARTH_NOT_EXILED', `${c.def} was unearthed and is not in exile`);
+      }
+    }
+    // the end step exiles everything unearthed
+    if (before.phase !== 'end' && after.phase === 'end') for (const c of creatures(after)) if (c.unearthed) R('UNEARTH_SURVIVED_END', `${c.def} is still on the battlefield in the end step`);
+    if (a.type === 'unearth') {
+      const who = before.active;
+      const was = before.players[who].graveyard.find((c) => c.iid === a.iid)!;
+      const cost = getDef(was.def).unearth!;
+      const now = after.players[who].battlefield.find((c) => c.iid === a.iid);
+      if (!now) R('UNEARTH_NOT_BACK', `${was.def} did not return to the battlefield`);
+      else if (now.summoningSick) R('UNEARTH_NO_HASTE', `${was.def} returned summoning sick`);
+      if (after.players[who].graveyard.some((c) => c.iid === a.iid)) R('UNEARTH_STILL_IN_GRAVEYARD', `${was.def} is in both zones`);
+      if (spentMana(before, after, who) !== cost) R('UNEARTH_COST', `${was.def}: paid ${spentMana(before, after, who)}, unearth costs ${cost}`);
+      if ((after.spellsThisTurn?.[who] ?? 0) !== (before.spellsThisTurn?.[who] ?? 0)) R('UNEARTH_COUNTED_AS_SPELL', 'an unearth is not a cast');
     }
   }
 
@@ -497,15 +538,15 @@ function check(
       const theirs = before.players[victim].battlefield.filter(isCreature);
       const asking = after.pending?.kind === 'sacrifice' && after.pending.controller === victim;
       if (theirs.length === 0 && after.pending) R('EDICT_PHANTOM_CHOICE', 'an Edict with nothing to sacrifice asked for a choice');
-      if (theirs.length === 1 && (after.pending || all(after).some((c) => c.iid === theirs[0].iid))) R('EDICT_ONLY_CREATURE_KEPT', `${theirs[0].def} is the only creature and must be sacrificed at once`);
+      if (theirs.length === 1 && (after.pending || (all(after).some((c) => c.iid === theirs[0].iid) && !wouldReturn(theirs[0])))) R('EDICT_ONLY_CREATURE_KEPT', `${theirs[0].def} is the only creature and must be sacrificed at once`);
       if (theirs.length >= 2 && !asking) R('EDICT_NO_CHOICE_OFFERED', `${victim} has ${theirs.length} creatures but was not asked to choose`);
     }
   }
   if (a.type === 'resolveTrigger' && before.pending?.kind === 'sacrifice') {
     const was = all(before).find((c) => c.iid === a.target)!;
-    if (all(after).some((c) => c.iid === a.target)) R('SACRIFICE_SURVIVED', `${was.def} was sacrificed but is still in play`);
+    if (all(after).some((c) => c.iid === a.target) && !wouldReturn(was)) R('SACRIFICE_SURVIVED', `${was.def} was sacrificed but is still in play`);
     if (after.pending) R('SACRIFICE_STILL_PENDING', 'the choice was made but the game still waits on it');
-    if (!TOKENS.has(was.def) && !after.players[was.owner].graveyard.some((c) => c.iid === a.target)) R('SACRIFICE_NOT_IN_GRAVEYARD', `${was.def} is not in its owner's graveyard`);
+    if (!TOKENS.has(was.def) && !was.unearthed && !wouldReturn(was) && !after.players[was.owner].graveyard.some((c) => c.iid === a.target)) R('SACRIFICE_NOT_IN_GRAVEYARD', `${was.def} is not in its owner's graveyard`);
   }
 
   // 4. combat-specific
@@ -533,8 +574,8 @@ function check(
   if (a.type === 'declareBlockers') {
     const expDead = expectedCombatDeaths(before, a);
     const nowAlive = new Set(creatures(after).map((c) => c.iid));
-    for (const iid of expDead) if (nowAlive.has(iid)) R('SURVIVED_LETHAL', `${creatures(before).find((c) => c.iid === iid)?.def} should have died in combat`);
-    for (const c of creatures(before)) if (!expDead.has(c.iid) && !nowAlive.has(c.iid)) R('DIED_WITHOUT_LETHAL', `${c.def} died but took non-lethal combat damage`);
+    for (const iid of expDead) if (nowAlive.has(iid) && !wouldReturn(creatures(before).find((c) => c.iid === iid)!)) R('SURVIVED_LETHAL', `${creatures(before).find((c) => c.iid === iid)?.def} should have died in combat`);
+    for (const c of creatures(before)) if (!expDead.has(c.iid) && !nowAlive.has(c.iid) && !c.unearthed) R('DIED_WITHOUT_LETHAL', `${c.def} died but took non-lethal combat damage`);
     for (const c of creatures(after)) if (c.damage !== 0) R('DAMAGE_NOT_CLEARED', `${c.def} carries damage ${c.damage} into the end step`);
     if (after.combat !== null) R('COMBAT_NOT_CLEARED', 'state.combat still set after resolution');
     if (!after.lastCombat) R('LASTCOMBAT_MISSING', 'lastCombat not recorded');
@@ -549,7 +590,7 @@ function check(
   // are skipped: losing it can take a point of toughness away, which is the one thing that does kill it.)
   const lv = leavers(before, a);
   for (const c of creatures(before)) {
-    if (!hasKeyword(c, 'indestructible') || c.blitz || c.auraT || toughness(c) <= 0 || lv.bounced.has(c.iid) || lv.sacrificed.has(c.iid)) continue;
+    if (!hasKeyword(c, 'indestructible') || c.blitz || c.auraT || toughness(c) <= 0 || lv.bounced.has(c.iid) || lv.sacrificed.has(c.iid) || c.unearthed) continue;
     if (!after.players[c.owner].battlefield.some((x) => x.iid === c.iid)) R('INDESTRUCTIBLE_DIED', `${c.def} (toughness ${toughness(c)}) left the battlefield`);
   }
   // damage must never survive into a new turn
@@ -657,15 +698,15 @@ const t0 = Date.now();
 // over the decks' creatures, so every keyword combination meets every situation (not just the few
 // the shipped cards happen to carry). Keywords are restored after each game.
 function caster0(st: GameState): PlayerId { return st.phase === 'combat_block' ? opponentOf(st.active) : st.active; }
-const STRESS_KW = ['reach', 'vigilance', 'firstStrike', 'doubleStrike', 'trample', 'deathtouch', 'lifelink', 'flash', 'prowess', 'skulk', 'bushido', 'indestructible', 'battleCry', 'exalted', 'hexproof'] as const;
+const STRESS_KW = ['reach', 'vigilance', 'firstStrike', 'doubleStrike', 'trample', 'deathtouch', 'lifelink', 'flash', 'prowess', 'skulk', 'bushido', 'indestructible', 'battleCry', 'exalted', 'hexproof', 'undying'] as const;
 type CardDefDeath = (typeof CARDS)[string]['onDeath'];
-type Sprinkled = { ward: number | undefined; kw: string[] | undefined; death: CardDefDeath; enter: CardDefDeath; land: CardDefDeath; attack: CardDefDeath; bonus: (typeof CARDS)[string]['bonus']; cycling: number | undefined; static: (typeof CARDS)[string]['static']; activated: (typeof CARDS)[string]['activated'] };
+type Sprinkled = { unearth: number | undefined; ward: number | undefined; kw: string[] | undefined; death: CardDefDeath; enter: CardDefDeath; land: CardDefDeath; attack: CardDefDeath; bonus: (typeof CARDS)[string]['bonus']; cycling: number | undefined; static: (typeof CARDS)[string]['static']; activated: (typeof CARDS)[string]['activated'] };
 function sprinkleKeywords(r: () => number): () => void {
   const saved = new Map<string, Sprinkled>();
   const flashed: string[] = [];
   for (const def of Object.values(CARDS)) {
     if (def.type !== 'creature') continue;
-    saved.set(def.id, { kw: def.keywords as string[] | undefined, death: def.onDeath, enter: def.onEnter, land: def.landTrigger, attack: def.onAttack, bonus: def.bonus, cycling: def.cycling, static: def.static, activated: def.activated, ward: def.ward });
+    saved.set(def.id, { kw: def.keywords as string[] | undefined, death: def.onDeath, enter: def.onEnter, land: def.landTrigger, attack: def.onAttack, bonus: def.bonus, cycling: def.cycling, static: def.static, activated: def.activated, ward: def.ward, unearth: def.unearth });
     const extra = STRESS_KW.filter(() => r() < 0.25);
     if (extra.length) def.keywords = [...(def.keywords ?? []), ...extra];
     // some creatures raise a token when they die (tokens included, so triggers can chain through them)
@@ -693,6 +734,8 @@ function sprinkleKeywords(r: () => number): () => void {
       if (!cost.tap && (!cost.mana || eff.type === 'mana')) cost.tap = true; // an ability always costs something, or it could be used without limit
       def.activated = { cost, effect: eff };
     }
+    // Phase 4g: Unearth (come back from the graveyard for a turn)
+    if (def.unearth === undefined && r() < 0.15) def.unearth = 1 + Math.floor(r() * 3);
     // Phase 4f2: ward (opposing spells that target it cost more)
     if (def.ward === undefined && r() < 0.12) def.ward = 1 + Math.floor(r() * 2);
     // Cycling on some creatures
@@ -746,7 +789,7 @@ function sprinkleKeywords(r: () => number): () => void {
       flashed.push(def.id);
     }
   }
-  return () => { for (const [id, v] of saved) { CARDS[id].keywords = v.kw as never; CARDS[id].onDeath = v.death; CARDS[id].onEnter = v.enter; CARDS[id].landTrigger = v.land; CARDS[id].onAttack = v.attack; CARDS[id].bonus = v.bonus; CARDS[id].cycling = v.cycling; CARDS[id].static = v.static; CARDS[id].activated = v.activated; CARDS[id].ward = v.ward; } for (const [id, b] of spellBonus) CARDS[id].bonus = b as never; for (const [id, e] of spellEffect) CARDS[id].effect = e; for (const [id, c] of spellCycling) CARDS[id].cycling = c; for (const [id, o] of spellOpts) { CARDS[id].x = o.x; CARDS[id].kicker = o.kicker; CARDS[id].modes = o.modes; } for (const id of flashed) delete CARDS[id].flashback; };
+  return () => { for (const [id, v] of saved) { CARDS[id].keywords = v.kw as never; CARDS[id].onDeath = v.death; CARDS[id].onEnter = v.enter; CARDS[id].landTrigger = v.land; CARDS[id].onAttack = v.attack; CARDS[id].bonus = v.bonus; CARDS[id].cycling = v.cycling; CARDS[id].static = v.static; CARDS[id].activated = v.activated; CARDS[id].ward = v.ward; CARDS[id].unearth = v.unearth; } for (const [id, b] of spellBonus) CARDS[id].bonus = b as never; for (const [id, e] of spellEffect) CARDS[id].effect = e; for (const [id, c] of spellCycling) CARDS[id].cycling = c; for (const [id, o] of spellOpts) { CARDS[id].x = o.x; CARDS[id].kicker = o.kicker; CARDS[id].modes = o.modes; } for (const id of flashed) delete CARDS[id].flashback; };
 }
 
 for (const policyName of ['ai', 'chaos', 'ai+kw', 'chaos+kw'] as const) {

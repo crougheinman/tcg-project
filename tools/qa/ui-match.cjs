@@ -288,6 +288,17 @@ async function playMatch(browser, A, B, idx) {
           ok = await clickEl(btn(/Cycle/), 'Cycle');
           if (ok) { await sleep(150); ok = await clickEl(cardLoc(action.iid, scopeHand), 'cycle card'); }
           break;
+        case 'unearth': { // Unearth: open my graveyard, then the Unearth button on that creature's card (the viewer groups copies, so match any copy of the same card)
+          bump('unearth'); await page.evaluate((a) => window.__H.setExpect([a]), action);
+          const iids = await page.evaluate((iid) => { const g = window.__game.getState().game.players.A.graveyard; const d = g.find((c) => c.iid === iid)?.def; return g.filter((c) => c.def === d).map((c) => c.iid); }, action.iid);
+          ok = await clickEl(page.locator('.player-zone.me .zone-btn.left').first(), 'graveyard');
+          if (ok) {
+            await page.locator('.zone-modal').first().waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
+            const card = page.locator('.zone-modal .zone-card').filter({ has: page.locator(iids.map((i) => `[data-iid="${i}"]`).join(',')) }).first();
+            ok = await clickEl(card.locator('.zone-flash', { hasText: 'Unearth' }).first(), 'Unearth');
+          }
+          break;
+        }
         case 'activate': // Activated ability: tap the Ability button, then the creature (two steps, like Cycle)
           bump('activate'); await page.evaluate((a) => window.__H.setExpect([a]), action);
           ok = await clickEl(btn(/Ability/), 'Ability');
