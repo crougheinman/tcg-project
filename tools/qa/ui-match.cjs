@@ -299,9 +299,15 @@ async function playMatch(browser, A, B, idx) {
         case 'mulligan':
           bump('mulligan'); await page.evaluate((a) => window.__H.setExpect([a]), action);
           ok = await clickEl(btn(/^Mulligan/), 'Mulligan'); break;
-        case 'resolveTrigger':
-          bump('enterTrigger'); await page.evaluate((a) => window.__H.setExpect([a]), action);
-          ok = await clickTarget({ kind: 'creature', iid: action.target }); break;
+        case 'resolveTrigger': {
+          // a Loot discard names a card in MY HAND; an Edict / Whipflash pick names a creature
+          const inHand = await page.evaluate((iid) => window.__game.getState().game.players.A.hand.some((c) => c.iid === iid), action.target);
+          bump(inHand ? 'lootDiscard' : 'enterTrigger'); await page.evaluate((a) => window.__H.setExpect([a]), action);
+          ok = inHand ? await clickEl(cardLoc(action.target, scopeHand), 'loot discard') : await clickTarget({ kind: 'creature', iid: action.target }); break;
+        }
+        case 'scry': // Scry: the modal shows the top card with Keep on top / Put on the bottom
+          bump('scry'); await page.evaluate((a) => window.__H.setExpect([a]), action);
+          ok = await clickEl(page.locator('.scry-modal button', { hasText: action.bottom ? 'Put on the bottom' : 'Keep on top' }).first(), 'Scry'); break;
         case 'castSorcery': {
           const card = await page.evaluate((iid) => { const g = window.__game.getState().game; return g.players.A.hand.find((c) => c.iid === iid)?.def; }, action.iid);
           bump('cast:' + card); await page.evaluate((a) => window.__H.setExpect([a]), action);

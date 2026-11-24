@@ -71,7 +71,7 @@ function leavers(before: GameState, a: Action): { bounced: Set<string>; sacrific
   }
   if (a.type === 'resolveTrigger' && before.pending) {
     if (before.pending.kind === 'sacrifice') sacrificed.add(a.target);
-    else if (getDef(before.pending.def).onEnter?.type === 'bounce') bounced.add(a.target);
+    else if (before.pending.kind === 'enter' && getDef(before.pending.def).onEnter?.type === 'bounce') bounced.add(a.target);
   }
   return { bounced, sacrificed };
 }
@@ -366,6 +366,65 @@ function check(
     if ((after.spellsThisTurn?.[who] ?? 0) !== (before.spellsThisTurn?.[who] ?? 0)) R('CYCLE_COUNTED_AS_SPELL', 'cycling is not a cast');
     if (after.players.A.life !== before.players.A.life || after.players.B.life !== before.players.B.life) R('CYCLE_CHANGED_LIFE', 'cycling changed a life total');
   }
+  // 3e. Part 4f: hexproof, Scry, Loot and Bite, each re-derived from the rule text
+  {
+    const caster = before.phase === 'combat_block' ? opponentOf(before.active) : before.active;
+    // a creature targeted by the OPPONENT's spell or enter effect must not have hexproof
+    let target: string | undefined, by: PlayerId | undefined;
+    if (a.type === 'castSorcery' && a.target?.kind === 'creature') { target = a.target.iid; by = caster; }
+    if (a.type === 'resolveTrigger' && before.pending?.kind === 'enter') { target = a.target; by = before.pending.controller; }
+    if (target && by) {
+      const t = all(before).find((c) => c.iid === target);
+      if (t && t.owner !== by && hasKeyword(t, 'hexproof') && before.players[opponentOf(by)].battlefield.some((c) => c.iid === target)) R('HEXPROOF_TARGETED', `${t.def} has hexproof but ${by} targeted it`);
+    }
+  }
+  if (a.type === 'scry' && before.pending?.kind === 'scry') {
+    const who = before.pending.controller, seen = before.pending.seen ?? 0;
+    const lb = before.players[who].library.map((c) => c.iid), la = after.players[who].library.map((c) => c.iid);
+    const expected = a.bottom ? [...lb.slice(0, seen), ...lb.slice(seen + 1), lb[seen]] : lb;
+    if (JSON.stringify(la) !== JSON.stringify(expected)) R('SCRY_LIBRARY', `scry ${a.bottom ? 'bottom' : 'top'} at ${seen}: library is not as expected`);
+    const leftBefore = before.pending.left ?? 1;
+    if (leftBefore <= 1 ? after.pending !== null : (after.pending?.left ?? -1) !== leftBefore - 1) R('SCRY_COUNT', `left ${leftBefore} -> ${after.pending?.left ?? 'done'}`);
+    if (!a.bottom && after.pending && (after.pending.seen ?? 0) !== seen + 1) R('SCRY_SEEN', 'keeping a card must advance the cursor');
+    for (const l of after.log.slice(before.log.length)) if (!/^(A|B) (keeps a card on top|puts a card on the bottom)$/.test(l)) R('SCRY_LOG', `a Scry answer logged something unexpected (it must not name the card): ${l}`);
+  }
+  if (a.type === 'castSorcery' || a.type === 'castCreature') {
+    const who = a.type === 'castCreature' ? actorOf(before) : caster0(before);
+    const card = before.players[who].hand.find((c) => c.iid === a.iid) ?? before.players[who].graveyard.find((c) => c.iid === a.iid);
+    const d = card && getDef(card.def);
+    const eff = a.type === 'castCreature' ? d?.onEnter : d?.effect;
+    if (eff?.type === 'scry') {
+      const want = Math.min(eff.amount, before.players[who].library.length);
+      if (want > 0 && !before.pending && after.pending?.kind !== 'scry' && !after.winner) R('SCRY_NOT_ASKED', `${d!.name} scry ${eff.amount} did not wait on a choice`);
+      if (after.pending?.kind === 'scry' && (after.pending.left !== want || after.pending.controller !== who)) R('SCRY_LEFT', `left ${after.pending.left}, expected ${want} for ${after.pending.controller}`);
+    }
+    if (eff?.type === 'loot' && !after.winner && d?.bonus?.effect.type !== 'draw') { // (a Morbid draw bonus on the same card would draw a second card)
+      if (after.players[who].library.length !== before.players[who].library.length - 1) R('LOOT_NO_DRAW', 'a Loot must draw exactly one card');
+      if (after.pending?.kind !== 'discard' || after.pending.controller !== who) R('LOOT_NOT_ASKED', 'a Loot must then wait on the controller discarding');
+    }
+    if (a.type === 'castSorcery' && eff?.type === 'bite' && a.target?.kind === 'creature') {
+      const mine = before.players[who].battlefield.filter(isCreature);
+      const victimB = all(before).find((c) => c.iid === a.target!.iid);
+      if (mine.length && victimB) {
+        const biter = mine.reduce((best, c) => (power(c) > power(best) ? c : best));
+        const victimA = all(after).find((c) => c.iid === victimB.iid);
+        const lethal = !hasKeyword(victimB, 'indestructible') && (victimB.damage + power(biter) >= toughness(victimB) || (hasKeyword(biter, 'deathtouch') && power(biter) > 0));
+        if (lethal && victimA && !after.pending) R('BITE_SURVIVED', `${biter.def} (power ${power(biter)}) bit ${victimB.def} (toughness ${toughness(victimB)}, damage ${victimB.damage}) and it lived`);
+        if (!lethal && victimA && power(biter) > 0 && victimA.damage - victimB.damage !== power(biter) && !hasKeyword(victimB, 'indestructible')) R('BITE_DAMAGE', `${victimB.def}: damage ${victimB.damage} -> ${victimA.damage}, expected +${power(biter)}`);
+        const biterA = all(after).find((c) => c.iid === biter.iid);
+        if (biterA && biterA.damage !== biter.damage && !after.winner) R('BITE_HURT_BITER', `${biter.def} took damage from its own bite`);
+      }
+    }
+  }
+  if (a.type === 'resolveTrigger' && before.pending?.kind === 'discard') {
+    const who = before.pending.controller;
+    if (!before.players[who].hand.some((c) => c.iid === a.target)) R('LOOT_FOREIGN_CARD', 'discarded a card that was not in hand');
+    if (after.players[who].hand.length !== before.players[who].hand.length - 1) R('LOOT_HAND_SIZE', `hand ${before.players[who].hand.length} -> ${after.players[who].hand.length}`);
+    if (!after.players[who].graveyard.some((c) => c.iid === a.target)) R('LOOT_NOT_IN_GRAVEYARD', 'the discarded card is not in the graveyard');
+    if (after.pending) R('LOOT_STILL_PENDING', 'the discard was made but the game still waits');
+    if (after.log.slice(before.log.length).some((l) => /discards/.test(l))) R('LOOT_LOGGED_AS_DISCARD', 'a Loot must not log "discards" (that is Rot\'s show)');
+  }
+
   // 3d. Part 4e: activated abilities, from the rule text: the cost is paid (tap, mana), the effect resolves, and it is not a cast
   if (a.type === 'activate') {
     const who = before.active;
@@ -567,7 +626,8 @@ const t0 = Date.now();
 // Keyword stress: besides the real decks, replay every policy with the new keywords sprinkled at random
 // over the decks' creatures, so every keyword combination meets every situation (not just the few
 // the shipped cards happen to carry). Keywords are restored after each game.
-const STRESS_KW = ['reach', 'vigilance', 'firstStrike', 'doubleStrike', 'trample', 'deathtouch', 'lifelink', 'flash', 'prowess', 'skulk', 'bushido', 'indestructible', 'battleCry', 'exalted'] as const;
+function caster0(st: GameState): PlayerId { return st.phase === 'combat_block' ? opponentOf(st.active) : st.active; }
+const STRESS_KW = ['reach', 'vigilance', 'firstStrike', 'doubleStrike', 'trample', 'deathtouch', 'lifelink', 'flash', 'prowess', 'skulk', 'bushido', 'indestructible', 'battleCry', 'exalted', 'hexproof'] as const;
 type CardDefDeath = (typeof CARDS)[string]['onDeath'];
 type Sprinkled = { kw: string[] | undefined; death: CardDefDeath; enter: CardDefDeath; land: CardDefDeath; attack: CardDefDeath; bonus: (typeof CARDS)[string]['bonus']; cycling: number | undefined; static: (typeof CARDS)[string]['static']; activated: (typeof CARDS)[string]['activated'] };
 function sprinkleKeywords(r: () => number): () => void {
@@ -587,7 +647,7 @@ function sprinkleKeywords(r: () => number): () => void {
     // some creatures make the opponent discard, or bring the last fallen creature back, as they enter
     if (!def.onEnter && r() < 0.18) {
       const roll = r();
-      def.onEnter = roll < 0.2 ? { type: 'discard', amount: 1 } : roll < 0.4 ? { type: 'recall' } : roll < 0.6 ? { type: 'edict' } : roll < 0.8 ? { type: 'rally', power: 1, toughness: 1 } : { type: 'bounce' };
+      def.onEnter = roll < 0.16 ? { type: 'discard', amount: 1 } : roll < 0.32 ? { type: 'recall' } : roll < 0.48 ? { type: 'edict' } : roll < 0.62 ? { type: 'rally', power: 1, toughness: 1 } : roll < 0.76 ? { type: 'bounce' } : roll < 0.9 ? { type: 'scry', amount: 1 + Math.floor(r() * 2) } : { type: 'loot' };
     }
     // Phase 4d static abilities: a lord for the rest of its side, a self-buff, or a Threshold bonus (never marked 'blitz')
     if (!def.static && r() < 0.15) {
@@ -614,7 +674,7 @@ function sprinkleKeywords(r: () => number): () => void {
     if (!def.blockOnly && def.flashback === undefined && r() < 0.3) {
       spellEffect.set(def.id, def.effect);
       const roll = r();
-      def.effect = roll < 0.34 ? { type: 'bounce' } : roll < 0.67 ? { type: 'edict' } : { type: 'rally', power: 1, toughness: 1 };
+      def.effect = roll < 0.2 ? { type: 'bounce' } : roll < 0.4 ? { type: 'edict' } : roll < 0.55 ? { type: 'rally', power: 1, toughness: 1 } : roll < 0.7 ? { type: 'scry', amount: 1 + Math.floor(r() * 3) } : roll < 0.85 ? { type: 'loot' } : { type: 'bite' };
     }
     if (def.cycling === undefined && r() < 0.15) { spellCycling.set(def.id, def.cycling); def.cycling = 1 + Math.floor(r() * 2); }
   }
