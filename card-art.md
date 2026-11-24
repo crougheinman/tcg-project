@@ -190,11 +190,10 @@ Lore: the Tide's slow arithmetic, one touch and the account is settled. No flame
 
 > A young stoneback bear cub (or any small beast) in a sunlit forest clearing, caught mid-swell as green light and curling vines wrap around it and its body visibly grows larger and stronger, muscles thickening, moss and small flowers blooming along its fur. Fresh shoots and glowing leaves swirl upward around it. A calm, confident look on its face. Palette: bright spring green, golden light, warm brown fur, soft white blossoms.
 
-## Prompts: new spells for Phase 4c (cards not in the game yet)
+## Prompts: new spells for Phase 4c (delivered)
 
-The effects exist and are tested (`bounce`, `rally`, `edict` in `src/engine`), but a new card needs art, so these three are waiting for it. When the art arrives
-they become real cards (balance-tested with the win-rate sim first): **Windrush** (Skyward, instant, 2: return target creature to its owner's hand), **War Drums**
-(Iron Blossom, sorcery, 3: your creatures get +1/+0 until end of turn) and **Grave Toll** (Grave Tide, sorcery, 4: your opponent sacrifices a creature of their choice).
+These three now exist as real cards (art delivered, balance-tested with the win-rate sim): **Windrush** (Skyward, instant, 2: return target creature to its owner's hand),
+**War Drums** (Iron Blossom, sorcery, 3: your creatures get +1/+0 until end of turn) and **Grave Toll** (Grave Tide, sorcery, 4: your opponent sacrifices a creature of their choice).
 Paste the shared style line first, then the scene.
 
 **Windrush** (instant, return target creature to its owner's hand; "Gone before it knew it was moved.")
