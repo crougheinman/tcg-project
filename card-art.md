@@ -211,6 +211,16 @@ Lore: Grave Tide's rite is a bell in a drowned chapel; each stroke takes one of 
 
 > A drowned stone chapel half sunk in grey-green water, a huge cracked bronze bell hanging in the roofless belfry, a pale undead sexton in a mud-streaked cassock ringing it with a long rope, his grin quiet and patient. Under the bell, three frightened soldiers stand knee-deep in the water, each turned toward the others, one of them already being drawn down by pale hands rising from below. Sickly green mist, floating candle stubs. Palette: sickly grey-green, bruised purple, pale bone, mud brown, tarnished bronze.
 
+### Waiting for art: Savage Bite (Phase 4f)
+
+The Bite effect (your creature with the greatest power deals damage equal to its power to target opposing creature) is in the engine, tested and stress-fuzzed, but no card prints it yet. The sim will decide the numbers once art
+exists; a Wildwood or Wild Blitz sorcery at cost 2 is the likely home.
+
+**Savage Bite** (sorcery, "your strongest creature deals damage equal to its power to target creature you do not control"; "It did not ask the beast to kill. It only pointed.")
+Lore: the Wild's hunters never raise a hand against a rival; they choose where to look, and something heavy follows the line of their gaze.
+
+> A lean Wild Blitz hunter in leather and feathers crouched on a mossy rock, one arm extended in a calm pointing gesture across the frame. Beside and behind her a huge scarred bear-beast, twice her height, is already lunging in the direction of her finger, jaws open, fur blown back by the speed. At the end of the line, an armoured rival warrior stares up with his shield half raised, too late. Torn leaves, flying bark chips, a low dawn sun through the trees. Palette: forest green, bark brown, bone white, warm dawn orange, a flash of steel grey on the rival.
+
 ## Prompts: Land
 
 **Aether Well** (land, tap for one mana; "It hums with borrowed light.")

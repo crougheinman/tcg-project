@@ -617,6 +617,14 @@ dropped the tap hung the fuzz run, which is how the loop shows up). Untap happen
 is the price of a tap ability and the reason the AI keeps real attackers out of it. The fuzz oracle accounts for mana by what was spent (newly tapped lands plus pool used), not by what is available, because a ramp spell
 adds untapped lands.
 
+### (q) Choices I: Scry, Loot, Bite, Hexproof (Phase 4f)
+Scry and Loot are the first `pending` decisions that are not about a creature, and they reuse the whole seam: `PendingTrigger.kind` grew `'scry'` and `'discard'`, `actorOf` already hands the move to `pending.controller`, `legalActions`
+enumerates the answers, and the lockstep rules need nothing new. Scry got its own small action (`scry`, keep or bottom) because its answer is not an iid; Loot reuses `resolveTrigger` with a card id, and its log line avoids the word
+"discards" because `zoneCues` turns that exact phrase into Rot's three-second show. Hexproof is the one rule that touches every targeting path, so it lives in one function (`canTargetCreature`) used by validation, `legalTargets`,
+`legalActions`, the pending-enter pick and the UI; the subtle failure was a deadlock, not a wrong target: an enter effect that asks for a target when every legal target is hexproof would set a `pending` with no legal answer, so
+`castCreature` checks for a legal target first and fizzles otherwise (a test pins it). The fuzz stress mode now also gives random creatures hexproof, scry and loot enter effects and gives random spells scry, loot and bite, which is how
+the oracle's own imprecision showed up once: a Morbid draw bonus on a looting creature draws a second card, so the oracle's "a Loot draws exactly one" check skips cards with a draw bonus.
+
 ## 8. Run it
 
 ```bash

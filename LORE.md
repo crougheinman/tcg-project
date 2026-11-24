@@ -193,10 +193,10 @@ part of her civilisation that is spent rather than saved.
 **The Talon-Keeper, Ferrik** — *Sky Talon · "It hunts the wind itself."*
 Keeps the roosts, and keeps the count. Ferrik's ledger of Well-depths is the most accurate in the
 world, and he has shown it to no one, because what it predicts is that altitude will stop being
-enough in roughly ninety years.
+enough in roughly ninety years. (*Scry 1 — when the Talon lands it reads the wind for what is coming, and may turn the next page down.*)
 
 **The Storm Drake Vael** — *"Thunder is merely the sound of its wings."*
-Drakes are not bred, bound or owned; they roost near the holds because the holds are warm. Vael
+(*Hexproof — nothing the holds cast can fix on a thing that lives above their reach.*) Drakes are not bred, bound or owned; they roost near the holds because the holds are warm. Vael
 has fought beside Skyward, the Wildwood and Stonewall in a single season and considers none of
 them allies. The ancient agreement is simpler than any treaty: the drakes keep the high air clear,
 and in exchange nobody builds higher.

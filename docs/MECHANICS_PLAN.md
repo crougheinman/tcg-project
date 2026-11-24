@@ -205,7 +205,8 @@ visible keywords first and the two engine keystones (statics, activated abilitie
 | 4c | **Spells**: Bounce, Edict (opponent sacrifices a creature of their choice), Rally (team buff), Cycling | S-M | **done** (see below) |
 | 4d | **Data-driven static abilities**: Beast Blitz moves onto data; Lords ("other Wolves +1/+1"); Threshold ("7+ cards in your graveyard") | M | **done** (see below) |
 | 4e | **Activated abilities** (`{T}: ...`): mana creatures, pingers, a Treasure token | M-L | **done** (see below; targeted abilities and a Treasure token wait) |
-| 4f | **Choices**: Scry, Loot, Modal ("choose one"), X spells, Kicker / Buyback, Fight / bite, Hexproof / Ward | M | planned |
+| 4f | **Choices I**: Scry, Loot, Fight / bite, Hexproof | M | **done** (see below) |
+| 4f2 | **Choices II**: Modal ("choose one"), X spells, Kicker / Buyback, Ward (these need extra fields on the cast action and a UI to fill them) | M | planned |
 | 4g | **Graveyard**: Undying, Unearth | M | planned |
 | 4h | **Showpiece**: Ninjutsu for Kunoichi / Hana (a short window between blocks and damage), later Equipment | L | planned |
 
@@ -295,3 +296,22 @@ Card (all decks 46.1%-53.3% at N=120, 45.7%-52.9% at N=80): **Kunoichi** gains "
 but Skyward 45.0%, Iron Blossom 46.1%) and on Ashigaru (Iron Blossom 57.3% at N=80, too near the ceiling). Not done: targeted abilities (a pinger that picks its victim; needs a target in the action and a UI
 mode), instant-speed use, a sacrifice cost and a Treasure token (the battlefield only holds creatures and lands, so a Treasure would be a 0/1 creature); non-mana abilities (ping, heal, draw, token) are
 engine-ready and stress-tested but have no printed card yet.
+
+### Part 4f: done (Scry, Loot, Bite, Hexproof)
+
+Part 4f was split: this half is everything that fits the existing seams (a `pending` choice, or a targeting rule); Modal, X, Kicker / Buyback and Ward need new fields on the cast action and a UI to fill them, so they are **4f2**.
+Three effects and one keyword. **Scry N** (`{ type: 'scry', amount }`): sets `pending` `{ kind: 'scry', left, seen }` for the controller (`actorOf` hands them the move) and a new `scry` action answers it for the NEXT
+card (`bottom: true` moves it to the end of the library, `bottom: false` keeps it and advances the `seen` cursor); `left` counts decisions, so it never looks at more cards than the library has and never at a card twice; the log
+never names the card (both clients hold both libraries, so the secret is only ever the UI's). **Loot** (`{ type: 'loot' }`): draw a card, then `pending` `{ kind: 'discard' }`: `resolveTrigger` with a card of the controller's hand
+sends it to the graveyard, logged as "loots away", NOT "discards" (that exact line is Rot's discard show in `zoneCues`). **Bite** (`{ type: 'bite' }`, a targeted spell effect): the controller's creature with the greatest power
+(first on the battlefield on a tie) deals damage equal to its power to target OPPOSING creature, one-way (the victim cannot hit back; a deathtouch biter kills it); it needs a creature of yours and is a spell effect only (a card-data
+test forbids it, scry and loot as triggers or abilities, which cannot wait on a choice safely). **Hexproof** (keyword; `canTargetCreature` in `rules.ts`): the opponent's spells and enter effects cannot target it; its controller
+can, combat and damage at players are unaffected. It is enforced in `validateTarget`, `legalTargets`, every targeted spell's validation and `legalActions`, the pending enter-effect pick, and the Board's cues; a creature whose
+enter effect has only hexproof targets left fizzles instead of leaving an unanswerable `pending` (the one deadlock this opened). The AI scries lands it needs and spells it can nearly cast, loots away a spare land or its dearest
+uncastable card, and bites only when the biter's power kills. The Board shows a Scry modal (the card, Keep on top / Put on the bottom) to the scrying player only, a "tap a card in your hand" Loot prompt, and hexproof creatures are
+not marked targetable. Tested (`choices.test.ts`, 18 tests, 11 rules mutation-checked); the fuzz oracle re-derives hexproof targeting, the scry library permutation and cursor, the loot draw / discard / log line and the
+bite damage independently, and stress-sprinkles scry, loot, bite and hexproof (each of six rule breaks makes it report).
+
+Cards (all decks 46.5%-55.6% at N=120, 46.6%-55.4% at N=80): **Sky Talon** "when it enters, scry 1", **Shambling Ghoul** "when it enters, draw a card, then discard a card" (Gravetide 53.2% -> 55.4%), **Storm Drake**
+Hexproof (Pyromancer 50.9% -> 46.8%: burn no longer answers it). Rejected: a hexproof Kunoichi (Wildblitz +5.5 points but Skyward 44.6%, Stonewall 45.0% against the burn decks). Bite waits for art: `card-art.md` has a
+prompt for **Savage Bite**; once it exists the sim decides its numbers. Not done: Ward, and Modal / X / Kicker (4f2).
