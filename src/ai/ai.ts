@@ -51,6 +51,7 @@ export function pickAction(state: GameState, ai: PlayerId): Action {
   if (state.pending?.kind === 'enter') return pickTriggerTarget(state, ai);
   if (state.pending?.kind === 'sacrifice') return pickSacrifice(state, ai);
   if (state.pending?.kind === 'scry') return pickScry(state, ai);
+  if (state.pending?.kind === 'ninjutsu') return pickNinjutsu(state, ai);
   if (state.pending?.kind === 'discard') return pickLootDiscard(state, ai);
   if (state.phase === 'combat_block' && state.active !== ai) return pickBlocks(state, ai);
   switch (state.phase) {
@@ -301,6 +302,25 @@ function pickAttacks(state: GameState, ai: PlayerId): Action {
   // ponytail: ignores unfavorable trades; add board eval before attacking later.
   const attackers = me.battlefield.filter(canAttack).map((c) => c.iid);
   return { type: 'declareAttackers', attackers };
+}
+
+/**
+ * Ninjutsu: swap a ninja in for an unblocked attacker when it is worth the mana: the bigger the ninja's power over the attacker's, the better;
+ * a cheap ninjutsu cost and a cheap attacker to replay add to it. Otherwise combat goes ahead as declared.
+ */
+function pickNinjutsu(state: GameState, ai: PlayerId): Action {
+  const me = state.players[ai];
+  let best: { action: Action; value: number } | null = null;
+  for (const a of legalActions(state, ai)) {
+    if (a.type !== 'ninjutsu') continue;
+    const ninja = me.hand.find((c) => c.iid === a.ninja);
+    const atk = findCreature(state, a.attacker)?.card;
+    if (!ninja || !atk) continue;
+    const nd = getDef(ninja.def);
+    const value = (power(ninja) - power(atk)) * 10 + (nd.cost - (nd.ninjutsu ?? nd.cost)) * 3 - getDef(atk.def).cost * 3;
+    if (!best || value > best.value) best = { action: a, value };
+  }
+  return best && best.value >= 10 ? best.action : { type: 'skipNinjutsu' };
 }
 
 /** Scry: keep a card we want soon on top, send the rest to the bottom. Lands are wanted until we have about five; spells when we can nearly cast them. */

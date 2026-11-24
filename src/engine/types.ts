@@ -117,6 +117,7 @@ export interface CardDef {
   x?: boolean; // an X spell: its damage / heal / draw effect scales with the X chosen (amount * X) and X is paid on top of the cost
   kicker?: { cost: number; effect: Effect }; // optional extra cost; when paid, this untargeted effect resolves too
   modes?: Effect[]; // modal: choose one (the cast names its index); `effect` must equal modes[0]
+  ninjutsu?: number; // creature: after blockers are declared, pay this to put it from your hand into combat in place of an UNBLOCKED attacker, which returns to your hand
   unearth?: number; // creature: cost to return it from your graveyard to the battlefield with haste, in your main phase; it is exiled at the end step, or instead of dying
   ward?: number; // creature: spells your opponent casts that TARGET it cost this much more
   activated?: ActivatedAbility; // creature: an ability its controller can use in their main phase (pingers, mana creatures)
@@ -181,7 +182,7 @@ export interface CombatState {
 
 /** A triggered ability waiting on the controller to choose a target. */
 export interface PendingTrigger {
-  kind: 'enter' | 'sacrifice' | 'scry' | 'discard'; // an enter effect that needs a target, an Edict waiting on the victim's choice, a Scry deciding top or bottom, or a Loot choosing a card to discard
+  kind: 'enter' | 'sacrifice' | 'scry' | 'discard' | 'ninjutsu'; // an enter effect that needs a target, an Edict waiting on the victim's choice, a Scry deciding top or bottom, a Loot choosing a card to discard, or the Ninjutsu window between blocks and damage (the attacker's)
   left?: number; // 'scry': cards still to decide; 'discard': cards still to discard
   seen?: number; // 'scry': cards already decided to stay on top
   source: string; // 'enter': iid of the creature whose trigger this is ('sacrifice': unused)
@@ -222,6 +223,8 @@ export type Action =
   | { type: 'resolveTrigger'; target: string } // choose the target of a pending enter effect (Whipflash), or the creature to sacrifice (Edict)
   | { type: 'activate'; iid: string } // use a creature's activated ability (its cost is paid, its effect resolves at once)
   | { type: 'scry'; bottom: boolean } // answer a pending Scry for the next card: put it on the bottom, or leave it on top
+  | { type: 'ninjutsu'; ninja: string; attacker: string } // Ninjutsu: swap a ninja from hand for an unblocked attacker (answers the pending Ninjutsu window)
+  | { type: 'skipNinjutsu' } // decline the Ninjutsu window: combat damage goes ahead
   | { type: 'unearth'; iid: string } // Unearth: pay a graveyard creature's unearth cost; it returns with haste and is exiled at the end step
   | { type: 'cycle'; iid: string } // Cycling: pay the card's cycling cost, discard it from hand, draw a card
   | { type: 'keepHand' } // mulligan phase: keep this opening hand

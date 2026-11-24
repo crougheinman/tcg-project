@@ -9,6 +9,7 @@ import {
   blitzCue,
   canTargetCreature,
   castCost,
+  ninjutsuOptions,
   spellEffect,
   findCreature,
   hasKeyword,
@@ -221,6 +222,37 @@ export function applyAction(state: GameState, action: Action): GameState {
           }
         }
       }
+      // Ninjutsu: if the attacker could swap a ninja in for an unblocked attacker, combat PAUSES here for their answer (and only then, so a game with no ninja in hand plays exactly as before)
+      if (ninjutsuOptions(s).length) {
+        s.pending = { kind: 'ninjutsu', source: '', def: '', controller: s.active };
+        s.log.push('✦ Ninjutsu window');
+        break;
+      }
+      resolveCombat(s);
+      break;
+    }
+    case 'skipNinjutsu': {
+      s.pending = null;
+      resolveCombat(s);
+      break;
+    }
+    case 'ninjutsu': {
+      // The ninja comes from hand into combat, tapped and attacking, in place of an unblocked attacker, which returns to its owner's hand (a bounce: no death, buffs gone).
+      const ninja = takeFromHand(active, action.ninja);
+      const d = getDef(ninja.def);
+      payMana(active, d.ninjutsu!);
+      const atk = active.battlefield.find((c) => c.iid === action.attacker)!;
+      active.battlefield = active.battlefield.filter((c) => c.iid !== atk.iid);
+      atk.tapped = false; atk.damage = 0; atk.buffP = 0; atk.buffT = 0; atk.tempP = 0; atk.tempT = 0; atk.auraP = 0; atk.auraT = 0; atk.blitz = false; atk.revived = false; atk.unearthed = false; atk.summoningSick = true;
+      if (!isToken(atk.def)) s.players[atk.owner].hand.push(atk); // a token just ceases to exist
+      ninja.tapped = true;
+      ninja.damage = 0;
+      ninja.summoningSick = true;
+      active.battlefield.push(ninja);
+      s.combat = { attackers: (s.combat?.attackers ?? []).map((i) => (i === atk.iid ? ninja.iid : i)), blocks: s.combat?.blocks ?? {} };
+      s.pending = null;
+      s.log.push(`✦ ${d.name} — ninjutsu (${getDef(atk.def).name} returns to hand)`);
+      recomputeStatics(s); // the ninja has just arrived: its bonuses (and the loss of the returned attacker's) count in THIS combat's damage
       resolveCombat(s);
       break;
     }

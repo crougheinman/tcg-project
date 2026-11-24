@@ -126,6 +126,7 @@ export const CARDS: Record<string, CardDef> = {
     power: 2,
     toughness: 1,
     keywords: ['skulk'],
+    ninjutsu: 1,
     skill: 'Beast Blitz',
     activated: { cost: { tap: true }, effect: { type: 'mana', amount: 1 } },
     static: {
@@ -136,7 +137,7 @@ export const CARDS: Record<string, CardDef> = {
       mark: 'blitz',
     },
     art: '/cards/kunoichi.webp', // 420x564 WebP; other cards auto-wire to <id>.png
-    text: 'Skulk. {T}: Add one mana. Beast Blitz — your Swift Lancer, Sky Talon, Stoneback Cub, Thornwood Brute, Dread Maw, and Wolves get +1/+1.',
+    text: 'Skulk. Ninjutsu {1}. {T}: Add one mana. Beast Blitz — your Swift Lancer, Sky Talon, Stoneback Cub, Thornwood Brute, Dread Maw, and Wolves get +1/+1.',
     flavor: 'One whistle, and the wild answers.',
   },
 
@@ -226,7 +227,8 @@ export const CARDS: Record<string, CardDef> = {
     power: 3,
     toughness: 2,
     keywords: ['haste', 'firstStrike'],
-    text: 'Haste. First strike.',
+    ninjutsu: 2,
+    text: 'Haste. First strike. Ninjutsu {2}.',
     art: '/cards/kensei_duelist.webp', // 420x422 WebP; other cards auto-wire to <id>.png
     flavor:
       "\"One breath, one cut. There is no second.\" Calm as still water and strict as the creed, Hana of the Single Breath has walked away from four duels she could have finished. All four still wish she hadn't.",

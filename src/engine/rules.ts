@@ -93,6 +93,25 @@ export function untappedLands(p: PlayerState): CardInstance[] {
 export function availableMana(p: PlayerState): number {
   return untappedLands(p).length + (p.pool ?? 0);
 }
+/**
+ * Ninjutsu: in the pause after blockers are declared, which swaps are possible: each ninja in the attacker's hand whose cost it can pay,
+ * for each UNBLOCKED attacker still in play. The one definition (the window is only opened when this is non-empty).
+ */
+export function ninjutsuOptions(state: GameState): { ninja: string; attacker: string }[] {
+  const p = state.players[state.active];
+  const mana = availableMana(p);
+  const blocked = new Set(Object.values(state.combat?.blocks ?? {}));
+  const open = (state.combat?.attackers ?? []).filter((iid) => !blocked.has(iid) && p.battlefield.some((c) => c.iid === iid && isCreature(c)));
+  if (!open.length) return [];
+  const out: { ninja: string; attacker: string }[] = [];
+  for (const c of p.hand) {
+    const cost = getDef(c.def).ninjutsu;
+    if (cost === undefined || getDef(c.def).type !== 'creature' || cost > mana) continue;
+    for (const attacker of open) out.push({ ninja: c.iid, attacker });
+  }
+  return out;
+}
+
 /** Why `c` (one of `p`'s creatures) cannot use its activated ability now, or null if it can. The single definition, shared by the validator, `legalActions`, the AI and the UI. */
 export function activateError(state: GameState, p: PlayerState, c: CardInstance): string | null {
   const ab = getDef(c.def).activated;
@@ -315,6 +334,9 @@ export function legalActions(state: GameState, player: PlayerId): Action[] {
         .filter(isCreature)
         .map((c): Action => ({ type: 'resolveTrigger', target: c.iid }));
     }
+    if (state.pending.kind === 'ninjutsu') {
+      return [...ninjutsuOptions(state).map((o): Action => ({ type: 'ninjutsu', ninja: o.ninja, attacker: o.attacker })), { type: 'skipNinjutsu' }];
+    }
     if (state.pending.kind === 'scry') return [{ type: 'scry', bottom: false }, { type: 'scry', bottom: true }];
     if (state.pending.kind === 'discard') {
       return state.players[state.pending.controller].hand.map((c): Action => ({ type: 'resolveTrigger', target: c.iid }));
@@ -478,10 +500,10 @@ export function legalTargets(
 export function validateAction(state: GameState, action: Action): void {
   if (state.winner) throw new Error('game is over');
   // A pending trigger must be resolved before anything else.
-  if (state.pending && action.type !== 'resolveTrigger' && action.type !== 'scry') {
+  if (state.pending && action.type !== 'resolveTrigger' && action.type !== 'scry' && action.type !== 'ninjutsu' && action.type !== 'skipNinjutsu') {
     throw new Error('resolve the pending trigger first');
   }
-  if (!state.pending && (action.type === 'resolveTrigger' || action.type === 'scry')) {
+  if (!state.pending && (action.type === 'resolveTrigger' || action.type === 'scry' || action.type === 'ninjutsu' || action.type === 'skipNinjutsu')) {
     throw new Error('no trigger to resolve');
   }
   const active = state.players[state.active];
@@ -500,6 +522,7 @@ export function validateAction(state: GameState, action: Action): void {
     case 'resolveTrigger': {
       const pend = state.pending;
       if (pend?.kind === 'scry') throw new Error('a Scry is answered with the scry action');
+      if (pend?.kind === 'ninjutsu') throw new Error('the Ninjutsu window is answered with ninjutsu or skipNinjutsu');
       if (pend?.kind === 'discard') {
         // Loot: the controller discards a card of their choice from their own hand
         if (!state.players[pend.controller].hand.some((c) => c.iid === action.target)) throw new Error('choose a card from your hand to discard');
@@ -519,6 +542,17 @@ export function validateAction(state: GameState, action: Action): void {
     }
     case 'scry': {
       if (state.pending?.kind !== 'scry') throw new Error('no Scry pending');
+      return;
+    }
+    case 'skipNinjutsu': {
+      if (state.pending?.kind !== 'ninjutsu') throw new Error('no Ninjutsu window');
+      return;
+    }
+    case 'ninjutsu': {
+      if (state.pending?.kind !== 'ninjutsu') throw new Error('no Ninjutsu window');
+      if (!ninjutsuOptions(state).some((o) => o.ninja === action.ninja && o.attacker === action.attacker)) {
+        throw new Error('not a legal ninjutsu: a ninja in hand you can pay for, and an unblocked attacker');
+      }
       return;
     }
     case 'unearth': {
