@@ -312,6 +312,24 @@ async function playMatch(browser, A, B, idx) {
           const card = await page.evaluate((iid) => { const g = window.__game.getState().game; return g.players.A.hand.find((c) => c.iid === iid)?.def; }, action.iid);
           bump('cast:' + card); await page.evaluate((a) => window.__H.setExpect([a]), action);
           ok = await clickEl(cardLoc(action.iid, scopeHand), 'spell ' + card);
+          // a modal / kicker / X spell opens its options first: set them as the action says, then Cast (the target, if any, comes after)
+          if (ok) {
+            const opened = await page.locator('.cast-opts').first().waitFor({ state: 'visible', timeout: 700 }).then(() => true).catch(() => false);
+            if (opened) {
+              const radios = page.locator('.cast-opts input[type=radio]');
+              if (await radios.count()) await radios.nth(action.mode ?? 0).check();
+              const box = page.locator('.cast-opts input[type=checkbox]');
+              if (await box.count() && (await box.isEnabled()) && (!!action.kicked !== (await box.isChecked()))) await box.setChecked(!!action.kicked);
+              if (action.x !== undefined) {
+                for (let i = 0; i < 14; i++) {
+                  const cur = Number(await page.locator('.cast-x b').textContent());
+                  if (cur === action.x) break;
+                  await page.locator(`.cast-x button[aria-label="${cur < action.x ? 'More' : 'Less'}"]`).click();
+                }
+              }
+              bump('castOptions'); ok = await clickEl(page.locator('.cast-opts .zone-flash').first(), 'Cast');
+            }
+          }
           if (ok && action.target) { await sleep(120); ok = await clickTarget(action.target); }
           break;
         }

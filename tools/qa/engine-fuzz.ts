@@ -14,7 +14,7 @@ import {
 } from '../../src/engine/rules';
 import { DECK_LIST } from '../../src/cards/decks';
 import { CARDS, getDef } from '../../src/cards/cards';
-import type { Action, CardInstance, Effect, GameState, PlayerId } from '../../src/engine/types';
+import type { Action, CardDef, CardInstance, Effect, GameState, PlayerId } from '../../src/engine/types';
 import { needsTarget, opponentOf } from '../../src/engine/types';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -60,7 +60,7 @@ function leavers(before: GameState, a: Action): { bounced: Set<string>; sacrific
   const everyVictim = (who: PlayerId) => { for (const c of before.players[opponentOf(who)].battlefield) if (isCreature(c)) sacrificed.add(c.iid); };
   if (a.type === 'castSorcery') {
     const who = actorOf(before);
-    const e = cardOf(who, a.iid) && getDef(cardOf(who, a.iid)!.def).effect;
+    const e = cardOf(who, a.iid) && chosen(getDef(cardOf(who, a.iid)!.def), a);
     if (e?.type === 'bounce' && a.target?.kind === 'creature') bounced.add(a.target.iid);
     if (e?.type === 'edict') everyVictim(who);
   }
@@ -93,6 +93,14 @@ const spentMana = (b: GameState, a: GameState, pid: PlayerId) => {
   return tapped(a) - tapped(b) + ((b.players[pid].pool ?? 0) - (a.players[pid].pool ?? 0));
 };
 
+/** The effect a cast resolves, re-derived here: the chosen mode, with X applied to an X spell's damage / heal / draw amount. */
+function chosen(d: ReturnType<typeof getDef>, a: { x?: number; mode?: number }): Effect | undefined {
+  let e = d.modes ? d.modes[a.mode ?? 0] : d.effect;
+  if (e && d.x && (e.type === 'damage' || e.type === 'heal' || e.type === 'draw')) e = { ...e, amount: e.amount * (a.x ?? 0) };
+  return e;
+}
+type CastOptsOf = { x?: number; mode?: number; kicked?: boolean };
+
 function expectedLife(before: GameState, a: Action, t: Track): Record<PlayerId, number> {
   const life = { A: before.players.A.life, B: before.players.B.life };
   const caster = before.phase === 'combat_block' ? opponentOf(before.active) : before.active;
@@ -116,13 +124,14 @@ function expectedLife(before: GameState, a: Action, t: Track): Record<PlayerId, 
   if (a.type === 'declareAttackers') for (const iid of a.attackers) eff(getDef(before.players[before.active].battlefield.find((c) => c.iid === iid)!.def).onAttack, before.active);
   if (a.type === 'castSorcery') {
     const hand = (before.players[caster].hand.find((c) => c.iid === a.iid) ?? before.players[caster].graveyard.find((c) => c.iid === a.iid))!; // (flashback casts from the graveyard)
-    const main = getDef(hand.def).effect!;
+    const main = chosen(getDef(hand.def), a)!;
     const isInstant = getDef(hand.def).type === 'instant';
     if (main.type === 'damage' && a.target?.kind === 'player') life[a.target.player] -= main.amount;
     if (main.type === 'heal') life[caster] += main.amount;
     // ramp puts lands from hand onto the battlefield, and each one is a landfall
     if (main.type === 'ramp') landfalls(caster, Math.min(main.amount, before.players[caster].hand.filter((c) => getDef(c.def).type === 'land').length));
     bonus(getDef(hand.def), caster);
+    if (a.kicked && getDef(hand.def).kicker) eff(getDef(hand.def).kicker!.effect, caster); // a paid kicker adds its own effect
     // creature triggers: every trigger creature the caster controls AFTER the spell resolved. A token made by the spell cannot have a trigger, but a
     // creature the spell bounced is gone before the triggers are looked at, so it does not trigger; one that merely dies of damage still does
     // (deaths are checked after the whole action).
@@ -283,7 +292,8 @@ function check(
     // (prowess or not) its +P/+T on top. A creature that entered or left does not count.
     const casterId = before.phase === 'combat_block' ? opponentOf(before.active) : before.active;
     const spellDef = (before.players[casterId].hand.find((x) => x.iid === a.iid) ?? before.players[casterId].graveyard.find((x) => x.iid === a.iid))!;
-    const rally = getDef(spellDef.def).effect?.type === 'rally' ? (getDef(spellDef.def).effect as { power: number; toughness: number }) : { power: 0, toughness: 0 };
+    const chosenE = chosen(getDef(spellDef.def), a);
+    const rally = chosenE?.type === 'rally' ? chosenE : { power: 0, toughness: 0 };
     for (const c of before.players[casterId].battlefield) {
       if (!isCreature(c)) continue;
       const now = after.players[casterId].battlefield.find((x) => x.iid === c.iid);
@@ -392,13 +402,13 @@ function check(
     const who = a.type === 'castCreature' ? actorOf(before) : caster0(before);
     const card = before.players[who].hand.find((c) => c.iid === a.iid) ?? before.players[who].graveyard.find((c) => c.iid === a.iid);
     const d = card && getDef(card.def);
-    const eff = a.type === 'castCreature' ? d?.onEnter : d?.effect;
+    const eff = a.type === 'castCreature' ? d?.onEnter : d && chosen(d, a as CastOptsOf);
     if (eff?.type === 'scry') {
       const want = Math.min(eff.amount, before.players[who].library.length);
       if (want > 0 && !before.pending && after.pending?.kind !== 'scry' && !after.winner) R('SCRY_NOT_ASKED', `${d!.name} scry ${eff.amount} did not wait on a choice`);
       if (after.pending?.kind === 'scry' && (after.pending.left !== want || after.pending.controller !== who)) R('SCRY_LEFT', `left ${after.pending.left}, expected ${want} for ${after.pending.controller}`);
     }
-    if (eff?.type === 'loot' && !after.winner && d?.bonus?.effect.type !== 'draw') { // (a Morbid draw bonus on the same card would draw a second card)
+    if (eff?.type === 'loot' && !after.winner && d?.bonus?.effect.type !== 'draw' && !(( a as CastOptsOf).kicked && d?.kicker?.effect.type === 'draw')) { // (a Morbid draw bonus on the same card would draw a second card)
       if (after.players[who].library.length !== before.players[who].library.length - 1) R('LOOT_NO_DRAW', 'a Loot must draw exactly one card');
       if (after.pending?.kind !== 'discard' || after.pending.controller !== who) R('LOOT_NOT_ASKED', 'a Loot must then wait on the controller discarding');
     }
@@ -423,6 +433,26 @@ function check(
     if (!after.players[who].graveyard.some((c) => c.iid === a.target)) R('LOOT_NOT_IN_GRAVEYARD', 'the discarded card is not in the graveyard');
     if (after.pending) R('LOOT_STILL_PENDING', 'the discard was made but the game still waits');
     if (after.log.slice(before.log.length).some((l) => /discards/.test(l))) R('LOOT_LOGGED_AS_DISCARD', 'a Loot must not log "discards" (that is Rot\'s show)');
+  }
+
+  // 3f. Part 4f2: what a spell COSTS with its cast options, re-derived: cost (or flashback cost) + X + kicker + the ward of an opposing creature it targets
+  if (a.type === 'castSorcery') {
+    const who = caster0(before);
+    const card = before.players[who].hand.find((c) => c.iid === a.iid) ?? before.players[who].graveyard.find((c) => c.iid === a.iid);
+    const d = card && getDef(card.def);
+    if (d) {
+      const fromGrave = !before.players[who].hand.some((c) => c.iid === a.iid);
+      let want = fromGrave ? d.flashback! : d.cost;
+      if (d.x) want += a.x ?? 0;
+      if (a.kicked && d.kicker) want += d.kicker.cost;
+      if (a.target?.kind === 'creature') {
+        const tc = before.players[opponentOf(who)].battlefield.find((c) => c.iid === (a.target as { iid: string }).iid);
+        if (tc) want += getDef(tc.def).ward ?? 0;
+      }
+      if (spentMana(before, after, who) !== want) R('SPELL_COST', `${d.name}: paid ${spentMana(before, after, who)}, it costs ${want} (x=${a.x ?? '-'} kicked=${!!a.kicked} mode=${a.mode ?? '-'})`);
+      if (a.x !== undefined && !d.x) R('X_WITHOUT_X', `${d.name} was cast with X`);
+      if (a.kicked && !d.kicker) R('KICKED_WITHOUT_KICKER', `${d.name} was kicked`);
+    }
   }
 
   // 3d. Part 4e: activated abilities, from the rule text: the cost is paid (tap, mana), the effect resolves, and it is not a cast
@@ -461,7 +491,7 @@ function check(
   if (a.type === 'castSorcery' || a.type === 'castCreature') {
     const who = actorOf(before);
     const card = before.players[who].hand.find((c) => c.iid === a.iid) ?? before.players[who].graveyard.find((c) => c.iid === a.iid);
-    const e = card && (a.type === 'castSorcery' ? getDef(card.def).effect : getDef(card.def).onEnter);
+    const e = card && (a.type === 'castSorcery' ? chosen(getDef(card.def), a) : getDef(card.def).onEnter);
     if (e?.type === 'edict') {
       const victim = opponentOf(who);
       const theirs = before.players[victim].battlefield.filter(isCreature);
@@ -629,13 +659,13 @@ const t0 = Date.now();
 function caster0(st: GameState): PlayerId { return st.phase === 'combat_block' ? opponentOf(st.active) : st.active; }
 const STRESS_KW = ['reach', 'vigilance', 'firstStrike', 'doubleStrike', 'trample', 'deathtouch', 'lifelink', 'flash', 'prowess', 'skulk', 'bushido', 'indestructible', 'battleCry', 'exalted', 'hexproof'] as const;
 type CardDefDeath = (typeof CARDS)[string]['onDeath'];
-type Sprinkled = { kw: string[] | undefined; death: CardDefDeath; enter: CardDefDeath; land: CardDefDeath; attack: CardDefDeath; bonus: (typeof CARDS)[string]['bonus']; cycling: number | undefined; static: (typeof CARDS)[string]['static']; activated: (typeof CARDS)[string]['activated'] };
+type Sprinkled = { ward: number | undefined; kw: string[] | undefined; death: CardDefDeath; enter: CardDefDeath; land: CardDefDeath; attack: CardDefDeath; bonus: (typeof CARDS)[string]['bonus']; cycling: number | undefined; static: (typeof CARDS)[string]['static']; activated: (typeof CARDS)[string]['activated'] };
 function sprinkleKeywords(r: () => number): () => void {
   const saved = new Map<string, Sprinkled>();
   const flashed: string[] = [];
   for (const def of Object.values(CARDS)) {
     if (def.type !== 'creature') continue;
-    saved.set(def.id, { kw: def.keywords as string[] | undefined, death: def.onDeath, enter: def.onEnter, land: def.landTrigger, attack: def.onAttack, bonus: def.bonus, cycling: def.cycling, static: def.static, activated: def.activated });
+    saved.set(def.id, { kw: def.keywords as string[] | undefined, death: def.onDeath, enter: def.onEnter, land: def.landTrigger, attack: def.onAttack, bonus: def.bonus, cycling: def.cycling, static: def.static, activated: def.activated, ward: def.ward });
     const extra = STRESS_KW.filter(() => r() < 0.25);
     if (extra.length) def.keywords = [...(def.keywords ?? []), ...extra];
     // some creatures raise a token when they die (tokens included, so triggers can chain through them)
@@ -663,6 +693,8 @@ function sprinkleKeywords(r: () => number): () => void {
       if (!cost.tap && (!cost.mana || eff.type === 'mana')) cost.tap = true; // an ability always costs something, or it could be used without limit
       def.activated = { cost, effect: eff };
     }
+    // Phase 4f2: ward (opposing spells that target it cost more)
+    if (def.ward === undefined && r() < 0.12) def.ward = 1 + Math.floor(r() * 2);
     // Cycling on some creatures
     if (def.cycling === undefined && r() < 0.15) def.cycling = 1 + Math.floor(r() * 2);
   }
@@ -686,14 +718,35 @@ function sprinkleKeywords(r: () => number): () => void {
       def.bonus = { when: r() < 0.5 ? 'morbid' : 'secondSpell', effect: r() < 0.5 ? { type: 'heal', amount: 2 } : { type: 'damage', amount: 1, targets: 'player' } };
     }
   }
+  // Phase 4f2: some spells become modal, X spells, or gain a kicker (restored afterwards)
+  const spellOpts = new Map<string, { x: boolean | undefined; kicker: CardDef['kicker']; modes: CardDef['modes'] }>();
+  for (const def of Object.values(CARDS)) {
+    if ((def.type !== 'sorcery' && def.type !== 'instant') || !def.effect || def.flashback !== undefined || def.blockOnly) continue;
+    const saved = { x: def.x, kicker: def.kicker, modes: def.modes };
+    let touched = false;
+    const optRoll = r();
+    if (optRoll < 0.14) { // modal: its own effect, or one of three other effects
+      const other: Effect[] = [{ type: 'draw', amount: 1 }, { type: 'heal', amount: 2 }, { type: 'damage', amount: 2, targets: 'any' }];
+      def.modes = [def.effect, other[Math.floor(r() * other.length)]];
+      touched = true;
+    } else if (optRoll < 0.28 && (def.effect.type === 'damage' || def.effect.type === 'heal' || def.effect.type === 'draw')) { // an X spell
+      def.x = true;
+      touched = true;
+    }
+    if (r() < 0.16) { // a kicker: heal, draw or damage at the player
+      def.kicker = { cost: 1 + Math.floor(r() * 2), effect: r() < 0.33 ? { type: 'heal', amount: 2 } : r() < 0.5 ? { type: 'draw', amount: 1 } : { type: 'damage', amount: 1, targets: 'player' } };
+      touched = true;
+    }
+    if (touched) spellOpts.set(def.id, saved);
+  }
   // some untargeted spells gain flashback (cost + 1)
   for (const def of Object.values(CARDS)) {
-    if ((def.type === 'sorcery' || def.type === 'instant') && def.effect && def.flashback === undefined && !needsTarget(def.effect) && r() < 0.4) {
+    if ((def.type === 'sorcery' || def.type === 'instant') && def.effect && def.flashback === undefined && !needsTarget(def.effect) && !def.x && !def.kicker && !def.modes && r() < 0.4) {
       def.flashback = def.cost + 1;
       flashed.push(def.id);
     }
   }
-  return () => { for (const [id, v] of saved) { CARDS[id].keywords = v.kw as never; CARDS[id].onDeath = v.death; CARDS[id].onEnter = v.enter; CARDS[id].landTrigger = v.land; CARDS[id].onAttack = v.attack; CARDS[id].bonus = v.bonus; CARDS[id].cycling = v.cycling; CARDS[id].static = v.static; CARDS[id].activated = v.activated; } for (const [id, b] of spellBonus) CARDS[id].bonus = b as never; for (const [id, e] of spellEffect) CARDS[id].effect = e; for (const [id, c] of spellCycling) CARDS[id].cycling = c; for (const id of flashed) delete CARDS[id].flashback; };
+  return () => { for (const [id, v] of saved) { CARDS[id].keywords = v.kw as never; CARDS[id].onDeath = v.death; CARDS[id].onEnter = v.enter; CARDS[id].landTrigger = v.land; CARDS[id].onAttack = v.attack; CARDS[id].bonus = v.bonus; CARDS[id].cycling = v.cycling; CARDS[id].static = v.static; CARDS[id].activated = v.activated; CARDS[id].ward = v.ward; } for (const [id, b] of spellBonus) CARDS[id].bonus = b as never; for (const [id, e] of spellEffect) CARDS[id].effect = e; for (const [id, c] of spellCycling) CARDS[id].cycling = c; for (const [id, o] of spellOpts) { CARDS[id].x = o.x; CARDS[id].kicker = o.kicker; CARDS[id].modes = o.modes; } for (const id of flashed) delete CARDS[id].flashback; };
 }
 
 for (const policyName of ['ai', 'chaos', 'ai+kw', 'chaos+kw'] as const) {
