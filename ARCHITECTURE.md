@@ -631,6 +631,13 @@ Four mechanics, one seam. The danger with cast options is the two sides of the e
 Ward is a cost tax decided at cast time by the TARGET, which is why `castCost` takes the target and why the UI cannot show a final price until the target is picked (it says so instead of failing). Combinatorics are bounded: X is enumerated 1..min(mana, 12), modes and the kicker
 multiply that by at most 2x2. The one process lesson is in the fuzz oracle: an oracle edit that is never written to disk produces "zero findings" and a mutation run with no detections, which looks like a rule that cannot be broken; the mutants must be seen to fail before the zero means anything.
 
+### (s) Graveyard mechanics: Undying and Unearth (Phase 4g)
+Both mechanics make the old assumption "a creature that dies is gone" false, and the fuzz oracle is what showed where that assumption lived. Undying returns the SAME instance object from `checkDeaths` after the dies triggers (so Morbid and last-breath effects still happen),
+which broke `resolveCombat`: it looked each fighter up by id for the second damage step, so a creature killed by first strike came straight back and hit again. The fix is explicit: `checkDeaths` returns the iids that died and combat excludes them for the rest of the fight. A returned creature
+is a new arrival (summoning sick, counter, `revived`), and `revived` is cleared whenever the creature leaves play by any other road so a recast copy gets a fresh life. Unearth reuses the exile zone Flashback introduced and the end-step hook (`toEnd`): the exile is quiet on purpose (it is not a
+death), and the other exit, dying, is redirected to exile in the same place the graveyard push happens. Rule 6 in CLAUDE.md ("tokens never go to the graveyard") gained a sibling: an unearthed creature never does either. Lesson for the oracle: its old checks (SURVIVED_LETHAL, INDESTRUCTIBLE_DIED, the dies-trigger counts, the Edict and bite checks) each
+assumed deaths are final, so each needed a `wouldReturn` carve-out; the right default for a new mechanic that changes what death means is to run the oracle first and read every finding.
+
 ## 8. Run it
 
 ```bash

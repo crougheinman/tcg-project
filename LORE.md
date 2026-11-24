@@ -157,7 +157,7 @@ games and has never once lost a long one.
 **The Elder Standing at Ellemar** — *Ancient Treant · "Older than the kingdoms that fear it."*
 Remembers the Sundering as a change in the weather. Has been asked, by every tradition in turn,
 what killed the Sleeper. Has answered every time, at length, in a language that takes four years
-to say anything, and no one has yet stayed to hear the end of it.
+to say anything, and no one has yet stayed to hear the end of it. (*Undying — felled, it stands again a little taller; trees do not accept the first ending, only the second.*)
 
 **Thornwood Brute** — *"The forest walks when the forest is angry."*
 Not a person. A mood. Brutes condense out of the Thornwood when the forest's patience fails and
@@ -313,7 +313,7 @@ Rode under Tadeo's banner at the Kettle and broke from it there — not from cow
 arithmetic. The charge, he judged, would cost more lives than the ground was worth, and the creed
 says you do not incur what you cannot settle. He was right. Tadeo knows he was right. Neither has
 found a way to say so, and the Clans field four Ronin Blades to every one Shogun, which is its own
-kind of verdict.
+kind of verdict. (*Unearth {2} — a masterless sword is never quite buried: for one more charge, at a price, it rises from the grave, and is gone by nightfall.*)
 
 ---
 

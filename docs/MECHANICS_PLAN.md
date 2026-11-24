@@ -207,7 +207,7 @@ visible keywords first and the two engine keystones (statics, activated abilitie
 | 4e | **Activated abilities** (`{T}: ...`): mana creatures, pingers, a Treasure token | M-L | **done** (see below; targeted abilities and a Treasure token wait) |
 | 4f | **Choices I**: Scry, Loot, Fight / bite, Hexproof | M | **done** (see below) |
 | 4f2 | **Choices II**: Modal ("choose one"), X spells, Kicker, Ward (extra fields on the cast action and a UI to fill them; Buyback not done) | M | **done** (see below) |
-| 4g | **Graveyard**: Undying, Unearth | M | planned |
+| 4g | **Graveyard**: Undying, Unearth | M | **done** (see below) |
 | 4h | **Showpiece**: Ninjutsu for Kunoichi / Hana (a short window between blocks and damage), later Equipment | L | planned |
 
 Still out of scope: the stack and counterspells, steal effects (controller is tied to owner), hidden-information mechanics, coloured mana.
@@ -329,3 +329,20 @@ its own imprecision once more: a kicker that draws makes a Loot draw two cards, 
 
 Cards (all decks 46.0%-55.5% at N=120, 45.9%-55.7% at N=80): **Soothe** modal (gain 6 life, or draw 2: Stonewall 47.5% -> 53.8%), **Pyroblast** Kicker {3} (also 3 damage to the opponent) and **Pyre Adept** Ward {1} (Pyromancer 46.8% -> 48.2%). Rejected by the sim: a Cinderbolt kicker
 (draw: no effect; 2 damage: Pyromancer 44.3%, because every burn deck gets it). No X spell is printed (an X Pyroblast is strictly worse than the 4-mana 6 damage at its sizes); the mechanic is engine-ready and stress-tested. Not done: Buyback.
+
+### Part 4g: done (Undying, Unearth)
+
+**Undying** (keyword): when a creature dies WITHOUT its +1/+1 counter it returns to the battlefield with one (`buffP` / `buffT` +1, `CardInstance.revived`), summoning sick, once: a returned creature that dies again stays dead. It is a death (the dies trigger fires,
+Morbid is on, sacrifice and Edict do not beat it), handled in `checkDeaths` after the dies triggers; it works for tokens, and bouncing it clears the flag so a recast copy has a fresh Undying. **Unearth** (`CardDef.unearth: cost`, `CardInstance.unearthed`, the `unearth`
+action): in your main phase, a creature in YOUR graveyard returns with haste for its unearth cost. It is not a cast (no spell trigger or count) and has no enter effect; `toEnd` exiles it quietly at the end step (no death, no triggers), and if it would die first it goes to
+exile instead (`PlayerState.exile`, where Flashback's spells also go). The AI unearths a body with power 2 or more when it has mana left after its casts. The Board has an Unearth button in your graveyard viewer (next to Flashback) and an "Unearthed" tag on the card; the log verb
+"unearths" is first-person. Card data tests: unearth is for creatures only, and an Undying creature has no enter effect (it returns without re-triggering one).
+
+**A real engine bug the oracle found:** `resolveCombat` re-looked-up each fighter by id for the second damage step, so a creature killed by first strike that returned through Undying FOUGHT AGAIN in the regular step (a returned blocker killed its attacker). `checkDeaths` now returns what died and
+`resolveCombat` excludes it (two regression tests, each failing without the fix). The oracle also needed carving out the older "dead is dead" checks for Undying and unearthed creatures, and its Morbid tracker now also reads "dies" log lines (an Undying creature never leaves the battlefield).
+
+Tested (`graveyard2.test.ts`, 11 tests, eleven rules mutation-checked; one equivalent mutant, skipping the unearth cost check in validation, is refused by payment anyway); the fuzz oracle re-derives Undying (`UNDYING_STAYED_DEAD`, `_TWICE`, `_NO_COUNTER`) and Unearth (`UNEARTH_*`: back with haste, cost, never in the graveyard, gone at the end step)
+and stress-sprinkles both (eight rule breaks each detected, including the combat bug).
+
+Cards (all decks 45.4%-54.5% at N=120, 45.5%-55.5% at N=80): **Ronin Blade** Unearth {2} (Iron Blossom 50.4% -> 55.5%) and **Ancient Treant** Undying (no measurable change: the AI rarely reaches six mana). Undying is very strong against this AI: on Swift Lancer it took Wildblitz to 74.6%,
+on Sky Talon Skyward to 60.0%, on Ashigaru Iron Blossom to 69.1%, so it is kept on a top-end body.
