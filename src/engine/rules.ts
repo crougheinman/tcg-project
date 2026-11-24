@@ -223,6 +223,11 @@ export function canAttack(c: CardInstance): boolean {
 }
 
 /** Find a creature on either battlefield by instance id. */
+/** May `caster` target this creature with a spell or ability? Hexproof stops the OPPONENT of its controller; its controller may still target it. */
+export function canTargetCreature(caster: PlayerId, card: CardInstance, controller: PlayerId): boolean {
+  return controller === caster || !hasKeyword(card, 'hexproof');
+}
+
 export function findCreature(
   state: GameState,
   iid: string,
@@ -283,11 +288,15 @@ export function legalActions(state: GameState, player: PlayerId): Action[] {
         .filter(isCreature)
         .map((c): Action => ({ type: 'resolveTrigger', target: c.iid }));
     }
+    if (state.pending.kind === 'scry') return [{ type: 'scry', bottom: false }, { type: 'scry', bottom: true }];
+    if (state.pending.kind === 'discard') {
+      return state.players[state.pending.controller].hand.map((c): Action => ({ type: 'resolveTrigger', target: c.iid }));
+    }
     const src = state.pending.source;
     const out: Action[] = [];
     for (const pid of ['A', 'B'] as PlayerId[]) {
       for (const c of state.players[pid].battlefield) {
-        if (isCreature(c) && c.iid !== src) out.push({ type: 'resolveTrigger', target: c.iid });
+        if (isCreature(c) && c.iid !== src && canTargetCreature(state.pending.controller, c, pid)) out.push({ type: 'resolveTrigger', target: c.iid });
       }
     }
     return out;
@@ -379,11 +388,17 @@ function spellActions(state: GameState, caster: PlayerId): Action[] {
       }
     } else if (eff.type === 'bounce') {
       for (const t of legalTargets(state, caster, 'creature')) out.push({ type: 'castSorcery', iid: c.iid, target: t });
+    } else if (eff.type === 'bite') {
+      // an opposing creature to bite, and one of ours to do the biting
+      if (!p.battlefield.some(isCreature)) continue;
+      for (const t of legalTargets(state, caster, 'creature')) {
+        if (t.kind === 'creature' && state.players[opponentOf(caster)].battlefield.some((x) => x.iid === t.iid)) out.push({ type: 'castSorcery', iid: c.iid, target: t });
+      }
     } else if (eff.type === 'destroy') {
       // Only tapped creatures are valid targets.
       for (const pid of ['A', 'B'] as PlayerId[]) {
         for (const cc of state.players[pid].battlefield) {
-          if (isCreature(cc) && cc.tapped) {
+          if (isCreature(cc) && cc.tapped && canTargetCreature(caster, cc, pid)) {
             out.push({ type: 'castSorcery', iid: c.iid, target: { kind: 'creature', iid: cc.iid } });
           }
         }
@@ -395,7 +410,7 @@ function spellActions(state: GameState, caster: PlayerId): Action[] {
 
 export function legalTargets(
   state: GameState,
-  _actor: PlayerId,
+  actor: PlayerId,
   spec: 'any' | 'creature' | 'player',
 ): Target[] {
   const out: Target[] = [];
@@ -405,7 +420,7 @@ export function legalTargets(
   if (spec === 'any' || spec === 'creature') {
     for (const pid of ['A', 'B'] as PlayerId[]) {
       for (const c of state.players[pid].battlefield) {
-        if (isCreature(c)) out.push({ kind: 'creature', iid: c.iid });
+        if (isCreature(c) && canTargetCreature(actor, c, pid)) out.push({ kind: 'creature', iid: c.iid });
       }
     }
   }
@@ -417,10 +432,10 @@ export function legalTargets(
 export function validateAction(state: GameState, action: Action): void {
   if (state.winner) throw new Error('game is over');
   // A pending trigger must be resolved before anything else.
-  if (state.pending && action.type !== 'resolveTrigger') {
+  if (state.pending && action.type !== 'resolveTrigger' && action.type !== 'scry') {
     throw new Error('resolve the pending trigger first');
   }
-  if (!state.pending && action.type === 'resolveTrigger') {
+  if (!state.pending && (action.type === 'resolveTrigger' || action.type === 'scry')) {
     throw new Error('no trigger to resolve');
   }
   const active = state.players[state.active];
@@ -438,6 +453,12 @@ export function validateAction(state: GameState, action: Action): void {
   switch (action.type) {
     case 'resolveTrigger': {
       const pend = state.pending;
+      if (pend?.kind === 'scry') throw new Error('a Scry is answered with the scry action');
+      if (pend?.kind === 'discard') {
+        // Loot: the controller discards a card of their choice from their own hand
+        if (!state.players[pend.controller].hand.some((c) => c.iid === action.target)) throw new Error('choose a card from your hand to discard');
+        return;
+      }
       const found = findCreature(state, action.target);
       if (pend?.kind === 'sacrifice') {
         // Edict: the victim picks one of THEIR OWN creatures
@@ -447,6 +468,11 @@ export function validateAction(state: GameState, action: Action): void {
       if (pend?.kind !== 'enter') throw new Error('no trigger pending');
       if (action.target === pend.source) throw new Error('cannot target the source');
       if (!found) throw new Error('target creature not found');
+      if (!canTargetCreature(pend.controller, found.card, found.controller)) throw new Error('that creature has hexproof');
+      return;
+    }
+    case 'scry': {
+      if (state.pending?.kind !== 'scry') throw new Error('no Scry pending');
       return;
     }
     case 'activate': {
@@ -506,14 +532,22 @@ export function validateAction(state: GameState, action: Action): void {
       if (needsTarget(def.effect)) {
         if (!action.target) throw new Error('target required');
         if (def.effect.type === 'damage' || def.effect.type === 'buff') {
-          validateTarget(state, def.effect.targets, action.target);
+          validateTarget(state, def.effect.targets, action.target, casterId);
         } else if (def.effect.type === 'bounce') {
-          if (action.target.kind !== 'creature' || !findCreature(state, action.target.iid)) throw new Error('must target a creature in play');
+          const fb = action.target.kind === 'creature' ? findCreature(state, action.target.iid) : null;
+          if (!fb) throw new Error('must target a creature in play');
+          if (!canTargetCreature(casterId, fb.card, fb.controller)) throw new Error('that creature has hexproof');
+        } else if (def.effect.type === 'bite') {
+          const fb = action.target.kind === 'creature' ? findCreature(state, action.target.iid) : null;
+          if (!fb || fb.controller === casterId) throw new Error('must target an opposing creature');
+          if (!canTargetCreature(casterId, fb.card, fb.controller)) throw new Error('that creature has hexproof');
+          if (!caster.battlefield.some(isCreature)) throw new Error('you need a creature to do the biting');
         } else if (def.effect.type === 'destroy') {
           if (action.target.kind !== 'creature') throw new Error('must target a creature');
           const found = findCreature(state, action.target.iid);
           if (!found) throw new Error('creature not found');
           if (!found.card.tapped) throw new Error('target must be tapped');
+          if (!canTargetCreature(casterId, found.card, found.controller)) throw new Error('that creature has hexproof');
         }
       }
       return;
@@ -565,11 +599,14 @@ function validateTarget(
   state: GameState,
   spec: 'any' | 'creature' | 'player',
   target: Target,
+  caster: PlayerId,
 ): void {
   if (target.kind === 'player') {
     if (spec === 'creature') throw new Error('must target a creature');
     return;
   }
   if (spec === 'player') throw new Error('must target a player');
-  if (!findCreature(state, target.iid)) throw new Error('creature not found');
+  const found = findCreature(state, target.iid);
+  if (!found) throw new Error('creature not found');
+  if (!canTargetCreature(caster, found.card, found.controller)) throw new Error('that creature has hexproof');
 }

@@ -61,7 +61,8 @@ export const CARDS: Record<string, CardDef> = {
     power: 2,
     toughness: 1,
     keywords: ['flying', 'vigilance', 'exalted'],
-    text: 'Flying. Vigilance. Exalted.',
+    onEnter: { type: 'scry', amount: 1 },
+    text: 'Flying. Vigilance. Exalted. When it enters, scry 1.',
     art: '/cards/sky_talon.webp', // 420x420 WebP; other cards auto-wire to <id>.png
     flavor: 'It hunts the wind itself.',
   },
@@ -98,9 +99,9 @@ export const CARDS: Record<string, CardDef> = {
     cost: 5,
     power: 4,
     toughness: 4,
-    keywords: ['flying', 'vigilance'],
+    keywords: ['flying', 'vigilance', 'hexproof'],
     onAttack: { type: 'heal', amount: 1 },
-    text: 'Flying. Vigilance. Whenever it attacks, gain 1 life.',
+    text: 'Flying. Vigilance. Hexproof. Whenever it attacks, gain 1 life.',
     art: '/cards/storm_drake.webp', // 420x422 WebP; other cards auto-wire to <id>.png
     flavor: 'Thunder is merely the sound of its wings.',
   },
@@ -261,6 +262,8 @@ export const CARDS: Record<string, CardDef> = {
     cost: 2,
     power: 2,
     toughness: 2,
+    onEnter: { type: 'loot' },
+    text: 'When it enters, draw a card, then discard a card.',
     art: '/cards/shambling_ghoul.webp', // 420x420 WebP; other cards auto-wire to <id>.png
     flavor: 'It shambles ever forward, and never tires.',
   },

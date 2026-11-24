@@ -23,6 +23,7 @@ export type Keyword =
   | 'bushido' // +1/+1 until end of turn when it blocks or becomes blocked
   | 'indestructible' // lethal damage and destroy effects do not kill it (only 0 toughness does)
   | 'battleCry' // when it attacks, each other attacking creature gets +1/+0 until end of turn
+  | 'hexproof' // its opponents' spells and abilities cannot target it (its controller's can)
   | 'exalted'; // when a creature its controller controls attacks alone, it gets +1/+1 until end of turn for each exalted creature
 
 /** What a creature can be targeted as / what an effect targets. */
@@ -47,11 +48,14 @@ export type Effect =
   | { type: 'rally'; power: number; toughness: number } // all your creatures get +P/+T until end of turn (untargeted)
   | { type: 'bounce' } // return target creature to its owner's hand (a token just ceases to exist); needs a target
   | { type: 'mana'; amount: number } // add N mana to your pool until the phase ends (an activated ability's effect)
+  | { type: 'scry'; amount: number } // look at the top N cards of your library and put each on the top or the bottom (a `pending` choice)
+  | { type: 'loot' } // draw a card, then discard a card of your choice (a `pending` choice)
+  | { type: 'bite' } // your creature with the greatest power deals damage equal to its power to target opposing creature (needs a target)
   | { type: 'edict' }; // the opponent sacrifices a creature of THEIR choice (a `pending` decision made by them; automatic when they have one)
 
 /** Which effects need the player to pick a target. */
 export function needsTarget(effect: Effect): boolean {
-  return effect.type === 'damage' || effect.type === 'buff' || effect.type === 'destroy' || effect.type === 'bounce';
+  return effect.type === 'damage' || effect.type === 'buff' || effect.type === 'destroy' || effect.type === 'bounce' || effect.type === 'bite';
 }
 
 /**
@@ -168,7 +172,9 @@ export interface CombatState {
 
 /** A triggered ability waiting on the controller to choose a target. */
 export interface PendingTrigger {
-  kind: 'enter' | 'sacrifice'; // an enter effect that needs a target, or an Edict waiting on the victim's choice of creature
+  kind: 'enter' | 'sacrifice' | 'scry' | 'discard'; // an enter effect that needs a target, an Edict waiting on the victim's choice, a Scry deciding top or bottom, or a Loot choosing a card to discard
+  left?: number; // 'scry': cards still to decide; 'discard': cards still to discard
+  seen?: number; // 'scry': cards already decided to stay on top
   source: string; // 'enter': iid of the creature whose trigger this is ('sacrifice': unused)
   def: string; // the card (creature or spell) behind it, so the effect is still known if the source has left play
   controller: PlayerId; // who chooses: the trigger's controller ('enter'), or the player who must sacrifice ('sacrifice')
@@ -206,6 +212,7 @@ export type Action =
   | { type: 'declareBlockers'; blocks: Record<string, string> }
   | { type: 'resolveTrigger'; target: string } // choose the target of a pending enter effect (Whipflash), or the creature to sacrifice (Edict)
   | { type: 'activate'; iid: string } // use a creature's activated ability (its cost is paid, its effect resolves at once)
+  | { type: 'scry'; bottom: boolean } // answer a pending Scry for the next card: put it on the bottom, or leave it on top
   | { type: 'cycle'; iid: string } // Cycling: pay the card's cycling cost, discard it from hand, draw a card
   | { type: 'keepHand' } // mulligan phase: keep this opening hand
   | { type: 'mulligan' } // mulligan phase: shuffle the hand back and draw one card fewer

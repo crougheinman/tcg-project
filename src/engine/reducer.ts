@@ -7,6 +7,7 @@ import {
   actorOf,
   availableMana,
   blitzCue,
+  canTargetCreature,
   findCreature,
   hasKeyword,
   isCreature,
@@ -59,7 +60,9 @@ export function applyAction(state: GameState, action: Action): GameState {
       const skill = def.skill ?? def.name;
       if (def.onEnter) {
         if (needsCreatureChoice(def.onEnter)) {
-          if (allCreatures(s).some((x) => x.iid !== c.iid)) {
+          // there must be something it may target (hexproof creatures of the opponent are not)
+          const targetable = (['A', 'B'] as PlayerId[]).some((pid) => s.players[pid].battlefield.some((x) => isCreature(x) && x.iid !== c.iid && canTargetCreature(casterId, x, pid)));
+          if (targetable) {
             s.pending = { kind: 'enter', source: c.iid, def: c.def, controller: casterId };
             s.log.push(`✦ ${skill}! Choose a creature.`);
           } else {
@@ -106,6 +109,15 @@ export function applyAction(state: GameState, action: Action): GameState {
     }
     case 'resolveTrigger': {
       const pend = s.pending!;
+      if (pend.kind === 'discard') {
+        // Loot: the chosen card goes from the controller's hand to their graveyard. (Logged as "loots away", not "discards": that line is Rot's show.)
+        const owner = s.players[pend.controller];
+        const card = takeFromHand(owner, action.target);
+        owner.graveyard.push(card);
+        s.log.push(`${pend.controller} loots away ${getDef(card.def).name}`);
+        s.pending = null;
+        break;
+      }
       if (pend.kind === 'sacrifice') {
         // Edict: the victim's chosen creature is sacrificed (it dies even if indestructible)
         const victim = findCreature(s, action.target)!;
@@ -122,6 +134,22 @@ export function applyAction(state: GameState, action: Action): GameState {
         }
       }
       s.pending = null;
+      break;
+    }
+    case 'scry': {
+      // Scry: decide the next unseen card of the top N. Bottom: it goes to the end of the library. Top: it stays, and the next card is looked at.
+      const pend = s.pending!;
+      const lib = s.players[pend.controller].library;
+      const seen = pend.seen ?? 0;
+      if (action.bottom) {
+        lib.push(lib.splice(seen, 1)[0]);
+        s.log.push(`${pend.controller} puts a card on the bottom`);
+      } else {
+        pend.seen = seen + 1;
+        s.log.push(`${pend.controller} keeps a card on top`);
+      }
+      pend.left = (pend.left ?? 1) - 1;
+      if (pend.left <= 0) s.pending = null;
       break;
     }
     case 'castSorcery': {
@@ -234,9 +262,6 @@ export function applyAction(state: GameState, action: Action): GameState {
 
 // ---- internals ----
 
-function allCreatures(s: GameState) {
-  return [...s.players.A.battlefield, ...s.players.B.battlefield].filter(isCreature);
-}
 
 /**
  * Static abilities (Beast Blitz, Lords, Threshold): every creature's bonus is rebuilt from scratch from what is on the battlefield now
@@ -358,6 +383,32 @@ function applyEffect(s: GameState, controller: PlayerId, effect: Effect, target?
         for (const [blk, atk] of Object.entries(s.combat.blocks)) if (blk === c.iid || atk === c.iid) delete s.combat.blocks[blk];
       }
       s.log.push(`${getDef(c.def).name} is returned to ${isToken(c.def) ? 'nowhere (a token)' : "its owner's hand"}`);
+      break;
+    }
+    case 'scry': {
+      const p = s.players[controller];
+      const n = Math.min(effect.amount, p.library.length);
+      if (s.pending || n <= 0) break; // (a decision is already waiting, or there is nothing to look at)
+      s.pending = { kind: 'scry', source: '', def: '', controller, left: n, seen: 0 };
+      s.log.push(`${controller} scries ${n}`);
+      break;
+    }
+    case 'loot': {
+      drawCard(s, controller);
+      if (s.winner || s.pending || s.players[controller].hand.length === 0) break;
+      s.pending = { kind: 'discard', source: '', def: '', controller, left: 1 };
+      s.log.push(`${controller} loots`);
+      break;
+    }
+    case 'bite': {
+      // The controller's creature with the greatest power (the first on the battlefield wins a tie) deals damage equal to its power to the target.
+      if (target?.kind !== 'creature') break;
+      const biters = s.players[controller].battlefield.filter(isCreature);
+      const victim = findCreature(s, target.iid);
+      if (!biters.length || !victim) break;
+      const biter = biters.reduce((best, c) => (power(c) > power(best) ? c : best));
+      markDamage(biter, victim.card, power(biter)); // (a deathtouch biter kills it)
+      s.log.push(`${getDef(biter.def).name} bites ${getDef(victim.card.def).name} for ${power(biter)}`);
       break;
     }
     case 'edict': {

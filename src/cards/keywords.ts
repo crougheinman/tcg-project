@@ -20,6 +20,7 @@ export const KEYWORD_INFO: Record<Keyword, { label: string; rule: string }> = {
   bushido: { label: 'Bushido', rule: 'gets +1/+1 until end of turn when it blocks or becomes blocked.' },
   battleCry: { label: 'Battle cry', rule: 'when it attacks, each other attacking creature gets +1/+0 until end of turn.' },
   exalted: { label: 'Exalted', rule: 'when a creature you control attacks alone, it gets +1/+1 until end of turn for each creature you control with Exalted.' },
+  hexproof: { label: 'Hexproof', rule: 'your opponents\' spells and abilities cannot target it (yours can).' },
   indestructible: { label: 'Indestructible', rule: 'lethal damage and destroy effects do not kill it. Only losing all its toughness does.' },
 };
 

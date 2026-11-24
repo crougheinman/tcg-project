@@ -48,6 +48,8 @@ export function pickAction(state: GameState, ai: PlayerId): Action {
   if (state.phase === 'mulligan') return pickMulligan(state, ai);
   if (state.pending?.kind === 'enter') return pickTriggerTarget(state, ai);
   if (state.pending?.kind === 'sacrifice') return pickSacrifice(state, ai);
+  if (state.pending?.kind === 'scry') return pickScry(state, ai);
+  if (state.pending?.kind === 'discard') return pickLootDiscard(state, ai);
   if (state.phase === 'combat_block' && state.active !== ai) return pickBlocks(state, ai);
   switch (state.phase) {
     case 'main1':
@@ -223,7 +225,19 @@ function scoreSpell(
       return score(BAND.buff, power(found.card) * 20 + thrift);
     }
     case 'draw':
+    case 'scry':
+    case 'loot':
       return score(BAND.draw, thrift);
+    case 'bite': {
+      // only worth it when the biter's power finishes the target (the bite is one-way: it takes nothing back)
+      if (a.target?.kind !== 'creature') return score(BAND.never);
+      const found = findCreature(state, a.target.iid);
+      if (!found || found.controller === ai) return score(BAND.never);
+      const biter = Math.max(0, ...me.battlefield.filter(isCreature).map(power));
+      const c = found.card;
+      const kills = !hasKeyword(c, 'indestructible') && biter >= toughness(c) - c.damage;
+      return kills ? score(BAND.removalKill, getDef(c.def).cost * 10 + power(c)) : score(BAND.never);
+    }
     case 'rally': {
       // before combat, and only with two or more creatures that will actually attack
       if (state.phase !== 'main1') return score(BAND.never);
@@ -277,6 +291,31 @@ function pickAttacks(state: GameState, ai: PlayerId): Action {
   // ponytail: ignores unfavorable trades; add board eval before attacking later.
   const attackers = me.battlefield.filter(canAttack).map((c) => c.iid);
   return { type: 'declareAttackers', attackers };
+}
+
+/** Scry: keep a card we want soon on top, send the rest to the bottom. Lands are wanted until we have about five; spells when we can nearly cast them. */
+function pickScry(state: GameState, ai: PlayerId): Action {
+  const me = state.players[ai];
+  const card = me.library[state.pending?.seen ?? 0];
+  if (!card) return { type: 'scry', bottom: false };
+  const lands = me.battlefield.filter(isLand).length;
+  const handLands = me.hand.filter(isLand).length;
+  const def = getDef(card.def);
+  if (def.type === 'land') return { type: 'scry', bottom: lands + handLands >= 5 };
+  return { type: 'scry', bottom: def.cost > lands + handLands + 2 };
+}
+
+/** Loot: discard what helps least: a land we have plenty of, else the dearest card we cannot cast for a long while, else the cheapest spell. */
+function pickLootDiscard(state: GameState, ai: PlayerId): Action {
+  const me = state.players[ai];
+  const lands = me.battlefield.filter(isLand).length;
+  const spare = (c: CardInstance) => {
+    const d = getDef(c.def);
+    if (d.type === 'land') return lands >= 5 ? 100 : lands >= 4 ? 40 : -50;
+    return d.cost > lands + 3 ? 60 + d.cost : -d.cost;
+  };
+  const pick = [...me.hand].sort((x, y) => spare(y) - spare(x))[0];
+  return pick ? { type: 'resolveTrigger', target: pick.iid } : { type: 'advance' };
 }
 
 /** Edict: give up the least valuable creature we have: a token first, then the smallest and cheapest. */
