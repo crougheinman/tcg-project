@@ -14,7 +14,7 @@ import {
 } from '../../src/engine/rules';
 import { DECK_LIST } from '../../src/cards/decks';
 import { CARDS, getDef } from '../../src/cards/cards';
-import type { Action, CardDef, CardInstance, Effect, GameState, PlayerId } from '../../src/engine/types';
+import type { Action, CardDef, CardInstance, Effect, GameState, PlayerId, PlayerState } from '../../src/engine/types';
 import { needsTarget, opponentOf } from '../../src/engine/types';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -69,6 +69,7 @@ function leavers(before: GameState, a: Action): { bounced: Set<string>; sacrific
     const e = cardOf(who, a.iid) && getDef(cardOf(who, a.iid)!.def).onEnter;
     if (e?.type === 'edict') everyVictim(who);
   }
+  if (a.type === 'ninjutsu') bounced.add(a.attacker); // the swapped-out attacker returns to hand: a bounce, not a death
   if (a.type === 'resolveTrigger' && before.pending) {
     if (before.pending.kind === 'sacrifice') sacrificed.add(a.target);
     else if (before.pending.kind === 'enter' && getDef(before.pending.def).onEnter?.type === 'bounce') bounced.add(a.target);
@@ -106,7 +107,50 @@ type CastOptsOf = { x?: number; mode?: number; kicked?: boolean };
 /** An Undying creature that would come back if it died now (it has no counter yet), and an unearthed one (exiled at the end step, or instead of dying): neither follows the plain die-and-stay-dead rules the older checks assume. */
 const wouldReturn = (c: CardInstance) => hasKeyword(c, 'undying') && !c.revived && !c.unearthed;
 
-function expectedLife(before: GameState, a: Action, t: Track): Record<PlayerId, number> {
+/** The static-ability bonus a creature should wear on `side`'s battlefield, from card data only (own loop, own threshold literal 7, own `unique` handling). */
+function auraOf(side: PlayerState, c: CardInstance): { p: number; t: number } {
+  let p = 0, t = 0;
+  const once = new Set<string>();
+  for (const src of side.battlefield) {
+    const st = CARDS[src.def].static;
+    if (!st) continue;
+    if (st.when === 'threshold' && side.graveyard.length < 7) continue;
+    const hit = (st.affects.self && c.iid === src.iid) || (st.affects.others && c.iid !== src.iid) || (st.affects.ids ?? []).includes(c.def);
+    if (!hit) continue;
+    if (st.unique) { if (once.has(src.def)) continue; once.add(src.def); }
+    p += st.power; t += st.toughness;
+  }
+  return { p, t };
+}
+
+/**
+ * Part 4h: combat is split in two when a Ninjutsu window opens (blocks, then the attacker's answer, then damage). For the action that resolves the
+ * window, build the state combat is actually resolved from: the pause state with the Bushido the engine applied at the pause taken back (the simulator
+ * applies it itself), and for a swap the ninja in and the attacker out (with the bonuses the new battlefield gives).
+ */
+function combatView(before: GameState, a: Action): { vb: GameState; blocks: Record<string, string> } {
+  const vb = structuredClone(before);
+  const blocks = { ...(before.combat?.blocks ?? {}) };
+  vb.pending = null;
+  for (const [blk, atk] of Object.entries(blocks)) for (const iid of [blk, atk]) {
+    const c = all(vb).find((x) => x.iid === iid);
+    if (c && hasKeyword(c, 'bushido')) { c.tempP = (c.tempP ?? 0) - 1; c.tempT = (c.tempT ?? 0) - 1; }
+  }
+  if (a.type === 'ninjutsu') {
+    const side = vb.players[vb.active];
+    const atk = side.battlefield.find((c) => c.iid === a.attacker)!;
+    const ninja = side.hand.find((c) => c.iid === a.ninja)!;
+    side.battlefield = side.battlefield.filter((c) => c.iid !== atk.iid);
+    side.hand = side.hand.filter((c) => c.iid !== ninja.iid);
+    ninja.tapped = true;
+    side.battlefield.push(ninja);
+    vb.combat = { attackers: (vb.combat?.attackers ?? []).map((i) => (i === a.attacker ? a.ninja : i)), blocks };
+    for (const c of side.battlefield) if (CARDS[c.def].type === 'creature') { const x = auraOf(side, c); c.auraP = x.p; c.auraT = x.t; }
+  }
+  return { vb, blocks };
+}
+
+function expectedLife(before: GameState, a: Action, t: Track, paused = false): Record<PlayerId, number> {
   const life = { A: before.players.A.life, B: before.players.B.life };
   const caster = before.phase === 'combat_block' ? opponentOf(before.active) : before.active;
   // an untargeted trigger or bonus effect: it heals its controller, or hurts the opponent when it is damage aimed at the player
@@ -149,16 +193,18 @@ function expectedLife(before: GameState, a: Action, t: Track): Record<PlayerId, 
       if (d.spellTrigger.type === 'damage') life[opponentOf(caster)] -= d.spellTrigger.amount;
     }
   }
-  if (a.type === 'declareBlockers') {
+  if (a.type === 'declareBlockers' && !paused) {
     const sim = simulateCombat(before, a.blocks);
     life.A += sim.delta.A;
     life.B += sim.delta.B;
   }
+  if (a.type === 'ninjutsu' || a.type === 'skipNinjutsu') {
+    const cv = combatView(before, a);
+    const sim = simulateCombat(cv.vb, cv.blocks);
+    life.A += sim.delta.A;
+    life.B += sim.delta.B;
+  }
   return life;
-}
-
-function expectedCombatDeaths(before: GameState, a: Extract<Action, { type: 'declareBlockers' }>): Set<string> {
-  return simulateCombat(before, a.blocks).dead;
 }
 
 /**
@@ -254,7 +300,9 @@ function check(
   }
 
   // 2. life oracle (skipped once a deck-out has fired: the oracle does not model draws)
-  const el = expectedLife(before, a, ctx.track!);
+  const paused = a.type === 'declareBlockers' && after.pending?.kind === 'ninjutsu'; // Part 4h: combat stopped for the attacker's Ninjutsu answer
+  const resolving = a.type === 'ninjutsu' || a.type === 'skipNinjutsu'; // ...and the action that finishes it
+  const el = expectedLife(before, a, ctx.track!, paused);
   const decked = (after.log.at(-1) ?? '').includes('decks out') || after.log.some((l, i) => i >= before.log.length && l.includes('decks out'));
   if (!decked) {
     for (const pid of ['A', 'B'] as PlayerId[]) {
@@ -268,7 +316,8 @@ function check(
     if (a.type === 'mulligan') return 'mulligan';
     if (a.type === 'advance') return before.phase === 'main1' ? 'combat_attack' : before.phase === 'combat_attack' ? 'end' : 'main1';
     if (a.type === 'declareAttackers') return a.attackers.length ? 'combat_block' : 'end';
-    if (a.type === 'declareBlockers') return 'end';
+    if (a.type === 'declareBlockers') return paused ? 'combat_block' : 'end';
+    if (a.type === 'ninjutsu' || a.type === 'skipNinjutsu') return 'end';
     return before.phase; // spells, land, creature, resolveTrigger
   })();
   if (after.phase !== exp && !after.winner) R('PHASE_TRANSITION', `${before.phase} + ${a.type} -> ${after.phase}, expected ${exp}`);
@@ -352,19 +401,32 @@ function check(
       }
     }
   }
-  if (a.type === 'declareBlockers') {
+  if ((a.type === 'declareBlockers' && !paused) || resolving) {
     // dies triggers: each token-making death adds exactly its tokens (tokens that died are replaced, not lost)
+    const cvv = resolving ? combatView(before, a) : null;
+    const bfore = cvv ? cvv.vb : before; // (a swap has already happened in the view: the returned attacker is not a death)
     const afterIds = new Set(all(after).map((c) => c.iid));
-    const died = creatures(before).filter((c) => !afterIds.has(c.iid) && !c.unearthed);
+    // an unearthed creature that leaves at the end step is exiled, not dead, but one that is killed in combat dies and its trigger fires. The log counts the
+    // "X dies" lines per name: ordinary leavers account for theirs first, and an unearthed copy is dead only if a line is left over for it.
+    const dyingLeft = new Map<string, number>();
+    for (const l of after.log.slice(before.log.length)) { const m = /^(.*) dies$/.exec(l); if (m) dyingLeft.set(m[1], (dyingLeft.get(m[1]) ?? 0) + 1); }
+    const gone = creatures(bfore).filter((c) => !afterIds.has(c.iid));
+    for (const c of gone) if (!c.unearthed) dyingLeft.set(getDef(c.def).name, (dyingLeft.get(getDef(c.def).name) ?? 0) - 1);
+    const died = gone.filter((c) => {
+      if (!c.unearthed) return true;
+      const left = dyingLeft.get(getDef(c.def).name) ?? 0;
+      if (left > 0) { dyingLeft.set(getDef(c.def).name, left - 1); return true; }
+      return false;
+    });
     const defs = new Set<string>();
     for (const c of died) { const t = getDef(c.def).onDeath; if (t?.type === 'token') defs.add(t.token); }
     for (const pid of ['A', 'B'] as PlayerId[]) {
       for (const tok of defs) {
-        const beforeN = before.players[pid].battlefield.filter((c) => c.def === tok).length;
+        const beforeN = bfore.players[pid].battlefield.filter((c) => c.def === tok).length;
         const lostN = died.filter((c) => c.owner === pid && c.def === tok).length;
         const madeN = died.filter((c) => c.owner === pid).reduce((n, c) => { const t = getDef(c.def).onDeath; return n + (t?.type === 'token' && t.token === tok ? t.count : 0); }, 0);
         const nowN = after.players[pid].battlefield.filter((c) => c.def === tok).length;
-        if (nowN !== beforeN - lostN + madeN && !creatures(before).some((c) => hasKeyword(c, 'undying'))) R('DIES_TRIGGER_TOKENS', `${pid}: ${tok} count ${beforeN} -${lostN} +${madeN} expected ${beforeN - lostN + madeN}, got ${nowN}`);
+        if (nowN !== beforeN - lostN + madeN && !creatures(bfore).some((c) => hasKeyword(c, 'undying'))) R('DIES_TRIGGER_TOKENS', `${pid}: ${tok} count ${beforeN} -${lostN} +${madeN} expected ${beforeN - lostN + madeN}, got ${nowN}`);
       }
     }
   }
@@ -496,6 +558,36 @@ function check(
     }
   }
 
+  // 3h. Part 4h: the Ninjutsu window opens exactly when a ninja in the attacker's hand can be paid for and an attacker is unblocked, and the swap does what the rules text says
+  if (a.type === 'declareBlockers') {
+    const who = before.active;
+    const blocked = new Set(Object.values(a.blocks));
+    const open = (before.combat?.attackers ?? []).filter((i) => !blocked.has(i) && before.players[who].battlefield.some((c) => c.iid === i && CARDS[c.def].type === 'creature'));
+    const mana = manaOf(before, who);
+    const want = open.length > 0 && before.players[who].hand.some((c) => CARDS[c.def].ninjutsu !== undefined && CARDS[c.def].type === 'creature' && CARDS[c.def].ninjutsu! <= mana);
+    if (want && !paused) R('NINJUTSU_WINDOW_MISSING', `a ninja could be swapped in (mana ${mana}, ${open.length} unblocked) but combat resolved without asking`);
+    if (!want && paused) R('NINJUTSU_WINDOW_SPURIOUS', 'the Ninjutsu window opened with no ninja to pay for or no unblocked attacker');
+    if (paused && (after.players[opponentOf(who)].life !== before.players[opponentOf(who)].life || after.players[who].life !== before.players[who].life)) R('NINJUTSU_PAUSE_DAMAGE', 'damage was dealt before the Ninjutsu answer');
+    if (paused && after.pending?.controller !== who) R('NINJUTSU_WRONG_CHOOSER', `the window belongs to ${who}, not ${after.pending?.controller}`);
+  }
+  if (a.type === 'ninjutsu') {
+    const who = before.active;
+    const ninja = before.players[who].hand.find((c) => c.iid === a.ninja);
+    const atk = before.players[who].battlefield.find((c) => c.iid === a.attacker);
+    if (!ninja || !atk) R('NINJUTSU_ILLEGAL', 'the swap named a card that is not where it must be');
+    else {
+      if ((before.combat?.blocks && Object.values(before.combat.blocks).includes(a.attacker))) R('NINJUTSU_BLOCKED_ATTACKER', `${atk.def} was blocked and still swapped`);
+      if (spentMana(before, after, who) !== CARDS[ninja.def].ninjutsu) R('NINJUTSU_COST', `${ninja.def}: paid ${spentMana(before, after, who)}, ninjutsu costs ${CARDS[ninja.def].ninjutsu}`);
+      if (after.players[who].battlefield.some((c) => c.iid === a.attacker)) R('NINJUTSU_ATTACKER_STAYED', `${atk.def} is still on the battlefield`);
+      if (!TOKENS.has(atk.def) && !after.players[who].hand.some((c) => c.iid === a.attacker)) R('NINJUTSU_ATTACKER_NOT_HOME', `${atk.def} did not return to hand`);
+      const li = after.lastCombat?.attackers ?? [];
+      if (!li.includes(a.ninja) || li.includes(a.attacker)) R('NINJUTSU_COMBAT_LIST', `the combat should name the ninja, not the swapped attacker (${li.join(',')})`);
+      if (!after.players[who].battlefield.some((c) => c.iid === a.ninja) && !after.players[who].graveyard.some((c) => c.iid === a.ninja) && !TOKENS.has(ninja.def)) R('NINJUTSU_NINJA_LOST', `${ninja.def} is neither in play nor in the graveyard`);
+      if ((after.spellsThisTurn?.[who] ?? 0) !== (before.spellsThisTurn?.[who] ?? 0)) R('NINJUTSU_COUNTED_AS_SPELL', 'ninjutsu is not a cast');
+    }
+  }
+  if (resolving && after.pending) R('NINJUTSU_STILL_PENDING', 'the window was answered but the game still waits');
+
   // 3d. Part 4e: activated abilities, from the rule text: the cost is paid (tap, mana), the effect resolves, and it is not a cast
   if (a.type === 'activate') {
     const who = before.active;
@@ -571,16 +663,19 @@ function check(
       if (c && c.tapped && hasKeyword(c, 'vigilance')) R('VIGILANCE_TAPPED', `${c.def} has vigilance but tapped to attack`);
     }
   }
-  if (a.type === 'declareBlockers') {
-    const expDead = expectedCombatDeaths(before, a);
+  if ((a.type === 'declareBlockers' && !paused) || resolving) {
+    const cvw = resolving ? combatView(before, a) : null;
+    const cbefore = cvw ? cvw.vb : before;
+    const cblocks = cvw ? cvw.blocks : (a as Extract<Action, { type: 'declareBlockers' }>).blocks;
+    const expDead = simulateCombat(cbefore, cblocks).dead;
     const nowAlive = new Set(creatures(after).map((c) => c.iid));
-    for (const iid of expDead) if (nowAlive.has(iid) && !wouldReturn(creatures(before).find((c) => c.iid === iid)!)) R('SURVIVED_LETHAL', `${creatures(before).find((c) => c.iid === iid)?.def} should have died in combat`);
-    for (const c of creatures(before)) if (!expDead.has(c.iid) && !nowAlive.has(c.iid) && !c.unearthed) R('DIED_WITHOUT_LETHAL', `${c.def} died but took non-lethal combat damage`);
+    for (const iid of expDead) if (nowAlive.has(iid) && !wouldReturn(creatures(cbefore).find((c) => c.iid === iid)!)) R('SURVIVED_LETHAL', `${creatures(cbefore).find((c) => c.iid === iid)?.def} should have died in combat`);
+    for (const c of creatures(cbefore)) if (!expDead.has(c.iid) && !nowAlive.has(c.iid) && !c.unearthed) R('DIED_WITHOUT_LETHAL', `${c.def} died but took non-lethal combat damage`);
     for (const c of creatures(after)) if (c.damage !== 0) R('DAMAGE_NOT_CLEARED', `${c.def} carries damage ${c.damage} into the end step`);
     if (after.combat !== null) R('COMBAT_NOT_CLEARED', 'state.combat still set after resolution');
     if (!after.lastCombat) R('LASTCOMBAT_MISSING', 'lastCombat not recorded');
-    for (const [b, atk] of Object.entries(a.blocks)) {
-      const bl = all(before).find((c) => c.iid === b), at = all(before).find((c) => c.iid === atk);
+    for (const [b, atk] of Object.entries(cblocks)) {
+      const bl = all(cbefore).find((c) => c.iid === b), at = all(cbefore).find((c) => c.iid === atk);
       if (bl && at && hasKeyword(at, 'flying') && !hasKeyword(bl, 'flying') && !hasKeyword(bl, 'reach')) R('FLYER_BLOCKED_BY_GROUND', `${at.def} blocked by ${bl.def}`);
       if (bl?.tapped) R('TAPPED_BLOCKER', `${bl.def} blocked while tapped`);
       if (bl && at && hasKeyword(at, 'skulk') && power(bl) > power(at)) R('SKULK_BLOCKED_BY_GREATER', `${at.def} (power ${power(at)}) blocked by ${bl.def} (power ${power(bl)})`);
@@ -700,13 +795,13 @@ const t0 = Date.now();
 function caster0(st: GameState): PlayerId { return st.phase === 'combat_block' ? opponentOf(st.active) : st.active; }
 const STRESS_KW = ['reach', 'vigilance', 'firstStrike', 'doubleStrike', 'trample', 'deathtouch', 'lifelink', 'flash', 'prowess', 'skulk', 'bushido', 'indestructible', 'battleCry', 'exalted', 'hexproof', 'undying'] as const;
 type CardDefDeath = (typeof CARDS)[string]['onDeath'];
-type Sprinkled = { unearth: number | undefined; ward: number | undefined; kw: string[] | undefined; death: CardDefDeath; enter: CardDefDeath; land: CardDefDeath; attack: CardDefDeath; bonus: (typeof CARDS)[string]['bonus']; cycling: number | undefined; static: (typeof CARDS)[string]['static']; activated: (typeof CARDS)[string]['activated'] };
+type Sprinkled = { ninjutsu: number | undefined; unearth: number | undefined; ward: number | undefined; kw: string[] | undefined; death: CardDefDeath; enter: CardDefDeath; land: CardDefDeath; attack: CardDefDeath; bonus: (typeof CARDS)[string]['bonus']; cycling: number | undefined; static: (typeof CARDS)[string]['static']; activated: (typeof CARDS)[string]['activated'] };
 function sprinkleKeywords(r: () => number): () => void {
   const saved = new Map<string, Sprinkled>();
   const flashed: string[] = [];
   for (const def of Object.values(CARDS)) {
     if (def.type !== 'creature') continue;
-    saved.set(def.id, { kw: def.keywords as string[] | undefined, death: def.onDeath, enter: def.onEnter, land: def.landTrigger, attack: def.onAttack, bonus: def.bonus, cycling: def.cycling, static: def.static, activated: def.activated, ward: def.ward, unearth: def.unearth });
+    saved.set(def.id, { kw: def.keywords as string[] | undefined, death: def.onDeath, enter: def.onEnter, land: def.landTrigger, attack: def.onAttack, bonus: def.bonus, cycling: def.cycling, static: def.static, activated: def.activated, ward: def.ward, unearth: def.unearth, ninjutsu: def.ninjutsu });
     const extra = STRESS_KW.filter(() => r() < 0.25);
     if (extra.length) def.keywords = [...(def.keywords ?? []), ...extra];
     // some creatures raise a token when they die (tokens included, so triggers can chain through them)
@@ -734,6 +829,8 @@ function sprinkleKeywords(r: () => number): () => void {
       if (!cost.tap && (!cost.mana || eff.type === 'mana')) cost.tap = true; // an ability always costs something, or it could be used without limit
       def.activated = { cost, effect: eff };
     }
+    // Phase 4h: Ninjutsu (swap in for an unblocked attacker)
+    if (def.ninjutsu === undefined && r() < 0.15) def.ninjutsu = Math.floor(r() * 3);
     // Phase 4g: Unearth (come back from the graveyard for a turn)
     if (def.unearth === undefined && r() < 0.15) def.unearth = 1 + Math.floor(r() * 3);
     // Phase 4f2: ward (opposing spells that target it cost more)
@@ -789,7 +886,7 @@ function sprinkleKeywords(r: () => number): () => void {
       flashed.push(def.id);
     }
   }
-  return () => { for (const [id, v] of saved) { CARDS[id].keywords = v.kw as never; CARDS[id].onDeath = v.death; CARDS[id].onEnter = v.enter; CARDS[id].landTrigger = v.land; CARDS[id].onAttack = v.attack; CARDS[id].bonus = v.bonus; CARDS[id].cycling = v.cycling; CARDS[id].static = v.static; CARDS[id].activated = v.activated; CARDS[id].ward = v.ward; CARDS[id].unearth = v.unearth; } for (const [id, b] of spellBonus) CARDS[id].bonus = b as never; for (const [id, e] of spellEffect) CARDS[id].effect = e; for (const [id, c] of spellCycling) CARDS[id].cycling = c; for (const [id, o] of spellOpts) { CARDS[id].x = o.x; CARDS[id].kicker = o.kicker; CARDS[id].modes = o.modes; } for (const id of flashed) delete CARDS[id].flashback; };
+  return () => { for (const [id, v] of saved) { CARDS[id].keywords = v.kw as never; CARDS[id].onDeath = v.death; CARDS[id].onEnter = v.enter; CARDS[id].landTrigger = v.land; CARDS[id].onAttack = v.attack; CARDS[id].bonus = v.bonus; CARDS[id].cycling = v.cycling; CARDS[id].static = v.static; CARDS[id].activated = v.activated; CARDS[id].ward = v.ward; CARDS[id].unearth = v.unearth; CARDS[id].ninjutsu = v.ninjutsu; } for (const [id, b] of spellBonus) CARDS[id].bonus = b as never; for (const [id, e] of spellEffect) CARDS[id].effect = e; for (const [id, c] of spellCycling) CARDS[id].cycling = c; for (const [id, o] of spellOpts) { CARDS[id].x = o.x; CARDS[id].kicker = o.kicker; CARDS[id].modes = o.modes; } for (const id of flashed) delete CARDS[id].flashback; };
 }
 
 for (const policyName of ['ai', 'chaos', 'ai+kw', 'chaos+kw'] as const) {

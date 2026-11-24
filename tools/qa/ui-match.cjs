@@ -288,6 +288,14 @@ async function playMatch(browser, A, B, idx) {
           ok = await clickEl(btn(/Cycle/), 'Cycle');
           if (ok) { await sleep(150); ok = await clickEl(cardLoc(action.iid, scopeHand), 'cycle card'); }
           break;
+        case 'ninjutsu': // Ninjutsu: tap the ninja in hand, then the unblocked attacker it replaces
+          bump('ninjutsu'); await page.evaluate((a) => window.__H.setExpect([a]), action);
+          ok = await clickEl(cardLoc(action.ninja, scopeHand), 'ninja');
+          if (ok) { await sleep(150); ok = await clickEl(cardLoc(action.attacker, '.player-zone.me .row.creatures'), 'swapped attacker'); }
+          break;
+        case 'skipNinjutsu':
+          bump('skipNinjutsu'); await page.evaluate((a) => window.__H.setExpect([a]), action);
+          ok = await clickEl(btn(/No ninjutsu/), 'No ninjutsu'); break;
         case 'unearth': { // Unearth: open my graveyard, then the Unearth button on that creature's card (the viewer groups copies, so match any copy of the same card)
           bump('unearth'); await page.evaluate((a) => window.__H.setExpect([a]), action);
           const iids = await page.evaluate((iid) => { const g = window.__game.getState().game.players.A.graveyard; const d = g.find((c) => c.iid === iid)?.def; return g.filter((c) => c.def === d).map((c) => c.iid); }, action.iid);
