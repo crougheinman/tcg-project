@@ -86,10 +86,10 @@ export const DECK_IRONBLOSSOM: string[] = [
   ...repeat('kensei_duelist', 3),
   ...repeat('iron_shogun', 1),
   ...repeat('iaijutsu_strike', 2),
-  ...repeat('warding_stance', 1),
+  ...repeat('ronins_katana', 1),
   ...repeat('shuriken_volley', 1),
   ...repeat('insight', 1),
-  ...repeat('war_drums', 1),
+  ...repeat('clan_banner', 1),
 ]; // 30
 
 export const DECK_GRAVETIDE: string[] = [

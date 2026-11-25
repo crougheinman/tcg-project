@@ -339,6 +339,26 @@ export const CARDS: Record<string, CardDef> = {
     art: '/cards/cinderbolt.webp', // 420x422 WebP; other cards auto-wire to <id>.png
     flavor: 'A handful of the old warmth, spent all at once.',
   },
+  ronins_katana: {
+    id: 'ronins_katana',
+    name: "Ronin's Katana",
+    type: 'equipment',
+    cost: 2,
+    equip: { cost: 2, power: 2, toughness: 0, keywords: ['firstStrike'] },
+    text: 'Equipped creature gets +2/+0 and first strike. Equip {2}.',
+    art: '/cards/ronins_katana.webp', // 420x414 WebP
+    flavor: 'A masterless sword is never quite unfaithful. It only waits to be picked up.',
+  },
+  clan_banner: {
+    id: 'clan_banner',
+    name: 'Clan Banner',
+    type: 'equipment',
+    cost: 2,
+    equip: { cost: 1, power: 1, toughness: 1 },
+    text: 'Equipped creature gets +1/+1. Equip {1}.',
+    art: '/cards/clan_banner.webp', // 420x422 WebP
+    flavor: 'Carry it, and the line remembers whose it is.',
+  },
   war_drums: {
     id: 'war_drums',
     name: 'War Drums',
