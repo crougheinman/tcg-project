@@ -79,7 +79,7 @@ function leavers(before: GameState, a: Action): { bounced: Set<string>; sacrific
 
 function updateTrack(t: Track, before: GameState, a: Action, after: GameState): void {
   if (a.type === 'advance' && before.phase === 'end') { t.died = false; t.spells = { A: 0, B: 0 }; return; }
-  if (a.type === 'castCreature' || a.type === 'castSorcery') t.spells[actorOf(before)] += 1;
+  if (a.type === 'castCreature' || a.type === 'castSorcery' || a.type === 'castEquipment') t.spells[actorOf(before)] += 1; // (an equipment is a spell for the second-spell count)
   const stillThere = new Set(all(after).map((c) => c.iid));
   const lv = leavers(before, a);
   for (const c of creatures(before)) if (!stillThere.has(c.iid) && !lv.bounced.has(c.iid) && !c.unearthed) t.died = true; // (an unearthed creature leaving at the end step is exiled, not dead)
@@ -120,6 +120,7 @@ function auraOf(side: PlayerState, c: CardInstance): { p: number; t: number } {
     if (st.unique) { if (once.has(src.def)) continue; once.add(src.def); }
     p += st.power; t += st.toughness;
   }
+  for (const src of side.battlefield) { const eq = CARDS[src.def].equip; if (eq && src.attachedTo === c.iid) { p += eq.power; t += eq.toughness; } } // (Part 4i: attached equipment)
   return { p, t };
 }
 
@@ -536,7 +537,9 @@ function check(
         R('UNDYING_STAYED_DEAD', `${c.def} left the battlefield without its counter and did not return (after ${a.type})`);
       }
       if (now && c.revived && !c.summoningSick && now.summoningSick) R('UNDYING_TWICE', `${c.def} returned a second time`);
-      if (now?.revived && (!hasKeyword(now, 'undying') || now.buffP < 1)) R('UNDYING_NO_COUNTER', `${now.def} is marked as returned but lacks the +1/+1 counter`);
+      // a creature that died and came back through Undying is a new arrival: the equipment it wore does not come back attached to it
+      if (now?.revived && !c.revived && after.players[now.owner].battlefield.some((e) => e.attachedTo === now.iid)) R('EQUIP_SURVIVED_RETURN', `${now.def} returned through Undying still wearing its equipment`);
+      if (now?.revived && now.buffP < 1) R('UNDYING_NO_COUNTER', `${now.def} is marked as returned but lacks the +1/+1 counter`); // (it may have had Undying only from equipment that has since fallen off)
       // an unearthed creature that leaves must be exiled, never in the graveyard
       if (c.unearthed && !afterBf.has(c.iid) && !lvg.bounced.has(c.iid)) {
         if (after.players[c.owner].graveyard.some((x) => x.iid === c.iid)) R('UNEARTH_TO_GRAVEYARD', `${c.def} was unearthed and ended in the graveyard`);
@@ -587,6 +590,34 @@ function check(
     }
   }
   if (resolving && after.pending) R('NINJUTSU_STILL_PENDING', 'the window was answered but the game still waits');
+
+  // 3i. Part 4i: casting an equipment, and attaching it, re-derived from the rule text
+  if (a.type === 'castEquipment') {
+    const who = before.active;
+    const was = before.players[who].hand.find((c) => c.iid === a.iid);
+    if (!was) R('EQUIP_CAST_ILLEGAL', 'cast an equipment that is not in hand');
+    else {
+      const now = after.players[who].battlefield.find((c) => c.iid === a.iid);
+      if (!now) R('EQUIP_NOT_IN_PLAY', `${was.def} did not enter the battlefield`);
+      else if (now.attachedTo) R('EQUIP_CAST_ATTACHED', `${was.def} entered already attached`);
+      if (spentMana(before, after, who) !== CARDS[was.def].cost) R('EQUIP_CAST_COST', `${was.def}: paid ${spentMana(before, after, who)}, it costs ${CARDS[was.def].cost}`);
+      if ((after.spellsThisTurn?.[who] ?? 0) !== (before.spellsThisTurn?.[who] ?? 0) + 1) R('EQUIP_CAST_COUNT', 'casting an equipment counts as one spell');
+      if (after.players[who].graveyard.some((c) => c.iid === a.iid)) R('EQUIP_IN_GRAVEYARD', `${was.def} went to the graveyard`);
+    }
+  }
+  if (a.type === 'equip') {
+    const who = before.active;
+    const e = before.players[who].battlefield.find((c) => c.iid === a.equipment);
+    const cr = before.players[who].battlefield.find((c) => c.iid === a.creature);
+    if (!e || !cr) R('EQUIP_ILLEGAL', 'equip named an equipment or creature that is not on the actor\'s battlefield');
+    else {
+      if (e.attachedTo === a.creature) R('EQUIP_SAME_CREATURE', `${e.def} was re-attached to the creature it was already on`);
+      const now = after.players[who].battlefield.find((c) => c.iid === a.equipment);
+      if (now?.attachedTo !== a.creature && after.players[who].battlefield.some((c) => c.iid === a.creature)) R('EQUIP_NOT_ATTACHED', `${e.def} is not attached to ${cr.def} after equip`);
+      if (spentMana(before, after, who) !== CARDS[e.def].equip!.cost) R('EQUIP_COST', `${e.def}: paid ${spentMana(before, after, who)}, equip costs ${CARDS[e.def].equip!.cost}`);
+      if ((after.spellsThisTurn?.[who] ?? 0) !== (before.spellsThisTurn?.[who] ?? 0)) R('EQUIP_COUNTED_AS_SPELL', 'equipping is not a cast');
+    }
+  }
 
   // 3d. Part 4e: activated abilities, from the rule text: the cost is paid (tap, mana), the effect resolves, and it is not a cast
   if (a.type === 'activate') {
@@ -720,6 +751,20 @@ function check(
         expT[c.iid] += st.toughness;
       }
     }
+    // Part 4i: attached equipment adds its bonus and keywords to its creature, and an equipment never stays attached to a creature that is not there
+    const expKw: Record<string, string[]> = {};
+    for (const e of side.battlefield) {
+      const eq = CARDS[e.def].equip;
+      if (!eq) continue;
+      if (e.attachedTo && !crea.some((c) => c.iid === e.attachedTo)) { R('EQUIP_DANGLING', `${e.def} is attached to ${e.attachedTo}, which is not one of ${pid}'s creatures`); continue; }
+      if (!e.attachedTo) continue;
+      expP[e.attachedTo] += eq.power;
+      expT[e.attachedTo] += eq.toughness;
+      for (const k of eq.keywords ?? []) { const have = (expKw[e.attachedTo] ??= []); if (!have.includes(k)) have.push(k); }
+    }
+    for (const c of crea) {
+      if ((c.grantedKw ?? []).slice().sort().join() !== (expKw[c.iid] ?? []).slice().sort().join()) R('EQUIP_KEYWORDS_WRONG', `${c.def} grants ${(c.grantedKw ?? []).join('+')} but its equipment says ${(expKw[c.iid] ?? []).join('+')}`);
+    }
     for (const c of crea) {
       if ((c.auraP ?? 0) !== expP[c.iid] || (c.auraT ?? 0) !== expT[c.iid]) R('AURA_WRONG', `${c.def} has aura ${c.auraP ?? 0}/${c.auraT ?? 0}, the battlefield says ${expP[c.iid]}/${expT[c.iid]} (graveyard ${side.graveyard.length})`);
     }
@@ -793,6 +838,17 @@ const t0 = Date.now();
 // over the decks' creatures, so every keyword combination meets every situation (not just the few
 // the shipped cards happen to carry). Keywords are restored after each game.
 function caster0(st: GameState): PlayerId { return st.phase === 'combat_block' ? opponentOf(st.active) : st.active; }
+// Part 4i: throwaway equipment, swapped into the decks of the stress games only (the shipped decks hold none yet)
+const STRESS_EQUIPMENT: string[] = [];
+for (const [id, cost, equip] of [
+  ['eq_stress_blade', 1, { cost: 1, power: 2, toughness: 0 }],
+  ['eq_stress_plate', 2, { cost: 2, power: 0, toughness: 3, keywords: ['vigilance'] }],
+  ['eq_stress_fang', 2, { cost: 1, power: 1, toughness: 1, keywords: ['firstStrike', 'lifelink'] }],
+  ['eq_stress_cloak', 1, { cost: 2, power: 0, toughness: 0, keywords: ['hexproof', 'undying'] }],
+] as const) {
+  CARDS[id] = { id, name: id, type: 'equipment', cost, equip: { ...equip, keywords: ('keywords' in equip ? [...equip.keywords] : undefined) as never } } as CardDef;
+  STRESS_EQUIPMENT.push(id);
+}
 const STRESS_KW = ['reach', 'vigilance', 'firstStrike', 'doubleStrike', 'trample', 'deathtouch', 'lifelink', 'flash', 'prowess', 'skulk', 'bushido', 'indestructible', 'battleCry', 'exalted', 'hexproof', 'undying'] as const;
 type CardDefDeath = (typeof CARDS)[string]['onDeath'];
 type Sprinkled = { ninjutsu: number | undefined; unearth: number | undefined; ward: number | undefined; kw: string[] | undefined; death: CardDefDeath; enter: CardDefDeath; land: CardDefDeath; attack: CardDefDeath; bonus: (typeof CARDS)[string]['bonus']; cycling: number | undefined; static: (typeof CARDS)[string]['static']; activated: (typeof CARDS)[string]['activated'] };
@@ -900,7 +956,9 @@ for (const policyName of ['ai', 'chaos', 'ai+kw', 'chaos+kw'] as const) {
       for (let seed = 1; seed <= SEEDS; seed++) {
         const gseed = seed * 7919 + (policy === 'chaos' ? 17 : 3);
         const r = rng(gseed ^ 0x9e3779b9);
-        let g = createInitialState(gseed, A.cards, B.cards, { mulligan: seed % 2 === 0 }); // half the games open with the keep-or-mulligan decision
+        // stress games swap about one card in ten for a throwaway equipment, so every policy meets equipment in every situation
+        const withGear = (cards: string[]) => (stress ? cards.map((id) => (CARDS[id].type !== 'land' && r() < 0.12 ? STRESS_EQUIPMENT[Math.floor(r() * STRESS_EQUIPMENT.length)] : id)) : cards);
+        let g = createInitialState(gseed, withGear(A.cards), withGear(B.cards), { mulligan: seed % 2 === 0 }); // half the games open with the keep-or-mulligan decision
         const sizes = { A: A.cards.length, B: B.cards.length } as Record<PlayerId, number>;
         const ctx = { pair: `${A.id} v ${B.id}`, policy: policyName, seed: gseed, step: 0, track: newTrack() };
         const restore = stress ? sprinkleKeywords(rng(gseed ^ 0x51ed270b)) : () => {};

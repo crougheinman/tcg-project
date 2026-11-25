@@ -280,13 +280,18 @@ async function playMatch(browser, A, B, idx) {
       };
 
       switch (action.type) {
-        case 'playLand': case 'castCreature':
+        case 'playLand': case 'castCreature': case 'castEquipment':
           bump(action.type); await page.evaluate((a) => window.__H.setExpect([a]), action);
           ok = await clickEl(cardLoc(action.iid, scopeHand), action.type); break;
         case 'cycle': // Cycling: tap the Cycle button, then the card (a two-step gesture, like casting a targeted spell)
           bump('cycle'); await page.evaluate((a) => window.__H.setExpect([a]), action);
           ok = await clickEl(btn(/Cycle/), 'Cycle');
           if (ok) { await sleep(150); ok = await clickEl(cardLoc(action.iid, scopeHand), 'cycle card'); }
+          break;
+        case 'equip': // Equip: tap the equipment in my creature row, then the creature it goes on
+          bump('equip'); await page.evaluate((a) => window.__H.setExpect([a]), action);
+          ok = await clickEl(cardLoc(action.equipment, '.player-zone.me .row.creatures'), 'equipment');
+          if (ok) { await sleep(150); ok = await clickEl(cardLoc(action.creature, '.player-zone.me .row.creatures'), 'equip target'); }
           break;
         case 'ninjutsu': // Ninjutsu: tap the ninja in hand, then the unblocked attacker it replaces
           bump('ninjutsu'); await page.evaluate((a) => window.__H.setExpect([a]), action);
