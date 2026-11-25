@@ -643,6 +643,11 @@ Everything else in Phase 4 hung on seams that already existed; Ninjutsu needed a
 protocol is untouched. The costs of that choice are the places that assumed "actor in combat_block means blocker": the Board's `inBlock` and block tally now exclude a pending window, and the oracle (which assumed `declareBlockers` resolves combat) now reads a combat in two halves through a `combatView`. The one engine subtlety is ordering: statics are recomputed after the swap and BEFORE damage, because combat damage is dealt inside the action and
 the usual end-of-action `settle` would be too late (a ninja would hit without the bonuses it should have; the oracle found it as a life mismatch). The attacker's replacement is a bounce on purpose, reusing the semantics (no death, no trigger, buffs gone) rather than inventing a fourth way to leave play.
 
+### (u) Equipment: a permanent that is neither land nor creature (Phase 4i)
+The engine's battlefield was lands + creatures, and a lot of code quietly depended on that, so the useful design question was where equipment could hide. The answer was the statics seam: an attached equipment is one more term in `staticBonus`, and what it grants is `grantedKw` consulted by `hasKeyword`. Nothing in combat, the AI's `duel` or the block planner needed to learn about equipment, because they already
+read `power`, `toughness` and `hasKeyword`. What DID need care is attachment lifetime: the equipment persists when its creature leaves, and the creature's iid can come back (Undying), so detaching has to happen at the moment of leaving play, in every exit (death, bounce, ninjutsu swap, unearth exile), with the statics recompute only a safety net. That detail was invisible to the unit tests until the oracle was given a rule for it (a creature returned through Undying must not
+still wear its equipment). On the UI side the first layout (a new row) was hidden under the player platform, which only showed up by looking at it in a browser; equipment now shares the creature row. No printed card yet by design: the mechanic is data and tested, the cards wait for art.
+
 ## 8. Run it
 
 ```bash

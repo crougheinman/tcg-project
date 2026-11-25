@@ -221,6 +221,20 @@ Lore: the Wild's hunters never raise a hand against a rival; they choose where t
 
 > A lean Wild Blitz hunter in leather and feathers crouched on a mossy rock, one arm extended in a calm pointing gesture across the frame. Beside and behind her a huge scarred bear-beast, twice her height, is already lunging in the direction of her finger, jaws open, fur blown back by the speed. At the end of the line, an armoured rival warrior stares up with his shield half raised, too late. Torn leaves, flying bark chips, a low dawn sun through the trees. Palette: forest green, bark brown, bone white, warm dawn orange, a flash of steel grey on the rival.
 
+### Waiting for art: equipment (Phase 4i)
+
+Equipment is in the engine, tested and stress-fuzzed, but no card prints it yet. Cast cost, equip cost and the bonus are for the sim to settle once the art exists (a +1/+1 banner and a +2/+0 first-strike katana both balanced; a +0/+3 plate did not).
+
+**Ronin's Katana** (equipment, "Equipped creature gets +2/+0 and first strike. Equip {2}."; "A masterless sword is never quite unfaithful. It only waits to be picked up.")
+Lore: Juro's old blade, left standing in the earth at the Kettle; whoever draws it inherits the first cut, but not the reasons for it.
+
+> A long Clan blade, katana-style, planted upright in cracked battlefield earth at dusk, its hilt wrapped in frayed indigo cord and a torn strip of crimson banner. Cherry-blossom petals drift across a faint silver edge, a thin line of cold light running the length of the steel. In the blurred background, the broken line of a charge and a smoke-dark sky. Palette: dark iron, indigo, crimson, cold silver, cherry-blossom pink.
+
+**Clan Banner** (equipment, "Equipped creature gets +1/+1. Equip {1}."; "Carry it, and the line remembers whose it is.")
+Lore: the Clans do not march without a banner, and a footman who carries one is never short of company.
+
+> A tall Clan war banner on a lacquered pole with a spear-point finial, its crimson silk bearing a white mon crest, snapping in the wind over a stone terrace. Rows of out-of-focus ashigaru spears stand behind it. Warm low sun, drifting blossom petals, a hand in a leather gauntlet gripping the pole at the bottom of the frame. Palette: crimson, white, dark iron, indigo, warm gold light.
+
 ## Prompts: Land
 
 **Aether Well** (land, tap for one mana; "It hums with borrowed light.")

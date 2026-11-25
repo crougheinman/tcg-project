@@ -208,7 +208,7 @@ visible keywords first and the two engine keystones (statics, activated abilitie
 | 4f | **Choices I**: Scry, Loot, Fight / bite, Hexproof | M | **done** (see below) |
 | 4f2 | **Choices II**: Modal ("choose one"), X spells, Kicker, Ward (extra fields on the cast action and a UI to fill them; Buyback not done) | M | **done** (see below) |
 | 4g | **Graveyard**: Undying, Unearth | M | **done** (see below) |
-| 4h | **Showpiece**: Ninjutsu for Kunoichi / Hana (a short window between blocks and damage), later Equipment | L | **Ninjutsu done** (see below); Equipment not done |
+| 4h | **Showpiece**: Ninjutsu for Kunoichi / Hana (a short window between blocks and damage), later Equipment | L | **done**: Ninjutsu (4h), Equipment (4i) |
 
 Still out of scope: the stack and counterspells, steal effects (controller is tied to owner), hidden-information mechanics, coloured mana.
 
@@ -358,3 +358,17 @@ The AI (`pickNinjutsu`) swaps when `(ninja power - attacker power) * 10 + the ni
 Tested (`ninjutsu.test.ts`, 9 tests, 11 rules mutation-checked); the fuzz oracle was taught that combat can be split: it re-derives the window (`NINJUTSU_WINDOW_MISSING` / `_SPURIOUS`), checks nothing is dealt before the answer, and resolves the damage expectations from a "combat view" of the pause state (Bushido taken back, the swap applied, auras recomputed from card data); eight rule breaks each detected.
 
 Cards (all decks 45.0%-54.2% at N=120, 45.5%-55.4% at N=80): **Kunoichi** Ninjutsu {1} and **Kensei Duelist** Ninjutsu {2}. The window opens in about 8% of AI-vs-AI games and the AI uses it in about two thirds of those, so the effect on balance is small. Not done: Equipment (the battlefield only holds creatures and lands, so it would need a new permanent type and an attach rule).
+
+### Part 4i: Equipment done (no printed card yet)
+
+A third kind of permanent. `CardType` gained `'equipment'`; `CardDef.equip: { cost, power, toughness, keywords? }`; `CardInstance.attachedTo` (the creature's iid) and `grantedKw` (keywords granted by equipment). Two actions: `castEquipment` (from hand onto the battlefield, unattached; it counts as a spell for the per-turn counters but is not a creature: no summoning
+sickness, no enter effect, never in the graveyard) and `equip { equipment, creature }` (main phase: pay the equip cost, attach to one of YOUR creatures; moving it to another creature pays again; it cannot be re-attached to the creature it is already on). The bonus is NOT bookkeeping: it is one more term in `staticBonus` (so it lands in `auraP` / `auraT` with Lords and Beast Blitz, rebuilt from scratch after
+every action) and granted keywords are `grantedKw`, read by `hasKeyword`, so first strike, lifelink and the rest work in combat with no special case. Two equipment on one creature stack. When a creature leaves play (dies, bounced, ninjutsu swapped out, unearth exile) `detachFrom` unattaches its equipment at once, and `recomputeStatics`
+clears any attachment to a creature that is not there as a safety net. A creature that dies and returns through Undying is a new arrival and does NOT get its equipment back (same iid, so this needed the explicit detach); a keyword granted by equipment counts as last known information when the creature dies (an Undying equipment works).
+The AI casts equipment after its creatures and attaches an unattached one to its hardest-hitting creature (it never shuffles an attached one: each move costs mana). The Board draws equipment as small cards at the end of the creature row (a separate row fell under the player platform), tapping one of yours starts an equip (a prompt, the creatures that can take it glow), a creature wearing equipment gets an
+"equipment" tag, and the equipment says who it is on.
+
+Tested (`equipment.test.ts`, 15 tests, thirteen rules mutation-checked); the fuzz oracle re-derives the bonus and keywords of every creature from the equipment attached to it (`AURA_WRONG`, `EQUIP_KEYWORDS_WRONG`), forbids an attachment to a creature that is not there (`EQUIP_DANGLING`) or to a creature that returned through Undying (`EQUIP_SURVIVED_RETURN`), checks the cost of casting and equipping (`EQUIP_*`),
+and the stress games swap about one card in ten for one of four throwaway equipment (including ones granting hexproof + undying and first strike + lifelink); eight rule breaks each detected. Two oracle imprecisions found on the way: an equipment cast counts toward the second-spell tracker, and a creature that returned through Undying may have had Undying only from equipment that has since fallen off.
+No card is printed: an equipment needs art (`card-art.md` has prompts for **Ronin's Katana** and **Clan Banner**), and the Board shows it with the art fallback until then. A balance trial (two copies swapped for a cheap creature in every deck, N=60; the AI casts about 4,400 equipment per run and attaches them) moved decks by a few points either way: a +1/+1 banner (cast 2, equip 1) kept every deck between 43.6% and 56.7%,
+a +2/+0 first-strike katana (equip 2) between 46.4% and 54.8%, a +0/+3 plate (equip 2) pushed Wildwood and Stonewall to about 62% and Pyromancer to 42%: so the plate is the one to avoid. Not done: equipment destruction, "Reconfigure", and any card that fetches or cares about equipment.
