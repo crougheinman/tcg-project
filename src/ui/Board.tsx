@@ -4,7 +4,7 @@ import { DEATH_CRACK_MS, DEATH_DUST_MS } from './fxTiming';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
 import { getDef } from '../cards/cards';
-import { activateError, actorOf, availableMana, canAttack, canBlock, canTargetCreature, castCost, ninjutsuOptions, spellEffect, hasKeyword, isCreature, isLand } from '../engine/rules';
+import { activateError, actorOf, availableMana, canAttack, canBlock, canTargetCreature, castCost, equipOptions, isEquipment, ninjutsuOptions, spellEffect, hasKeyword, isCreature, isLand } from '../engine/rules';
 import type { Action, CardInstance, GameState, PlayerId, Target } from '../engine/types';
 import { needsTarget, opponentOf } from '../engine/types';
 import { CardView } from './CardView';
@@ -81,6 +81,7 @@ export function Board() {
   const [sorceryOpts, setSorceryOpts] = useState<CastOpts>({}); // the mode / kicker / X chosen for the spell awaiting its target
   const [castOptsIid, setCastOptsIid] = useState<string | null>(null); // a modal / kicker / X spell choosing its options
   const [cycleMode, setCycleMode] = useState(false); // choosing a card to cycle (Cycling)
+  const [equipIid, setEquipIid] = useState<string | null>(null); // an equipment of mine picked, waiting for the creature to put it on
   const [ninjaIid, setNinjaIid] = useState<string | null>(null); // Ninjutsu window: the ninja picked from my hand, waiting for an unblocked attacker
   const [abilityMode, setAbilityMode] = useState(false); // choosing one of my creatures to use its activated ability
   const [attackers, setAttackers] = useState<Set<string>>(new Set());
@@ -217,6 +218,7 @@ export function Board() {
     const def = getDef(inst.def);
     if (def.type === 'land') dispatch({ type: 'playLand', iid: inst.iid });
     else if (def.type === 'creature') dispatch({ type: 'castCreature', iid: inst.iid });
+    else if (def.type === 'equipment') dispatch({ type: 'castEquipment', iid: inst.iid });
     // sorceries need a target — keep using click/targeting for those
   }
 
@@ -509,6 +511,7 @@ export function Board() {
     // and to the defender during combat_block).
     const sorcerySpeed = game.phase === 'main1';
     if (def.type === 'land') return sorcerySpeed && !me.landPlayedThisTurn;
+    if (def.type === 'equipment') return sorcerySpeed && def.cost <= mana;
     // a flash creature may also be cast in the attack step and as a surprise blocker
     if (def.type === 'creature') return (sorcerySpeed || (hasKeyword(c, 'flash') && game.phase !== 'end')) && def.cost <= mana;
     if (def.type === 'sorcery' || def.type === 'instant') {
@@ -541,6 +544,14 @@ export function Board() {
     return myTurnToAct && !game.pending && !game.winner && isCreature(c) && !!getDef(c.def).activated && !activateError(game, me, c);
   }
   const anyActivatable = me.battlefield.some(canActivate);
+
+  // Equipment: one of MY equipment in play that I can pay to attach now; tap it, then the creature to put it on
+  const equipOpts = myTurnToAct && !game.pending && !game.winner && game.phase === 'main1' ? equipOptions(game, localId) : [];
+  const canEquip = (c: CardInstance) => equipOpts.some((o) => o.equipment === c.iid);
+  const equipPossible = !!equipIid && equipOpts.some((o) => o.equipment === equipIid);
+  useEffect(() => {
+    if (equipIid && !equipPossible) setEquipIid(null); // the pick stopped being possible (phase moved on, mana spent, equipment gone)
+  }, [equipIid, equipPossible]);
 
   // Unearth: a creature in my graveyard, in my own main phase, whose unearth cost I can pay
   function canUnearth(c: CardInstance): boolean {
@@ -595,6 +606,7 @@ export function Board() {
     const def = getDef(c.def);
     if (def.type === 'land') dispatch({ type: 'playLand', iid: c.iid });
     else if (def.type === 'creature') dispatch({ type: 'castCreature', iid: c.iid });
+    else if (def.type === 'equipment') dispatch({ type: 'castEquipment', iid: c.iid });
     else if (def.type === 'sorcery' || def.type === 'instant') {
       if (def.x || def.kicker || def.modes) setCastOptsIid(c.iid); // choose the options first
       else startCast(c.iid, {});
@@ -623,6 +635,20 @@ export function Board() {
     setSorceryIid(null);
   }
 
+  // the equipment attached to creature `c` on `pid`'s side (for the tag on the creature)
+  function equipmentOn(pid: PlayerId, c: CardInstance): CardInstance[] {
+    return game.players[pid].battlefield.filter((e) => isEquipment(e) && e.attachedTo === c.iid);
+  }
+  // tapping one of my equipment in play starts an equip: pick the creature next
+  function equipClick(e: CardInstance) {
+    if (cardsLocked) return;
+    if (!canEquip(e)) {
+      setAnnounce({ id: announceId.current++, text: '⚠ Equip needs your main phase, the mana, and a creature to put it on', ms: 2200 });
+      return;
+    }
+    setEquipIid((cur) => (cur === e.iid ? null : e.iid));
+  }
+
   function creatureClick(c: CardInstance, side: PlayerId) {
     if (cardsLocked) return; // the Attack phase banner is still playing
     // An Edict is waiting on ME: only my own creatures can be sacrificed
@@ -643,6 +669,12 @@ export function Board() {
     if (game.pending?.kind === 'enter' && myTurnToAct) {
       if (c.iid !== game.pending.source && canTargetCreature(localId, c, side)) dispatch({ type: 'resolveTrigger', target: c.iid });
       else if (c.iid !== game.pending.source) setAnnounce({ id: announceId.current++, text: '⚠ That creature has hexproof', ms: 2000 });
+      return;
+    }
+    // Equip mode: the equipment picked from my battlefield goes on this creature of mine
+    if (equipIid) {
+      if (side === localId && equipOpts.some((o) => o.equipment === equipIid && o.creature === c.iid)) act({ type: 'equip', equipment: equipIid, creature: c.iid });
+      setEquipIid(null);
       return;
     }
     // Ability mode: the next creature of mine that can use its ability does; either way the mode ends
@@ -750,6 +782,7 @@ export function Board() {
     const p = game.players[pid];
     const lands = p.battlefield.filter(isLand);
     const creatures = p.battlefield.filter(isCreature);
+    const gear = p.battlefield.filter(isEquipment);
     const blockerOf = (atkIid: string) =>
       Object.entries(blocks).find(([, a]) => a === atkIid)?.[0];
     return (
@@ -791,6 +824,7 @@ export function Board() {
                     (game.pending?.kind === 'enter' && c.iid !== game.pending.source && canTargetCreature(localId, c, side)) ||
                     (game.pending?.kind === 'sacrifice' && myTurnToAct && side === localId) ||
                     (abilityMode && side === localId && canActivate(c)) ||
+                    (!!equipIid && side === localId && equipOpts.some((o) => o.equipment === equipIid && o.creature === c.iid)) ||
                     (ninjaPick && !!ninjaIid && side === localId && ninjaOpts.some((o) => o.ninja === ninjaIid && o.attacker === c.iid))
                   }
                   // With a blocker waiting for its target, dim the attackers it cannot legally
@@ -806,6 +840,7 @@ export function Board() {
                     <i />
                   </span>
                 )}
+                {equipmentOn(side, c).length > 0 && <span className="equip-tag">⚔ {equipmentOn(side, c).map((e) => getDef(e.def).name).join(' · ')}</span>}
                 {c.unearthed && <span className="haste-tag">Unearthed</span>}
                 {hasteIids.has(c.iid) && !c.unearthed && !attackingIids.has(c.iid) && <span className="haste-tag">Can Attack</span>}
                 {attackingIids.has(c.iid) && <span className="combat-tag atk">ATK</span>}
@@ -864,7 +899,22 @@ export function Board() {
               </motion.div>
             ))}
           </AnimatePresence>
-          {creatures.length === 0 && <span className="empty">no creatures</span>}
+          {gear.map((e) => {
+            const holder = e.attachedTo ? creatures.find((c) => c.iid === e.attachedTo) : undefined;
+            const mineE = side === localId;
+            return (
+              <div key={e.iid} className="equip-item">
+                <CardView
+                  inst={e}
+                  onClick={mineE ? () => equipClick(e) : undefined}
+                  greenGlow={mineE && (canEquip(e) || equipIid === e.iid)}
+                  targetable={false}
+                />
+                <span className="equip-tag on">{holder ? `on ${getDef(holder.def).name}` : 'unattached'}</span>
+              </div>
+            );
+          })}
+          {creatures.length === 0 && gear.length === 0 && <span className="empty">no creatures</span>}
         </div>
         <div className="row lands">
           <AnimatePresence>
@@ -969,6 +1019,14 @@ export function Board() {
         <div className="actions">
           <span className="prompt">⟳ Choose a card to cycle…</span>
           <button onClick={() => setCycleMode(false)}>Cancel</button>
+        </div>
+      );
+    }
+    if (equipIid) {
+      return (
+        <div className="actions">
+          <span className="prompt">⚔ Choose a creature to equip…</span>
+          <button onClick={() => setEquipIid(null)}>Cancel</button>
         </div>
       );
     }

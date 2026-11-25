@@ -31,7 +31,7 @@ const TYPE_FILTERS: { key: Filter; label: string }[] = [
   { key: 'instant', label: 'Instants' },
   { key: 'land', label: 'Lands' },
 ];
-const TYPE_ORDER: Record<CardType, number> = { creature: 0, sorcery: 1, instant: 2, land: 3 };
+const TYPE_ORDER: Record<CardType, number> = { creature: 0, equipment: 1, sorcery: 2, instant: 3, land: 4 };
 
 const byBinderOrder = (a: CardDef, b: CardDef) =>
   TYPE_ORDER[a.type] - TYPE_ORDER[b.type] || a.cost - b.cost || a.name.localeCompare(b.name);

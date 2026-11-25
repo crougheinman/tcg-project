@@ -22,7 +22,7 @@ const TYPE_FILTERS: { key: Filter; label: string }[] = [
 ];
 
 // Group by type, then curve, then name — reads like a well-ordered binder.
-const TYPE_ORDER: Record<CardType, number> = { creature: 0, sorcery: 1, instant: 2, land: 3 };
+const TYPE_ORDER: Record<CardType, number> = { creature: 0, equipment: 1, sorcery: 2, instant: 3, land: 4 };
 
 export function CardGallery({ onBack }: { onBack: () => void }) {
   const [q, setQ] = useState('');

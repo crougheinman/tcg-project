@@ -2411,6 +2411,19 @@ button.count-chip:hover:not(:disabled) { color: var(--vs-ink); background: var(-
 .scry-bottom { background: var(--vs-yellow, #ffd24a); box-shadow: 0 0 14px rgba(255, 210, 74, 0.45); }
 .scry-bottom:hover { background: #ffe58a; }
 
+/* Equipment: small cards at the end of the creature row, and a tag on the creature that wears it */
+.row.creatures .equip-item { align-self: flex-end; margin: 0 6px 12px; }
+.row.creatures .equip-item .card { --card-w: 68px; --card-h: 94px; }
+.equip-item { position: relative; flex: 0 0 auto; }
+.equip-tag {
+  position: absolute; left: 50%; bottom: -12px; z-index: 6; pointer-events: none; white-space: nowrap; max-width: 150%; overflow: hidden; text-overflow: ellipsis;
+  transform: translateX(-50%) skewX(-12deg); padding: 2px 9px;
+  font: 700 12px / 1.1 'Barlow Condensed', system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #0a0c13; background: var(--me, #22d3ee); border: 2px solid #0a0c13; box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.55);
+}
+.equip-tag.on { background: #9fb4c8; }
+.stack .equip-tag { bottom: auto; top: auto; bottom: 22px; }
+
 /* Cast options (modal / kicker / X) */
 .cast-opts { display: flex; flex-direction: column; gap: 12px; padding: 16px 18px 20px; }
 .cast-group { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
