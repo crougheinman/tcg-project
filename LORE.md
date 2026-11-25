@@ -284,8 +284,11 @@ not leave a thing half-done to be finished later at interest.
 **In play.** No Clan fights beside a Dread Maw, a drake or a wolf. Four Ashigaru, four Ronin
 Blades, three Kensei Duelists and a single Iron Shogun, nearly all with *haste* — the Clans do not
 hold troops in reserve, because a reserve is a debt to tomorrow. Their instants are the creed in
-miniature: Iaijutsu Strike and Warding Stance resolve a fight in the instant it happens rather
-than the turn after.
+miniature: Iaijutsu Strike resolves a fight in the instant it happens rather than the turn after.
+Two pieces of Clan gear ride with the troops: **Ronin's Katana** — Juro's old blade, left standing in
+the earth at the Kettle, which lends the first cut to whoever picks it up but not the reasons for it
+(*+2/+0 and first strike, Equip {2}*) — and the **Clan Banner**, which a Clan does not march without,
+and which makes any footman who carries it a little less alone (*+1/+1, Equip {1}*).
 
 The roster is closed but for exactly one card. Of everything the Clans field, only **Insight** —
 *draw two cards* — is shared with the outside world, and they share it with the three traditions
@@ -413,6 +416,6 @@ The lore is written to be **harvested, not obeyed**:
 - **New cards.** Each tradition has explicit room: Skyward's ninety-year ledger, Stonewall's
   refusal to heal with Well-light, the Wildwood's unfinished answer, whatever the Pyre is actually
   doing to the record.
-- **Late spells.** Windrush (Skyward), War Drums (Iron Blossom) and Grave Toll (Grave Tide) are in the game now; their scenes and lore lines are in `card-art.md`.
+- **Late spells.** Windrush (Skyward), War Drums (Iron Blossom) and Grave Toll (Grave Tide) are in the game now; their scenes and lore lines are in `card-art.md`. (War Drums and Warding Stance are in the Codex and the deck builder but no longer in the built-in Iron Blossom deck, which now carries the two pieces of Clan gear instead.)
 - **Balance is unaffected.** Nothing here asks for a rules change. Where the fiction and the rules
   disagree, the rules are canon and the fiction is wrong.

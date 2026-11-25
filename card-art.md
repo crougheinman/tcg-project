@@ -51,7 +51,7 @@ painterly textured background. One clear subject, a readable silhouette, an expr
 Kunoichi, Swift Lancer, Pyre Adept, Grave Necromancer, Insight, Ember Sprite, Stoneback Cub, Sky Talon, Thornwood
 Brute, Granite Sentinel, Storm Drake, Dread Maw, Soothe, Pyroblast, Ancient Treant, Call Wolves, Overgrowth, Bulwark,
 Zombie token, Shambling Ghoul, Plague Priest, Rotting Hulk, Carrion Colossus, Raise Horde, Wolf token, Ronin Blade,
-Kensei Duelist, Iron Shogun, Iaijutsu Strike, Warding Stance, Scorch, Ashigaru, Cinderbolt, Shuriken Volley, Topple, Take Counter, Grasp from the Grave, Soul Siphon, Wild Growth, Aether Well, Withering Touch.
+Kensei Duelist, Iron Shogun, Iaijutsu Strike, Warding Stance, Scorch, Ashigaru, Cinderbolt, Shuriken Volley, Topple, Take Counter, Grasp from the Grave, Soul Siphon, Wild Growth, Aether Well, Withering Touch, Ronin's Katana, Clan Banner.
 
 ## To do (still on the original art)
 
@@ -221,9 +221,9 @@ Lore: the Wild's hunters never raise a hand against a rival; they choose where t
 
 > A lean Wild Blitz hunter in leather and feathers crouched on a mossy rock, one arm extended in a calm pointing gesture across the frame. Beside and behind her a huge scarred bear-beast, twice her height, is already lunging in the direction of her finger, jaws open, fur blown back by the speed. At the end of the line, an armoured rival warrior stares up with his shield half raised, too late. Torn leaves, flying bark chips, a low dawn sun through the trees. Palette: forest green, bark brown, bone white, warm dawn orange, a flash of steel grey on the rival.
 
-### Waiting for art: equipment (Phase 4i)
+### Equipment (Phase 4i): art delivered, now real cards
 
-Equipment is in the engine, tested and stress-fuzzed, but no card prints it yet. Cast cost, equip cost and the bonus are for the sim to settle once the art exists (a +1/+1 banner and a +2/+0 first-strike katana both balanced; a +0/+3 plate did not).
+Both pieces of art arrived (420px WebP, `ronins_katana.webp` 19 KB and `clan_banner.webp` 27 KB) and both are Iron Blossom cards, one copy each in place of Warding Stance and War Drums (the sim kept the deck at 53.9% at N=120; swapping a footman or a land for them dropped it to 45-48%). The prompts below produced them. A +0/+3 plate did not balance and has no art.
 
 **Ronin's Katana** (equipment, "Equipped creature gets +2/+0 and first strike. Equip {2}."; "A masterless sword is never quite unfaithful. It only waits to be picked up.")
 Lore: Juro's old blade, left standing in the earth at the Kettle; whoever draws it inherits the first cut, but not the reasons for it.
