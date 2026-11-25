@@ -79,6 +79,8 @@ const BAND = {
   bounce: 74, // tempo removal on their best creature
   manaAbility: 72, // a mana creature, when its mana lets us cast something we otherwise could not
   creature: 70, // biggest body we can afford
+  equipment: 66, // an equipment, once the creatures are out
+  equip: 63, // attach an unattached equipment to our strongest creature
   rally: 62, // a team pump, worth it when two or more creatures can attack
   token: 60,
   ramp: 58,
@@ -133,6 +135,18 @@ function scoreAction(state: GameState, ai: PlayerId, a: Action): number {
     }
     case 'activate':
       return scoreActivate(state, ai, a.iid);
+    case 'castEquipment': {
+      const card = state.players[ai].hand.find((c) => c.iid === a.iid);
+      return card ? score(BAND.equipment, getDef(card.def).cost * 10) : score(BAND.never);
+    }
+    case 'equip': {
+      // only an unattached equipment goes on (moving one is not worth the mana), and it goes on the creature that hits hardest
+      const me = state.players[ai];
+      const e = me.battlefield.find((c) => c.iid === a.equipment);
+      const c = me.battlefield.find((x) => x.iid === a.creature);
+      if (!e || !c || e.attachedTo) return score(BAND.never);
+      return score(BAND.equip, power(c) * 10 + (canAttack(c) ? 5 : 0));
+    }
     case 'unearth': {
       // worth the mana for a body that hits hard; it is gone at the end of the turn, so a weak one is not
       const card = state.players[ai].graveyard.find((c) => c.iid === a.iid);
@@ -164,7 +178,7 @@ function scoreActivate(state: GameState, ai: PlayerId, iid: string): number {
     }, 0);
     const wanted = me.hand.some((h) => {
       const d = getDef(h.def);
-      return (d.type === 'creature' || d.type === 'sorcery' || d.type === 'instant') && d.cost > have && d.cost <= have + extra;
+      return (d.type === 'creature' || d.type === 'equipment' || d.type === 'sorcery' || d.type === 'instant') && d.cost > have && d.cost <= have + extra;
     });
     return wanted ? score(BAND.manaAbility) : score(BAND.never);
   }

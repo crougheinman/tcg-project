@@ -231,6 +231,26 @@ export function applyAction(state: GameState, action: Action): GameState {
       resolveCombat(s);
       break;
     }
+    case 'castEquipment': {
+      // An equipment enters the battlefield unattached. It counts as a spell for the per-turn counters, but it is not a creature (no summoning sickness, no enter effect).
+      const c = takeFromHand(active, action.iid);
+      const d = getDef(c.def);
+      payMana(active, d.cost);
+      c.tapped = false;
+      c.attachedTo = undefined;
+      active.battlefield.push(c);
+      s.log.push(`${s.active} casts ${d.name}`);
+      countSpell(s, s.active);
+      break;
+    }
+    case 'equip': {
+      const e = active.battlefield.find((x) => x.iid === action.equipment)!;
+      payMana(active, getDef(e.def).equip!.cost);
+      e.attachedTo = action.creature;
+      const target = active.battlefield.find((x) => x.iid === action.creature)!;
+      s.log.push(`✦ ${getDef(e.def).name} — equipped to ${getDef(target.def).name}`);
+      break;
+    }
     case 'skipNinjutsu': {
       s.pending = null;
       resolveCombat(s);
@@ -244,6 +264,7 @@ export function applyAction(state: GameState, action: Action): GameState {
       const atk = active.battlefield.find((c) => c.iid === action.attacker)!;
       active.battlefield = active.battlefield.filter((c) => c.iid !== atk.iid);
       atk.tapped = false; atk.damage = 0; atk.buffP = 0; atk.buffT = 0; atk.tempP = 0; atk.tempT = 0; atk.auraP = 0; atk.auraT = 0; atk.blitz = false; atk.revived = false; atk.unearthed = false; atk.summoningSick = true;
+      detachFrom(s, atk);
       if (!isToken(atk.def)) s.players[atk.owner].hand.push(atk); // a token just ceases to exist
       ninja.tapped = true;
       ninja.damage = 0;
@@ -315,17 +336,32 @@ export function applyAction(state: GameState, action: Action): GameState {
  * Static abilities (Beast Blitz, Lords, Threshold): every creature's bonus is rebuilt from scratch from what is on the battlefield now
  * (`staticBonus`), so it is idempotent and stacks without bookkeeping. Returns whether anything changed.
  */
+/** A creature is leaving play (or coming back as a new arrival): equipment attached to it is unattached, and it loses what the equipment granted. */
+function detachFrom(s: GameState, c: CardInstance): void {
+  for (const pid of ['A', 'B'] as PlayerId[]) for (const e of s.players[pid].battlefield) if (e.attachedTo === c.iid) e.attachedTo = undefined;
+  c.grantedKw = undefined;
+}
+
 function recomputeStatics(s: GameState): boolean {
   let changed = false;
   for (const pid of ['A', 'B'] as PlayerId[]) {
     const p = s.players[pid];
+    // an equipment whose creature is no longer on this battlefield is unattached (the creature died, was bounced or exiled)
+    for (const e of p.battlefield) {
+      if (e.attachedTo && !p.battlefield.some((x) => x.iid === e.attachedTo && isCreature(x))) {
+        e.attachedTo = undefined;
+        changed = true;
+      }
+    }
     for (const c of p.battlefield) {
       if (!isCreature(c)) continue;
       const b = staticBonus(p, c);
-      if ((c.auraP ?? 0) !== b.power || (c.auraT ?? 0) !== b.toughness || c.blitz !== b.blitz) {
+      const gk = b.keywords.length ? b.keywords : undefined;
+      if ((c.auraP ?? 0) !== b.power || (c.auraT ?? 0) !== b.toughness || c.blitz !== b.blitz || (c.grantedKw ?? []).join() !== (gk ?? []).join()) {
         c.auraP = b.power;
         c.auraT = b.toughness;
         c.blitz = b.blitz;
+        c.grantedKw = gk;
         changed = true;
       }
     }
@@ -424,6 +460,7 @@ function applyEffect(s: GameState, controller: PlayerId, effect: Effect, target?
       side.battlefield = side.battlefield.filter((x) => x.iid !== c.iid);
       // it leaves play like a dead creature does: every buff, mark and aura is gone, and it is summoning sick if recast
       c.tapped = false; c.damage = 0; c.buffP = 0; c.buffT = 0; c.tempP = 0; c.tempT = 0; c.auraP = 0; c.auraT = 0; c.blitz = false; c.revived = false; c.unearthed = false; c.summoningSick = true;
+      detachFrom(s, c);
       if (!isToken(c.def)) s.players[c.owner].hand.push(c); // a token just ceases to exist
       // it is no longer attacking or blocking
       if (s.combat) {
@@ -638,6 +675,7 @@ function toEnd(s: GameState): void {
       side.battlefield = side.battlefield.filter((c) => !c.unearthed);
       for (const c of gone) {
         c.unearthed = false; c.buffP = 0; c.buffT = 0; c.tempP = 0; c.tempT = 0; c.auraP = 0; c.auraT = 0; c.blitz = false; c.tapped = false; c.damage = 0;
+        detachFrom(s, c);
         (s.players[c.owner].exile ??= []).push(c);
         s.log.push(`${getDef(c.def).name} is exiled`);
       }
@@ -764,6 +802,7 @@ function checkDeaths(s: GameState): Set<string> {
         c.blitz = false;
         c.doomed = false;
         c.summoningSick = true;
+        for (const pid2 of ['A', 'B'] as PlayerId[]) for (const e of s.players[pid2].battlefield) if (e.attachedTo === c.iid) e.attachedTo = undefined; // its equipment falls off (what it granted is cleared below, after Undying has looked at it)
         // A token that dies simply ceases to exist. It is not a card, so it must not
         // pad the graveyard (the count, the viewer and the result screen all read it).
         // An unearthed creature is exiled instead of going to the graveyard.
@@ -789,7 +828,9 @@ function checkDeaths(s: GameState): Set<string> {
     for (const c of fallen) {
       const wasRevived = !!c.revived;
       c.revived = false;
-      if (!hasKeyword(c, 'undying') || wasRevived || s.players[c.owner].exile?.some((x) => x.iid === c.iid)) continue;
+      const undying = hasKeyword(c, 'undying'); // (last known information: a granted Undying counts)
+      c.grantedKw = undefined;
+      if (!undying || wasRevived || s.players[c.owner].exile?.some((x) => x.iid === c.iid)) continue;
       const side = s.players[c.owner];
       const gi = side.graveyard.findIndex((x) => x.iid === c.iid);
       if (gi >= 0) side.graveyard.splice(gi, 1); // (a token never reached the graveyard)

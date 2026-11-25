@@ -27,10 +27,19 @@ export const THRESHOLD = 7;
  * What the static abilities on `p`'s battlefield give creature `c` (one of p's creatures), worked out from scratch. `blitz` is true when a
  * static marked 'blitz' (Beast Blitz) is among them. Pure: the engine writes the result to `auraP` / `auraT` / `blitz` after every action.
  */
-export function staticBonus(p: PlayerState, c: CardInstance): { power: number; toughness: number; blitz: boolean } {
+export function staticBonus(p: PlayerState, c: CardInstance): { power: number; toughness: number; blitz: boolean; keywords: Keyword[] } {
   let power = 0;
   let toughness = 0;
   let blitz = false;
+  const keywords: Keyword[] = [];
+  // Equipment attached to this creature: its bonus and keywords (the equipment is on the same battlefield, so it is read here with the statics)
+  for (const src of p.battlefield) {
+    const eq = getDef(src.def).equip;
+    if (!eq || src.attachedTo !== c.iid) continue;
+    power += eq.power;
+    toughness += eq.toughness;
+    for (const k of eq.keywords ?? []) if (!keywords.includes(k)) keywords.push(k);
+  }
   const counted = new Set<string>(); // `unique` statics already applied to this creature, by source card id
   for (const src of p.battlefield) {
     const st = getDef(src.def).static;
@@ -46,10 +55,13 @@ export function staticBonus(p: PlayerState, c: CardInstance): { power: number; t
     toughness += st.toughness;
     if (st.mark === 'blitz') blitz = true;
   }
-  return { power, toughness, blitz };
+  return { power, toughness, blitz, keywords };
 }
 export function hasKeyword(c: CardInstance, kw: Keyword): boolean {
-  return (getDef(c.def).keywords ?? []).includes(kw);
+  return (getDef(c.def).keywords ?? []).includes(kw) || !!c.grantedKw?.includes(kw); // (granted by equipment)
+}
+export function isEquipment(c: CardInstance): boolean {
+  return getDef(c.def).type === 'equipment';
 }
 /**
  * Has `c` taken enough to die? Marked damage at or past its toughness, except that an indestructible creature ignores
@@ -108,6 +120,19 @@ export function ninjutsuOptions(state: GameState): { ninja: string; attacker: st
     const cost = getDef(c.def).ninjutsu;
     if (cost === undefined || getDef(c.def).type !== 'creature' || cost > mana) continue;
     for (const attacker of open) out.push({ ninja: c.iid, attacker });
+  }
+  return out;
+}
+
+/** Equipment: the (equipment, creature) pairs the player can pay for now: each equipment they have in play x each of their creatures it is not already on. */
+export function equipOptions(state: GameState, pid: PlayerId): { equipment: string; creature: string }[] {
+  const p = state.players[pid];
+  const mana = availableMana(p);
+  const out: { equipment: string; creature: string }[] = [];
+  for (const e of p.battlefield) {
+    const eq = getDef(e.def).equip;
+    if (!eq || eq.cost > mana) continue;
+    for (const c of p.battlefield) if (isCreature(c) && e.attachedTo !== c.iid) out.push({ equipment: e.iid, creature: c.iid });
   }
   return out;
 }
@@ -368,12 +393,15 @@ export function legalActions(state: GameState, player: PlayerId): Action[] {
         actions.push({ type: 'playLand', iid: c.iid });
       } else if (def.type === 'creature' && def.cost <= mana) {
         actions.push({ type: 'castCreature', iid: c.iid });
+      } else if (def.type === 'equipment' && def.cost <= mana) {
+        actions.push({ type: 'castEquipment', iid: c.iid });
       }
     }
     for (const c of p.hand) {
       const cost = getDef(c.def).cycling;
       if (cost !== undefined && cost <= mana) actions.push({ type: 'cycle', iid: c.iid });
     }
+    for (const o of equipOptions(state, player)) actions.push({ type: 'equip', equipment: o.equipment, creature: o.creature });
     for (const c of p.graveyard) {
       const cost = getDef(c.def).unearth;
       if (cost !== undefined && getDef(c.def).type === 'creature' && cost <= mana) actions.push({ type: 'unearth', iid: c.iid });
@@ -542,6 +570,20 @@ export function validateAction(state: GameState, action: Action): void {
     }
     case 'scry': {
       if (state.pending?.kind !== 'scry') throw new Error('no Scry pending');
+      return;
+    }
+    case 'castEquipment': {
+      requirePhase(state, 'main1');
+      const c = inHand(active, action.iid);
+      if (!c || getDef(c.def).type !== 'equipment') throw new Error('not an equipment in hand');
+      if (getDef(c.def).cost > availableMana(active)) throw new Error('not enough mana');
+      return;
+    }
+    case 'equip': {
+      requirePhase(state, 'main1');
+      if (!equipOptions(state, state.active).some((o) => o.equipment === action.equipment && o.creature === action.creature)) {
+        throw new Error('not a legal equip: your equipment in play, one of your creatures it is not already on, and the equip cost');
+      }
       return;
     }
     case 'skipNinjutsu': {

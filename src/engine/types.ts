@@ -4,7 +4,7 @@
 
 export type PlayerId = 'A' | 'B';
 
-export type CardType = 'land' | 'creature' | 'sorcery' | 'instant';
+export type CardType = 'land' | 'creature' | 'sorcery' | 'instant' | 'equipment';
 
 export type Keyword =
   | 'haste'
@@ -117,6 +117,12 @@ export interface CardDef {
   x?: boolean; // an X spell: its damage / heal / draw effect scales with the X chosen (amount * X) and X is paid on top of the cost
   kicker?: { cost: number; effect: Effect }; // optional extra cost; when paid, this untargeted effect resolves too
   modes?: Effect[]; // modal: choose one (the cast names its index); `effect` must equal modes[0]
+  /**
+   * Equipment (a permanent that is neither land nor creature): cast from hand like a creature, then attached to one of your creatures by the `equip` action
+   * for `cost` (sorcery speed). The creature it is attached to gets +power/+toughness and the listed keywords, recomputed from scratch with the other static
+   * bonuses; when that creature leaves play the equipment stays but is unattached.
+   */
+  equip?: { cost: number; power: number; toughness: number; keywords?: Keyword[] };
   ninjutsu?: number; // creature: after blockers are declared, pay this to put it from your hand into combat in place of an UNBLOCKED attacker, which returns to your hand
   unearth?: number; // creature: cost to return it from your graveyard to the battlefield with haste, in your main phase; it is exiled at the end step, or instead of dying
   ward?: number; // creature: spells your opponent casts that TARGET it cost this much more
@@ -150,6 +156,8 @@ export interface CardInstance {
   tempT?: number;
   doomed?: boolean; // sacrificed: dies at the next death check even if indestructible
   // The bonus from static abilities (Beast Blitz, Lords, Threshold), recomputed from scratch after every action. Optional so older fixtures need nothing.
+  attachedTo?: string; // equipment: the iid of the creature it is attached to (cleared when that creature leaves play)
+  grantedKw?: Keyword[]; // creature: keywords its equipment grants, recomputed after every action
   revived?: boolean; // returned by Undying: it carries its +1/+1 counter, so it cannot return again
   unearthed?: boolean; // returned by Unearth: exiled at the end step, or instead of dying
   auraP?: number;
@@ -223,6 +231,8 @@ export type Action =
   | { type: 'resolveTrigger'; target: string } // choose the target of a pending enter effect (Whipflash), or the creature to sacrifice (Edict)
   | { type: 'activate'; iid: string } // use a creature's activated ability (its cost is paid, its effect resolves at once)
   | { type: 'scry'; bottom: boolean } // answer a pending Scry for the next card: put it on the bottom, or leave it on top
+  | { type: 'castEquipment'; iid: string } // cast an equipment from hand onto the battlefield (unattached)
+  | { type: 'equip'; equipment: string; creature: string } // pay an equipment's equip cost to attach it to one of your creatures (moves it if already attached elsewhere)
   | { type: 'ninjutsu'; ninja: string; attacker: string } // Ninjutsu: swap a ninja from hand for an unblocked attacker (answers the pending Ninjutsu window)
   | { type: 'skipNinjutsu' } // decline the Ninjutsu window: combat damage goes ahead
   | { type: 'unearth'; iid: string } // Unearth: pay a graveyard creature's unearth cost; it returns with haste and is exiled at the end step
