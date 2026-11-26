@@ -1,84 +1,75 @@
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { KEYWORD_INFO } from '../cards/keywords';
+import { CHAPTERS, PAGES, chapterById, pagesOf, type Block, type Page } from '../rulebook/content';
+import { markRuns, queryTerms, searchPages, stepIndex } from '../rulebook/search';
 
-// Reusable rulebook. Renders its own book button + an animated parchment scroll
-// that unrolls open. Drop <Rulebook /> anywhere (home menu, battle topbar).
+// The Field Manual (what used to be the plain "Rulebook"). Reusable: it renders its own book button and the book
+// overlay. Chapters are the rotated side tabs; every chapter is a handful of pages with prev / next; the header
+// search finds a page by any word. The words live in `src/rulebook/content.ts`, the search and paging maths in
+// `src/rulebook/search.ts`; this file only lays them out.
 
-const SECTIONS: { title: string; items: string[] }[] = [
-  {
-    title: 'Goal',
-    items: [
-      'Reduce your opponent from 20 life to 0 to win.',
-      'If a player must draw from an empty deck, they lose.',
-    ],
-  },
-  {
-    title: 'Opening Hand',
-    items: [
-      'Each player starts with 7 cards and may keep them or take a mulligan.',
-      'A mulligan shuffles your hand back and draws one card fewer. You may do it up to 3 times.',
-      'You decide first, then your opponent. A hand with 2 to 5 lands is usually a keeper.',
-    ],
-  },
-  {
-    title: 'Your Turn',
-    items: [
-      'Untap and draw a card (automatic).',
-      'Main phase: play one land, cast creatures and sorceries.',
-      'Combat: declare attackers, the opponent blocks, then damage is dealt.',
-      'End: pass the turn to your opponent.',
-    ],
-  },
-  {
-    title: 'Mana',
-    items: [
-      'Each land taps for 1 mana.',
-      'You may play at most one land per turn.',
-      "A card's cost is the number on its orb — you need that many untapped lands.",
-    ],
-  },
-  {
-    title: 'Card Types',
-    items: [
-      'Land — taps for mana.',
-      'Creature — has power / toughness; can attack and block.',
-      'Sorcery — a one-time effect, cast only in your main phase.',
-      'Instant — like a sorcery, but castable any time you can act — during combat, or on defense while blocking.',
-    ],
-  },
-  {
-    title: 'Combat',
-    items: [
-      'Attacking creatures tap (unless they have Vigilance).',
-      'Each blocker blocks one attacker; each attacker is blocked by at most one.',
-      'Unblocked attackers hit the player; blocked creatures trade damage. With first strike or double strike in the fight, damage is dealt in two steps and creatures destroyed in the first step do not strike back.',
-      'A creature with damage equal to or above its toughness is destroyed (unless it is indestructible).',
-    ],
-  },
-  {
-    title: 'Keywords',
-    items: Object.values(KEYWORD_INFO).map((k) => `${k.label} — ${k.rule}`),
-  },
-  {
-    title: 'Tips',
-    items: [
-      'Hover a card — or press and hold on mobile — to read its full details.',
-      'Watch the activity log (bottom-right) to follow every action.',
-      'Flashback: a spell with Flashback can be cast again from your graveyard (tap the graveyard counter), for its flashback cost. It is then exiled.',
-      'Landfall triggers when a land enters under your control (played or ramped). An attack trigger fires when its creature attacks, even if it is then blocked. Morbid is true once a creature has died this turn, and a second-spell bonus once you have cast two spells this turn (creature spells count); both are on the card that carries them.',
-      'Cycling: in your main phase you may pay a card\'s cycling cost and discard it from your hand to draw a card (tap Cycle, then the card). Edict: the opponent sacrifices a creature of THEIR choice, and a sacrificed creature dies even if indestructible. Bounce sends a creature back to its owner\'s hand (a token just vanishes). Rally gives all your creatures a bonus until end of turn.',
-      'Activated abilities: in your main phase tap Ability, then a creature, to use it. {T} needs the creature untapped and not summoning sick, and it stays tapped through your opponent\'s turn (so it cannot block); a mana cost is paid from your lands. {T}: Add one mana puts floating mana in your pool, which empties when the phase ends.',
-      'Scry N: look at the top N cards of your library one at a time and keep each on top or put it on the bottom. Loot: draw a card, then discard a card of your choice. Hexproof: your opponent\'s spells and abilities cannot target it (yours can; combat and damage to players are unaffected). Bite: your creature with the greatest power deals damage equal to its power to target opposing creature.',
-      'Cast options: a Modal spell ("choose one") asks which effect before it is cast. Kicker: pay the extra cost and the spell does its extra effect too. X: you choose X, pay it on top of the cost, and the effect scales with it. Ward {N}: your opponent\'s spells that target that creature cost N more (a spell at a player is not taxed).',
-      'Undying: when the creature dies without a +1/+1 counter, it returns to the battlefield with one (once only; it is summoning sick, and its dies trigger still fires). Unearth {N}: in your main phase, open your graveyard and pay N to return that creature with haste; it is exiled at the end step, or instead of dying, and it is not a cast.',
-      'Ninjutsu {N}: after blockers are declared, if you have an UNBLOCKED attacker and a ninja in hand you can pay for, combat pauses and asks you: tap the ninja, then the attacker. The attacker returns to your hand and the ninja takes its place, tapped and attacking, so it hits instead. It is not a cast. If you cannot use it, combat goes straight to damage as usual.',
-      'Equipment: cast it like a creature (it stays in play, unattached), then tap it and one of your creatures to attach it for its Equip cost, in your main phase. The creature gets its bonus and keywords. Move it to another creature by paying again. If the creature leaves play the equipment stays, unattached.',
-      'Static abilities (Beast Blitz, Zombie lords, Threshold) are always on while their creature is in play: they lift other creatures, or the creature itself, and end the moment it leaves. Threshold counts the cards in YOUR graveyard (7 or more). Lords stack with each other; Beast Blitz does not.',
-      'Last breath triggers when a creature dies (tokens too). Rot makes the opponent discard at random. Grave Call returns your most recently fallen creature.',
-    ],
-  },
-];
+export const MANUAL_NAME = 'Field Manual';
+
+function Marked({ text, terms }: { text: string; terms: readonly string[] }) {
+  return (
+    <>
+      {markRuns(text, terms).map((r, i) => (r.hit ? <mark key={i}>{r.text}</mark> : <span key={i}>{r.text}</span>))}
+    </>
+  );
+}
+
+function Blocks({ blocks, terms }: { blocks: readonly Block[]; terms: readonly string[] }) {
+  return (
+    <>
+      {blocks.map((b, i) => {
+        switch (b.kind) {
+          case 'p':
+            return (
+              <p key={i}>
+                <Marked text={b.text} terms={terms} />
+              </p>
+            );
+          case 'list':
+            return (
+              <ul key={i}>
+                {b.items.map((it, j) => (
+                  <li key={j}>
+                    <Marked text={it} terms={terms} />
+                  </li>
+                ))}
+              </ul>
+            );
+          case 'note':
+            return (
+              <aside key={i} className="fm-note">
+                {b.title && <b>{b.title}</b>}
+                <Marked text={b.text} terms={terms} />
+              </aside>
+            );
+          case 'keywords':
+            return (
+              <dl key={i} className="fm-kw">
+                {b.keys.map((k) => (
+                  <div key={k}>
+                    <dt>
+                      <Marked text={KEYWORD_INFO[k].label} terms={terms} />
+                    </dt>
+                    <dd>
+                      <Marked text={KEYWORD_INFO[k].rule} terms={terms} />
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            );
+        }
+      })}
+    </>
+  );
+}
+
+const FOCUSABLE = 'button:not(:disabled), input, a[href], [tabindex]:not([tabindex="-1"])';
 
 export function Rulebook({
   label = true,
@@ -86,12 +77,14 @@ export function Rulebook({
   trigger = true,
   open: openProp,
   onOpenChange,
+  page: startPage,
 }: {
   label?: boolean;
   icon?: boolean; // render the 📖 glyph
   trigger?: boolean; // render the 📖 button (false = controlled externally)
   open?: boolean; // controlled open state
   onOpenChange?: (v: boolean) => void;
+  page?: string; // page id to open at (default: the first page)
 }) {
   const [openState, setOpenState] = useState(false);
   const controlled = openProp !== undefined;
@@ -100,66 +93,284 @@ export function Rulebook({
   return (
     <>
       {trigger && (
-        <button
-          className="book-btn"
-          onClick={() => setOpen(true)}
-          title="Rulebook"
-          aria-label="Open rulebook"
-        >
+        <button className="book-btn" onClick={() => setOpen(true)} title={MANUAL_NAME} aria-label={`Open ${MANUAL_NAME.toLowerCase()}`}>
           {icon && (
             <span className="book-ico" aria-hidden>
               📖
             </span>
           )}
-          {label && <span>Rulebook</span>}
+          {label && <span>{MANUAL_NAME}</span>}
         </button>
       )}
+      {/* In a portal on <body>: opened from the game's top bar, the book would sit inside the board's stacking context, and the phase
+          banners and the Activity panel would paint over it. */}
+      {createPortal(<AnimatePresence>{open && <Book key="book" onClose={() => setOpen(false)} startPage={startPage} />}</AnimatePresence>, document.body)}
+    </>
+  );
+}
 
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            className="book-backdrop"
-            onClick={() => setOpen(false)}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              className="scroll"
-              onClick={(e) => e.stopPropagation()}
-              initial={{ scaleY: 0, opacity: 0 }}
-              animate={{ scaleY: 1, opacity: 1 }}
-              exit={{ scaleY: 0, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 240, damping: 26 }}
-              style={{ transformOrigin: 'top' }}
-            >
-              <div className="scroll-rod" />
-              <motion.div
-                className="scroll-body"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.18 }}
+function Book({ onClose, startPage }: { onClose: () => void; startPage?: string }) {
+  const reduce = useReducedMotion();
+  const [index, setIndex] = useState(() => Math.max(0, PAGES.findIndex((p) => p.id === startPage)));
+  const [dir, setDir] = useState<1 | -1>(1);
+  const [query, setQuery] = useState('');
+  const [searching, setSearching] = useState(false); // the results list covers the page while true
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const page: Page = PAGES[index];
+  const chapter = chapterById(page.chapter);
+  const siblings = useMemo(() => pagesOf(page.chapter), [page.chapter]);
+  const terms = useMemo(() => queryTerms(query), [query]);
+  const hits = useMemo(() => searchPages(PAGES, query), [query]);
+
+  const go = useCallback(
+    (to: number) => {
+      const next = Math.min(PAGES.length - 1, Math.max(0, to));
+      setDir(next >= index ? 1 : -1);
+      setIndex(next);
+      setSearching(false);
+    },
+    [index],
+  );
+  const step = (d: 1 | -1) => go(stepIndex(PAGES.length, index, d));
+  const goTo = (id: string) => {
+    go(PAGES.findIndex((p) => p.id === id));
+    dialogRef.current?.focus(); // the button that was clicked may be about to unmount (search results): keep the keys working
+  };
+
+  // A new page starts at its top.
+  useEffect(() => {
+    pageRef.current?.scrollTo?.({ top: 0 });
+  }, [index]);
+
+  // Take focus on open (so the keys work at once) and give it back to what opened the book on close.
+  useEffect(() => {
+    const before = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    return () => before?.focus?.();
+  }, []);
+
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    const typing = (e.target as HTMLElement).tagName === 'INPUT';
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      // Esc first backs out of an active search; with none on screen it closes the book (a query kept only for highlighting does not count).
+      if (query && (searching || document.activeElement === searchRef.current)) {
+        setQuery('');
+        setSearching(false);
+      } else onClose();
+    } else if (e.key === 'ArrowRight' && !typing) {
+      step(1);
+    } else if (e.key === 'ArrowLeft' && !typing) {
+      step(-1);
+    } else if (e.key === '/' && !typing) {
+      e.preventDefault();
+      searchRef.current?.focus();
+    } else if (e.key === 'Tab') {
+      // keep Tab inside the book
+      const items = [...(dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])];
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const here = document.activeElement;
+      if (e.shiftKey && (here === first || here === dialogRef.current)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && here === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  }
+
+  // Touch: a clear horizontal swipe turns the page.
+  const swipe = useRef<{ x: number; y: number } | null>(null);
+
+  const slide = reduce ? 0 : 26;
+
+  return (
+    <motion.div className="book-backdrop" onClick={(e) => { e.stopPropagation(); onClose(); }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <motion.div
+        className="fm"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={MANUAL_NAME}
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={onKeyDown}
+        initial={reduce ? { opacity: 0 } : { scaleY: 0.04, opacity: 0 }}
+        animate={reduce ? { opacity: 1 } : { scaleY: 1, opacity: 1 }}
+        exit={reduce ? { opacity: 0 } : { scaleY: 0.04, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 240, damping: 28 }}
+        style={{ transformOrigin: 'top', ['--fm-accent' as string]: chapter.color } as CSSProperties}
+      >
+        <header className="fm-head">
+          <h2 className="fm-title">{MANUAL_NAME}</h2>
+          <label className="fm-search">
+            <span aria-hidden>⌕</span>
+            <input
+              ref={searchRef}
+              type="search"
+              value={query}
+              placeholder="Search"
+              aria-label="Search the manual"
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setSearching(true);
+              }}
+              onFocus={() => query && setSearching(true)}
+            />
+            {query ? (
+              <button
+                type="button"
+                className="fm-clear"
+                aria-label="Clear search"
+                onClick={() => {
+                  setQuery('');
+                  setSearching(false);
+                  searchRef.current?.focus();
+                }}
               >
-                <h2 className="scroll-title">Entity Duel — How to Play</h2>
-                {SECTIONS.map((s) => (
-                  <section key={s.title} className="scroll-sec">
-                    <h3>{s.title}</h3>
+                ✕
+              </button>
+            ) : (
+              <kbd aria-hidden>/</kbd>
+            )}
+          </label>
+          <button className="fm-close" onClick={onClose} aria-label={`Close ${MANUAL_NAME.toLowerCase()}`}>
+            ✕
+          </button>
+        </header>
+
+        <div className="fm-main">
+          <div className="fm-book">
+            <nav className="fm-aside" aria-label={`Pages in ${chapter.title}`}>
+              <div className="fm-aside-head">
+                <span className="fm-aside-ch">{chapter.title}</span>
+                <span className="fm-aside-blurb">{chapter.blurb}</span>
+              </div>
+              <ol>
+                {siblings.map((p) => (
+                  <li key={p.id}>
+                    <button className={p.id === page.id ? 'on' : ''} aria-current={p.id === page.id ? 'page' : undefined} onClick={() => goTo(p.id)}>
+                      {p.title}
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            </nav>
+
+            <div
+              className="fm-page"
+              ref={pageRef}
+              onTouchStart={(e) => {
+                swipe.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+              }}
+              onTouchEnd={(e) => {
+                const s = swipe.current;
+                swipe.current = null;
+                if (!s) return;
+                const dx = e.changedTouches[0].clientX - s.x;
+                const dy = e.changedTouches[0].clientY - s.y;
+                if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.8) step(dx < 0 ? 1 : -1);
+              }}
+            >
+              <AnimatePresence mode="wait" initial={false} custom={dir}>
+                <motion.article
+                  key={page.id}
+                  className="fm-article"
+                  custom={dir}
+                  variants={{
+                    in: (d: number) => ({ opacity: 0, x: d * slide }),
+                    show: { opacity: 1, x: 0 },
+                    out: (d: number) => ({ opacity: 0, x: -d * slide }),
+                  }}
+                  initial="in"
+                  animate="show"
+                  exit="out"
+                  transition={{ duration: 0.16 }}
+                >
+                  <p className="fm-kicker">
+                    {chapter.title} · page {siblings.indexOf(page) + 1} of {siblings.length}
+                  </p>
+                  <h3 className="fm-h">
+                    <Marked text={page.title} terms={terms} />
+                  </h3>
+                  <Blocks blocks={page.blocks} terms={terms} />
+                </motion.article>
+              </AnimatePresence>
+            </div>
+
+            {searching && query && (
+              <div className="fm-results" role="region" aria-label="Search results" aria-live="polite">
+                {hits.length === 0 ? (
+                  <p className="fm-none">
+                    Nothing found for <b>“{query}”</b>. Try a word from a card, like <i>flying</i>, <i>mulligan</i> or <i>kicker</i>.
+                  </p>
+                ) : (
+                  <>
+                    <p className="fm-count">
+                      {hits.length} {hits.length === 1 ? 'page' : 'pages'}
+                    </p>
                     <ul>
-                      {s.items.map((it, i) => (
-                        <li key={i}>{it}</li>
+                      {hits.map(({ page: p, snippet }) => (
+                        <li key={p.id}>
+                          <button onClick={() => goTo(p.id)} style={{ ['--tab' as string]: chapterById(p.chapter).color } as CSSProperties}>
+                            <span className="fm-hit-ch">{chapterById(p.chapter).tab}</span>
+                            <span className="fm-hit-title">
+                              <Marked text={p.title} terms={terms} />
+                            </span>
+                            <span className="fm-hit-snip">
+                              {snippet.before}
+                              {snippet.match && <mark>{snippet.match}</mark>}
+                              {snippet.after}
+                            </span>
+                          </button>
+                        </li>
                       ))}
                     </ul>
-                  </section>
-                ))}
-                <button className="primary scroll-close" onClick={() => setOpen(false)}>
-                  Close
-                </button>
-              </motion.div>
-              <div className="scroll-rod" />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="fm-tabs" role="tablist" aria-orientation="vertical" aria-label="Chapters">
+            {CHAPTERS.map((c) => (
+              <button
+                key={c.id}
+                role="tab"
+                aria-selected={c.id === page.chapter}
+                className={c.id === page.chapter ? 'on' : ''}
+                style={{ ['--tab' as string]: c.color } as CSSProperties}
+                title={c.title}
+                onClick={() => go(PAGES.findIndex((p) => p.chapter === c.id))}
+              >
+                <span>{c.tab}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <footer className="fm-foot">
+          <button className="fm-nav" onClick={() => step(-1)} disabled={index === 0} aria-label="Previous page">
+            <span aria-hidden>‹</span>
+            <span className="fm-nav-t">{index > 0 ? PAGES[index - 1].title : ''}</span>
+          </button>
+          <span className="fm-count-pill">
+            {index + 1} / {PAGES.length}
+          </span>
+          <button className="fm-nav next" onClick={() => step(1)} disabled={index === PAGES.length - 1} aria-label="Next page">
+            <span className="fm-nav-t">{index < PAGES.length - 1 ? PAGES[index + 1].title : ''}</span>
+            <span aria-hidden>›</span>
+          </button>
+        </footer>
+      </motion.div>
+    </motion.div>
   );
 }

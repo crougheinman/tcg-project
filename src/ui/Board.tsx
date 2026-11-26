@@ -69,7 +69,7 @@ export function Board() {
 
   const [menuOpen, setMenuOpen] = useState(false); // burger menu modal
   const [confirmAbort, setConfirmAbort] = useState(false); // abort confirmation
-  const [rulesOpen, setRulesOpen] = useState(false); // "How to Play" (controlled Rulebook)
+  const [rulesOpen, setRulesOpen] = useState(false); // the Field Manual (controlled Rulebook)
   const guided = useGame((s) => s.guided);
   const depth = useGame((s) => s.depth);
   const setDepth = useGame((s) => s.setDepth);
@@ -1449,7 +1449,7 @@ export function Board() {
                     setRulesOpen(true);
                   }}
                 >
-                  How to Play
+                  Field Manual
                 </button>
                 <button
                   className={'game-menu-item toggle' + (guided ? ' on' : '')}
@@ -1528,7 +1528,7 @@ export function Board() {
           )}
         </AnimatePresence>
 
-        {/* "How to Play" — controlled rulebook opened from the menu */}
+        {/* the Field Manual, opened from the game menu */}
         <Rulebook trigger={false} open={rulesOpen} onOpenChange={setRulesOpen} />
 
         {/* Game over (a winner) or PvP forfeit (opponent left) -> animated stats. */}
