@@ -401,6 +401,26 @@ export const PAGES: readonly Page[] = [
     ],
   },
   {
+    id: 'online',
+    chapter: 'board',
+    title: 'Online play',
+    tags: ['online', 'pvp', 'multiplayer', 'matchmaking', 'queue', 'find a match', 'ready', 'room code', 'friend', 'host', 'join', 'countdown', 'reconnect'],
+    blocks: [
+      { kind: 'p', text: 'Online PvP is you against another person. Choose one of the built-in decks, then choose how to meet your opponent.' },
+      {
+        kind: 'list',
+        items: [
+          'Find a match: you join the queue and are paired with the next player searching. The screen shows how many players are searching right now.',
+          'Play a friend: Host a match and send them the four-letter room code, or Join with the code they sent you.',
+          'Ready: once two players are together, each sees the other\u2019s status. Press Ready (press again to undo). When both are ready, the game starts after a 3 second countdown.',
+          'In a matched game you have 30 seconds to press Ready. If your opponent does not, you go back to searching automatically.',
+        ],
+      },
+      { kind: 'note', title: 'Who goes first', text: 'In a matched game the seat, and so who is on the play, is chosen at random. In a friend\u2019s room the host goes first.' },
+      { kind: 'p', text: 'If your connection drops during a game, reload the page and use Reconnect on the home screen to rejoin it. A player who leaves for good, or is gone for a long while, loses.' },
+    ],
+  },
+  {
     id: 'board-actions',
     chapter: 'board',
     title: 'Acting on cards',

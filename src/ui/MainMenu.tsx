@@ -1,7 +1,7 @@
 import { useEffect, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useGame } from '../store/gameStore';
-import { hasSupabase } from '../net/supabase';
+import { onlineAvailable } from '../net/transport';
 import { loadMatch } from '../net/resume';
 import { DECK_LIST, randomDeck } from '../cards/decks';
 import { CARDS } from '../cards/cards';
@@ -109,6 +109,7 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
   const startAI = useGame((s) => s.startAI);
   const startHotseat = useGame((s) => s.startHotseat);
   const resumePvp = useGame((s) => s.resumePvp);
+  const online = onlineAvailable(); // Supabase is configured (or a development transport is on)
   // An unfinished PvP match from this tab (reload / crash). Read once on mount so
   // the button doesn't vanish mid-render once the record is cleared.
   const [resumable] = useState(() => loadMatch());
@@ -223,11 +224,11 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
               </button>
             </li>
             <li>
-              <button onClick={onOnline} disabled={!hasSupabase}>
-                Online PvP <small>{hasSupabase ? 'ROOM CODE' : 'SET KEYS'}</small>
+              <button onClick={onOnline} disabled={!online}>
+                Online PvP <small>{online ? 'FIND A MATCH' : 'SET KEYS'}</small>
               </button>
             </li>
-            {resumable && hasSupabase && (
+            {resumable && online && (
               <li>
                 <button onClick={resumePvp}>
                   Reconnect <small>{resumable.roomId}</small>
@@ -252,7 +253,7 @@ export function MainMenu({ onOnline }: { onOnline: () => void }) {
             <kbd>↑</kbd> <kbd>↓</kbd> SELECT &nbsp; <kbd>ENTER</kbd> CONFIRM
           </div>
 
-          {!hasSupabase && (
+          {!online && (
             <p className="hint vs-hint">
               Online needs a free Supabase project. Copy <code>.env.local.example</code> to{' '}
               <code>.env.local</code> and add your URL + anon key.
