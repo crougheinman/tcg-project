@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CARDS } from '../../cards/cards';
 import { KEYWORD_INFO } from '../../cards/keywords';
 import type { Effect, Keyword } from '../../engine/types';
-import { CHAPTERS, PAGES, chapterById, pageById, pagesOf } from '../content';
+import { CHAPTERS, HELP_PAGES, PAGES, chapterById, pageById, pagesOf, type FigureId } from '../content';
 import { blockText, markRuns, pageText, queryTerms, searchPages, stepIndex } from '../search';
 
 const ALL_TEXT = PAGES.map(pageText).join(' \n ').toLowerCase();
@@ -33,6 +33,23 @@ describe('field manual: structure', () => {
     expect(pageById('ninjutsu')?.title).toBe('Ninjutsu');
     expect(pageById('nope')).toBeUndefined();
     expect(chapterById('combat').tab).toBe('Combat');
+  });
+});
+
+describe('field manual: figures and help links', () => {
+  it('uses every figure id, each at least once, and writes a caption for each', () => {
+    const used: FigureId[] = [];
+    for (const p of PAGES) for (const b of p.blocks) if (b.kind === 'figure') { used.push(b.id); expect(b.caption.length).toBeGreaterThan(10); }
+    expect(new Set(used)).toEqual(new Set<FigureId>(['turn', 'block', 'damage', 'twostep', 'blitz', 'equip', 'ninjutsu', 'board']));
+  });
+
+  it('finds figure captions in search', () => {
+    expect(searchPages(PAGES, 'thumbnail')).toEqual([]);
+    expect(searchPages(PAGES, 'Katana').map((h) => h.page.id)).toContain('equipment');
+  });
+
+  it('points every "?" link on the board at a real page', () => {
+    for (const id of HELP_PAGES) expect(pageById(id), `help page ${id}`).toBeTruthy();
   });
 });
 

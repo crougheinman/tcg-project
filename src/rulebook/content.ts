@@ -17,11 +17,15 @@ export interface Chapter {
   color: string;
 }
 
+/** The figures the manual can show (drawn by `src/ui/ManualFigures.tsx`; every id there is a live diagram built from real card data, or the annotated board screenshot). */
+export type FigureId = 'turn' | 'block' | 'damage' | 'twostep' | 'blitz' | 'equip' | 'ninjutsu' | 'board';
+
 export type Block =
   | { kind: 'p'; text: string }
   | { kind: 'list'; items: string[] }
   | { kind: 'note'; title?: string; text: string }
-  | { kind: 'keywords'; keys: Keyword[] };
+  | { kind: 'keywords'; keys: Keyword[] }
+  | { kind: 'figure'; id: FigureId; caption: string };
 
 export interface Page {
   id: string;
@@ -86,6 +90,7 @@ export const PAGES: readonly Page[] = [
         text: 'A creature cannot attack, or use an ability that taps it, on the turn it enters play. Haste lifts that.',
       },
       { kind: 'p', text: 'Instants and Flash creatures can be cast outside your main phase, whenever you are the one who can act.' },
+      { kind: 'figure', id: 'turn', caption: 'One turn, left to right. Cyan steps are yours; the Block step belongs to the defender.' },
     ],
   },
   {
@@ -145,6 +150,7 @@ export const PAGES: readonly Page[] = [
       { kind: 'list', items: ['Each blocker blocks one attacker, and each attacker is blocked by at most one blocker.', 'Flying attackers can only be blocked by creatures with Flying or Reach.', 'A creature with Skulk cannot be blocked by a creature with greater power.'] },
       { kind: 'p', text: 'You can cast instants, and Flash creatures, while you are blocking. A Flash creature that arrives now can block at once.' },
       { kind: 'note', text: 'If nothing you control can block, and you cannot cast anything useful, the block step is skipped and damage is dealt straight away.' },
+      { kind: 'figure', id: 'block', caption: 'A block is one blocker for one attacker. Flying can only be blocked by Flying or Reach.' },
     ],
   },
   {
@@ -156,6 +162,7 @@ export const PAGES: readonly Page[] = [
       { kind: 'p', text: 'Unblocked attackers hit the player for their power. Blocked creatures trade damage: each deals its power to the other.' },
       { kind: 'p', text: 'A creature with damage equal to or above its toughness is destroyed and goes to the graveyard (unless it is indestructible). Damage wears off at the end of the turn.' },
       { kind: 'p', text: 'Counters and buffs from other cards are lost when a creature dies. Undying then gives the returned creature its own +1/+1 counter.' },
+      { kind: 'figure', id: 'damage', caption: 'Each creature deals its power to the other. Damage at or above toughness destroys.' },
     ],
   },
   {
@@ -174,6 +181,7 @@ export const PAGES: readonly Page[] = [
           'Deathtouch destroys any creature it damages; lifelink gains its controller life equal to the damage dealt.',
         ],
       },
+      { kind: 'figure', id: 'twostep', caption: 'The first striker hits in step one; the creature it destroys never gets to hit back.' },
     ],
   },
 
@@ -276,6 +284,7 @@ export const PAGES: readonly Page[] = [
           'Threshold (Pyre Adept): active while you have 7 or more cards in your own graveyard.',
         ],
       },
+      { kind: 'figure', id: 'blitz', caption: 'Beast Blitz in action: the bonus is on while Kunoichi is in play, and gone when she leaves.' },
     ],
   },
   {
@@ -287,6 +296,7 @@ export const PAGES: readonly Page[] = [
       { kind: 'p', text: 'Cast equipment like a creature. It stays in play, unattached. Then, in your main phase, tap it and one of your creatures to attach it for its Equip cost.' },
       { kind: 'p', text: 'The creature gets the equipment’s bonus and keywords. To move it to another creature, pay the Equip cost again.' },
       { kind: 'note', text: 'If the creature leaves play, the equipment stays, unattached. A creature that returns through Undying does not get it back.' },
+      { kind: 'figure', id: 'equip', caption: 'Equipping Ronin\u2019s Katana: +2/+0 and first strike for as long as it stays attached.' },
     ],
   },
   {
@@ -297,6 +307,7 @@ export const PAGES: readonly Page[] = [
     blocks: [
       { kind: 'p', text: 'After blockers are declared, if you have an unblocked attacker and a ninja in hand that you can pay for, combat pauses and asks you.' },
       { kind: 'list', items: ['Tap the ninja, then the attacker.', 'The attacker returns to your hand. The ninja takes its place, tapped and attacking, so it hits instead.', 'It is not a cast. If you cannot use it, combat goes straight to damage as usual.'] },
+      { kind: 'figure', id: 'ninjutsu', caption: 'An unblocked Ashigaru swaps out for a Kensei Duelist from your hand, which then hits for more.' },
     ],
   },
 
@@ -374,6 +385,7 @@ export const PAGES: readonly Page[] = [
     title: 'Reading the board',
     tags: ['hud', 'life', 'cyan', 'red', 'hover', 'hold', 'log', 'activity', 'card details'],
     blocks: [
+      { kind: 'figure', id: 'board', caption: 'The battlefield: your side is cyan at the bottom, your opponent\u2019s red at the top.' },
       { kind: 'list', items: ['Cyan is you; red is your opponent, everywhere on screen.', 'The bar above each side shows life and mana. Floating mana counts.', 'Hover a card, or press and hold it on a phone, to read its full details.', 'The activity log (bottom-right) lists every action, so you can follow what the opponent did.'] },
     ],
   },
@@ -407,6 +419,10 @@ export const PAGES: readonly Page[] = [
     ],
   },
 ];
+
+/** The pages a "?" link on the board opens (a Ninjutsu window, a Scry, a cast option...). Typed, so a typo is a compile error; the tests check each id is a real page. */
+export const HELP_PAGES = ['effects', 'ninjutsu', 'cycling', 'equipment', 'activated', 'cast-options'] as const;
+export type HelpPageId = (typeof HELP_PAGES)[number];
 
 export const pageById = (id: string): Page | undefined => PAGES.find((p) => p.id === id);
 export const chapterById = (id: ChapterId): Chapter => CHAPTERS.find((c) => c.id === id) as Chapter;

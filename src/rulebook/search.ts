@@ -28,6 +28,8 @@ export function blockText(b: Block): string {
       return b.items.join(' ');
     case 'keywords':
       return b.keys.map((k) => `${KEYWORD_INFO[k].label} ${KEYWORD_INFO[k].rule}`).join(' ');
+    case 'figure':
+      return b.caption;
   }
 }
 
