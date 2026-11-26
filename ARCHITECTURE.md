@@ -171,7 +171,7 @@ Emberwood.
 decks of 30 (`decks.ts`). Effects are a discriminated union of 8 kinds (`types.ts`), **every one
 implemented** in the `applyEffect` switch (`reducer.ts:189`). All 12 keywords (haste, flying, defender,
 reach, vigilance, first strike, double strike, trample, deathtouch, lifelink, flash, prowess) are consumed; their
-player-facing text lives in one table, `cards/keywords.ts`, which the Rulebook and gallery read; `destroy` is a `damage += 9999` sentinel (`reducer.ts:254`) routed through the normal
+player-facing text lives in one table, `cards/keywords.ts`, which the Field Manual (the rulebook) and gallery read; `destroy` is a `damage += 9999` sentinel (`reducer.ts:254`) routed through the normal
 death path. New cards are almost entirely authoring, not code. The one non-data mechanic is Beast
 Blitz, a hardcoded `BLITZ_TARGETS` list in the reducer (`reducer.ts:131`).
 
@@ -647,6 +647,14 @@ the usual end-of-action `settle` would be too late (a ninja would hit without th
 The engine's battlefield was lands + creatures, and a lot of code quietly depended on that, so the useful design question was where equipment could hide. The answer was the statics seam: an attached equipment is one more term in `staticBonus`, and what it grants is `grantedKw` consulted by `hasKeyword`. Nothing in combat, the AI's `duel` or the block planner needed to learn about equipment, because they already
 read `power`, `toughness` and `hasKeyword`. What DID need care is attachment lifetime: the equipment persists when its creature leaves, and the creature's iid can come back (Undying), so detaching has to happen at the moment of leaving play, in every exit (death, bounce, ninjutsu swap, unearth exile), with the statics recompute only a safety net. That detail was invisible to the unit tests until the oracle was given a rule for it (a creature returned through Undying must not
 still wear its equipment). On the UI side the first layout (a new row) was hidden under the player platform, which only showed up by looking at it in a browser; equipment now shares the creature row. The mechanic shipped without a card on purpose (the cards wait for art); the first two, Ronin's Katana and Clan Banner, followed when the art arrived, and the sim showed the cost of a creature deck spending slots on gear: they replace Iron Blossom's spells, not its creatures.
+
+### (v) The Field Manual: rules as data, with navigation
+
+The rulebook was one scrolling parchment whose "Tips" section had become a dump of twelve long paragraphs, one per Phase 4 mechanic, with no way to find anything. It is now a book (`src/ui/Rulebook.tsx`) whose words live in `src/rulebook/content.ts` as chapters and pages made of four block kinds (paragraph, list, note, keyword table), and whose search and paging maths are pure functions in `src/rulebook/search.ts`. The same principle as cards-are-data: the UI knows how to draw a page and nothing about a rule, so a rule is documented by adding a block, and the keyword table reads `KEYWORD_INFO`, so a keyword rule is still written in exactly one place.
+
+The part worth keeping is the coverage test (`rulebook.test.ts`). The old rulebook stayed current only by someone remembering; the new one fails the suite when a keyword is on no page, when a card field that is a mechanic (`cycling`, `ninjutsu`, `landTrigger`, ...) has no word in the manual, or when an `Effect` type is added (the `EFFECT_TERMS` table is a `Record` over the type, so the compiler forces the decision "which word names it, or does the card text say it all"). Search matches word starts, needs every term, ranks title over tag over body and keeps a few synonyms ("mull", "hp"); the snippet is built from the page body, because the first version built it from title + tags and showed a list of tag words.
+
+Browser checking at four sizes found what the unit tests could not: a grid track that let the book grow wider than a 320px screen, a search box squeezed to nothing beside the title, keyboard focus dying when a clicked search result unmounted, and, the one that was true of the old rulebook too, the book painting under the phase banners and the Activity panel when opened mid-game, because the board is its own stacking context. A portal on `<body>` fixes that class of bug for good. Phases 1-2 of the plan are done (structure, tabs, search, paging, responsive); figures (live card diagrams, annotated screenshots) and "?" links from the board are the remaining parts.
 
 ## 8. Run it
 

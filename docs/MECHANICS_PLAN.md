@@ -88,7 +88,7 @@ attacker and on a trade, vigilance + `legalActions` (can still block next turn),
 tapped creatures, and the `lastCombat` snapshot that the UI animates from.
 
 UI/UX for Phase 1:
-- Rulebook keyword list (`src/ui/Rulebook.tsx` ~line 53), card text, optionally a small keyword
+- Field Manual page (`src/rulebook/content.ts`; keyword rules come from `cards/keywords.ts`), card text, optionally a small keyword
   badge on `CardView`. The gallery keyword filter already reads `keywords`.
 - `BoardFx` choreography: first strike needs two visual beats (`STRIKE_STAGGER_MS`, `LUNGE_MS`,
   `IMPACT_MS` in `fxTiming.ts`). Lifelink and trample need floaters (a "+N life" number, an

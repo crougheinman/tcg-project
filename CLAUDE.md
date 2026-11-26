@@ -17,7 +17,7 @@ the 8 decks, card flavour), `docs/MECHANICS_PLAN.md` (the mechanics roadmap: Pha
 
 ```bash
 npm run dev           # http://localhost:5173 (the browser QA tools play against this; it can die between shell calls, check it)
-npm test              # vitest: `engine` project on node, `ui` project on jsdom (all unit tests)
+npm test              # vitest: `engine` project on node (engine, ai, cards, net, audio, rulebook), `ui` project on jsdom (all unit tests)
 npm run lint          # eslint, ZERO warnings allowed
 npx tsc --noEmit      # type-check (the build also runs it)
 npm run build         # tsc + vite build into dist/
@@ -48,6 +48,7 @@ the change (below). Playwright is not a project dependency; it must exist where 
 - **`src/net`**: lockstep PvP over Supabase; `keys.ts` picks and vets the env key.
 - **`src/cards`**: card data (`cards.ts`), decks (`decks.ts`), builder rules (`customDecks.ts`),
   keyword text (`keywords.ts`: the one place keyword rules are written for players).
+- **`src/rulebook`**: the Field Manual's words (`content.ts`: chapters and pages as data) and its search / paging maths (`search.ts`); `src/ui/Rulebook.tsx` only lays them out.
 - **`tools/qa`**: the QA harness (fuzz oracle, win-rate sim, browser match runner, scenarios, smoke).
 
 ## UI systems worth knowing
@@ -109,6 +110,7 @@ the change (below). Playwright is not a project dependency; it must exist where 
   creature onto the enemy zone (`.player-zone.opp`) advances to combat with it pre-picked (`autoAttack` ref).
   Other creatures are not draggable. Works for mouse and touch (framer sets `touch-action: none`).
 
+- **Field Manual** (what was the plain "Rulebook"; `src/ui/Rulebook.tsx`, `src/rulebook/`, `.fm*` in `index.css`): an overlay book with six chapters (Basics, Combat, Keywords, Abilities, Spells and Zones, Using the Board; 25 pages) shown as rotated side tabs (`writing-mode: vertical-rl`, one colour each), prev / next paging across chapters (buttons with the neighbour page's title, arrow keys, swipe), and a header search (`/` focuses it; every term must match as a word prefix; title > tags > body; a few synonyms; results show a snippet and opening one lights the words with `<mark>`). Wide screens show a two-page spread: the page on the left, this chapter's page list on the right; under 860px it is one page with the list as a strip above it. The words are DATA in `content.ts` (`CHAPTERS`, `PAGES` of `p` / `list` / `note` / `keywords` blocks); a `keywords` block reads `KEYWORD_INFO`, so keyword rules are still written once. **To document a new rule, add a page or block there**: `rulebook.test.ts` fails when a keyword is on no page, when a card field (`cycling`, `ninjutsu`, `ward`, `landTrigger`...) or an `Effect` type has no word in the manual (the `EFFECT_TERMS` table is a `Record<Effect['type'], ...>`, so a new effect type fails the build until it is decided). The book renders through a portal on `<body>` (opened from the game's top bar it used to sit under the phase banners and the Activity panel, because the board is its own stacking context), refocuses itself when a search result unmounts (or the arrow keys and Esc stop working), and Esc first backs out of an active search, then closes. `<Rulebook page="ninjutsu">` opens at a page (nothing uses it yet). The user-facing name is "Field Manual" (home menu, game menu, tooltips); the component and file keep the name `Rulebook`. Not done yet: figures (live card diagrams and annotated screenshots) and context "?" links from the board; see the plan in the change log.
 - **Codex detail view** (`CardGallery.tsx`, `.gallery-detail` in `index.css`): the whole modal is the card. The art
   (`.gallery-detail-art`, `object-fit: cover`) fills it edge to edge and name / type / cost / P/T / rules / flavor sit in a
   frosted translucent panel (`.gallery-detail-info`) at the bottom. Phone width uses a shorter box and a compact panel so
@@ -214,8 +216,8 @@ Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.
   `Co-Authored-By`, no "Generated with Claude Code"): the user is the sole contributor. Never put a model name
   in code, comments or docs.
 - Update the relevant docs in the same change: `ARCHITECTURE.md` (design + findings), `LORE.md` (card text and
-  flavour), `docs/MECHANICS_PLAN.md` (status), `tools/qa/README.md` (tooling), the in-game Rulebook
-  (`src/ui/Rulebook.tsx`) for player-facing rules, and this file.
+  flavour), `docs/MECHANICS_PLAN.md` (status), `tools/qa/README.md` (tooling), the in-game Field Manual
+  (`src/rulebook/content.ts`) for player-facing rules, and this file.
 - Report honestly: say what was and was not run, and call out anything unreproduced or unverified.
 
 ## Known issues
@@ -226,6 +228,8 @@ Effect art (cut-in faces) lives in `public/ui/` (`blitz-face.webp`, `grave-grin.
 - Not done: keyword badges on board cards; the full 56-match browser pass has not been run since the mechanics phases.
 
 ## Change log (newest first; add a line per change)
+
+- Field Manual (the rulebook reworked, phases 1-2 of the plan; figures not done): 25 pages in 6 chapters as data (`src/rulebook/content.ts`), rotated colour tabs on the outer edge, two-page spread on desktop and one page on phones, prev / next with arrow keys and swipe, search with snippets and highlighting, Esc / `/` keys, focus trap, reduced-motion page turns; the home and game menus now say "Field Manual". Replaces the old single scrolling parchment (8 sections, one 12-paragraph "Tips" dump). 48 new tests: 42 on the content and search (`src/rulebook/__tests__/rulebook.test.ts`, incl. the coverage rules above; the word-boundary, AND-match, clamp, keyword-coverage, title-weight and snippet-source rules each mutation-checked) and 6 on the component (`src/ui/__tests__/rulebook.test.tsx`; the portal, the refocus and the Esc rules mutation-checked). Real browser at desktop, 390 wide, 320x568 and landscape 844x390: no horizontal overflow, every tab label fits (landscape scrolls the rail), search / tabs / paging / Esc driven with real clicks and keys, and opened from the game's top bar during a live match. That check found four real bugs, all fixed: the whole book was wider than a 320px screen (grid track sizing), the search box was squeezed to a few letters beside the title on a small phone, focus was lost when a search result was opened (arrows and Esc died), and the book painted UNDER the phase banner and Activity panel in a game (it lived in the board's stacking context; the old rulebook had the same flaw; now a portal). `npm run lint` still shows only the two known warnings. Also run: `npm run qa:scenarios` 40/40 and `npm run qa:smoke` 8/8 clean (0 anomalies; neither opens the manual, so they show only that nothing else broke). Not done: figures (live card diagrams for combat, Beast Blitz and equipment, plus annotated screenshots for the interface pages), "?" links that open a page from the board, a keyboard-only pass with a screen reader, `Rulebook.tsx` was not renamed.
 
 - Equipment is now printed: the owner supplied the art for **Ronin's Katana** (cast 2, +2/+0 and first strike, Equip {2}) and **Clan Banner** (cast 2, +1/+1, Equip {1}) (420px WebP, 19 / 27 KB). Iron Blossom swaps Warding Stance for the Katana and War Drums for the Banner (one copy each). Chosen by the sim (N=120, Iron Blossom 54.2% before, 53.9% with this swap): putting them in place of creatures or lands dropped the deck to 36-48%, and swapping Insight (the clan's one shared card) or a Iaijutsu Strike (Hana's signature) was avoided. Win rates 45.2%-54.1% (N=80), 44.4%-54.0% (N=120). `LORE.md` and `card-art.md` updated. Warding Stance and War Drums remain real cards (Codex, deck builder). Verified: lint (only the two known warnings), tsc, 471 tests, `SEEDS=100` fuzz 22,400 games zero findings, scenarios 40/40, smoke 8/8 clean, and the real art, tags and an attached banner seen in a real browser at desktop and iPhone 13 width. Not verified: no smoke match cast or equipped an equipment (the runner's `castEquipment` / `equip` gestures remain untested end to end), the Katana's equip was not driven in the browser, landscape phone and 320x568 not checked.
 
