@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { KEYWORD_INFO } from '../cards/keywords';
 import { CHAPTERS, PAGES, chapterById, pagesOf, type Block, type Page } from '../rulebook/content';
 import { markRuns, queryTerms, searchPages, stepIndex } from '../rulebook/search';
+import { ManualFigure } from './ManualFigures';
 
 // The Field Manual (what used to be the plain "Rulebook"). Reusable: it renders its own book button and the book
 // overlay. Chapters are the rotated side tabs; every chapter is a handful of pages with prev / next; the header
@@ -48,6 +49,8 @@ function Blocks({ blocks, terms }: { blocks: readonly Block[]; terms: readonly s
                 <Marked text={b.text} terms={terms} />
               </aside>
             );
+          case 'figure':
+            return <ManualFigure key={i} id={b.id} caption={<Marked text={b.caption} terms={terms} />} />;
           case 'keywords':
             return (
               <dl key={i} className="fm-kw">
@@ -67,6 +70,30 @@ function Blocks({ blocks, terms }: { blocks: readonly Block[]; terms: readonly s
       })}
     </>
   );
+}
+
+/** True on a wide window, where the right-hand page of the spread is shown (kept in step with the 860px breakpoint in index.css). */
+function useWide(): boolean {
+  const query = '(min-width: 861px)';
+  const get = () => (typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(query).matches : false);
+  const [wide, setWide] = useState(get);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia(query);
+    const on = () => setWide(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return wide;
+}
+
+/** One page-wide column (a phone): a figure follows the page's first block, so it is on screen without scrolling. A page that opens with its figure keeps it first. */
+function figuresAfterIntro(blocks: readonly Block[]): Block[] {
+  if (blocks[0]?.kind === 'figure') return [...blocks];
+  const figs = blocks.filter((b) => b.kind === 'figure');
+  const rest = blocks.filter((b) => b.kind !== 'figure');
+  return [rest[0], ...figs, ...rest.slice(1)].filter(Boolean);
 }
 
 const FOCUSABLE = 'button:not(:disabled), input, a[href], [tabindex]:not([tabindex="-1"])';
@@ -111,6 +138,7 @@ export function Rulebook({
 
 function Book({ onClose, startPage }: { onClose: () => void; startPage?: string }) {
   const reduce = useReducedMotion();
+  const wide = useWide();
   const [index, setIndex] = useState(() => Math.max(0, PAGES.findIndex((p) => p.id === startPage)));
   const [dir, setDir] = useState<1 | -1>(1);
   const [query, setQuery] = useState('');
@@ -124,6 +152,11 @@ function Book({ onClose, startPage }: { onClose: () => void; startPage?: string 
   const siblings = useMemo(() => pagesOf(page.chapter), [page.chapter]);
   const terms = useMemo(() => queryTerms(query), [query]);
   const hits = useMemo(() => searchPages(PAGES, query), [query]);
+  // On a wide window a page's figures sit on the right-hand page; on a narrow one they stay in the text.
+  // The board screenshot is wide, so it stays in the text (it needs the room); the diagrams go to the right-hand page.
+  const asideFig = (b: Block) => b.kind === 'figure' && b.id !== 'board';
+  const figures = page.blocks.filter(asideFig);
+  const textBlocks = wide ? page.blocks.filter((b) => !asideFig(b)) : figuresAfterIntro(page.blocks);
 
   const go = useCallback(
     (to: number) => {
@@ -249,7 +282,12 @@ function Book({ onClose, startPage }: { onClose: () => void; startPage?: string 
 
         <div className="fm-main">
           <div className="fm-book">
-            <nav className="fm-aside" aria-label={`Pages in ${chapter.title}`}>
+            <nav className={'fm-aside' + (wide && figures.length > 0 ? ' has-figs' : '')} aria-label={`Pages in ${chapter.title}`}>
+              {wide && figures.length > 0 && (
+                <div className="fm-aside-figs">
+                  <Blocks blocks={figures} terms={terms} />
+                </div>
+              )}
               <div className="fm-aside-head">
                 <span className="fm-aside-ch">{chapter.title}</span>
                 <span className="fm-aside-blurb">{chapter.blurb}</span>
@@ -301,7 +339,7 @@ function Book({ onClose, startPage }: { onClose: () => void; startPage?: string 
                   <h3 className="fm-h">
                     <Marked text={page.title} terms={terms} />
                   </h3>
-                  <Blocks blocks={page.blocks} terms={terms} />
+                  <Blocks blocks={textBlocks} terms={terms} />
                 </motion.article>
               </AnimatePresence>
             </div>

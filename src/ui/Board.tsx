@@ -14,6 +14,8 @@ import { CardPreview } from './CardPreview';
 import { HoverCtx } from './hover';
 import { PhaseBar } from './PhaseBar';
 import { Rulebook } from './Rulebook';
+import { HelpLink } from './HelpLink';
+import type { HelpPageId } from '../rulebook/content';
 import { ZoneViewer } from './ZoneViewer';
 import { ScryPrompt } from './ScryPrompt';
 import { CastOptions } from './CastOptions';
@@ -70,6 +72,11 @@ export function Board() {
   const [menuOpen, setMenuOpen] = useState(false); // burger menu modal
   const [confirmAbort, setConfirmAbort] = useState(false); // abort confirmation
   const [rulesOpen, setRulesOpen] = useState(false); // the Field Manual (controlled Rulebook)
+  const [helpPage, setHelpPage] = useState<string | undefined>(); // the manual page a "?" link asked for (undefined = the first page)
+  const openHelp = (page: HelpPageId) => {
+    setHelpPage(page);
+    setRulesOpen(true);
+  };
   const guided = useGame((s) => s.guided);
   const depth = useGame((s) => s.depth);
   const setDepth = useGame((s) => s.setDepth);
@@ -952,6 +959,7 @@ export function Board() {
       return myTurnToAct ? (
         <div className="actions">
           <span className="prompt">✦ {triggerName} — choose one of your creatures to sacrifice</span>
+          <HelpLink page="effects" onOpen={openHelp} />
         </div>
       ) : (
         <div className="waiting">Opponent is choosing a creature to sacrifice…</div>
@@ -970,6 +978,7 @@ export function Board() {
       return myTurnToAct ? (
         <div className="actions">
           <span className="prompt">✦ Ninjutsu — {ninjaIid ? 'tap one of your unblocked attackers to swap it out' : 'tap a ninja in your hand, or skip'}</span>
+          <HelpLink page="ninjutsu" onOpen={openHelp} />
           <button
             onClick={() => {
               setNinjaIid(null);
@@ -987,6 +996,7 @@ export function Board() {
       return myTurnToAct ? (
         <div className="actions">
           <span className="prompt">✦ Scry — keep the top card or put it on the bottom</span>
+          <HelpLink page="effects" onOpen={openHelp} />
         </div>
       ) : (
         <div className="waiting">Opponent is scrying…</div>
@@ -996,6 +1006,7 @@ export function Board() {
       return myTurnToAct ? (
         <div className="actions">
           <span className="prompt">✦ Loot — tap a card in your hand to discard</span>
+          <HelpLink page="effects" onOpen={openHelp} />
         </div>
       ) : (
         <div className="waiting">Opponent is looting…</div>
@@ -1018,6 +1029,7 @@ export function Board() {
       return (
         <div className="actions">
           <span className="prompt">⟳ Choose a card to cycle…</span>
+          <HelpLink page="cycling" onOpen={openHelp} />
           <button onClick={() => setCycleMode(false)}>Cancel</button>
         </div>
       );
@@ -1026,6 +1038,7 @@ export function Board() {
       return (
         <div className="actions">
           <span className="prompt">⚔ Choose a creature to equip…</span>
+          <HelpLink page="equipment" onOpen={openHelp} />
           <button onClick={() => setEquipIid(null)}>Cancel</button>
         </div>
       );
@@ -1034,6 +1047,7 @@ export function Board() {
       return (
         <div className="actions">
           <span className="prompt">✦ Choose a creature to use its ability…</span>
+          <HelpLink page="activated" onOpen={openHelp} />
           <button onClick={() => setAbilityMode(false)}>Cancel</button>
         </div>
       );
@@ -1343,6 +1357,7 @@ export function Board() {
             def={getDef(me.hand.find((h) => h.iid === castOptsIid)!.def)}
             mana={availableMana(me)}
             onCancel={() => setCastOptsIid(null)}
+            onHelp={() => openHelp('cast-options')}
             onCast={(o) => {
               const iid = castOptsIid;
               setCastOptsIid(null);
@@ -1357,6 +1372,7 @@ export function Board() {
             total={(game.pending.seen ?? 0) + (game.pending.left ?? 1)}
             onKeep={() => dispatch({ type: 'scry', bottom: false })}
             onBottom={() => dispatch({ type: 'scry', bottom: true })}
+            onHelp={() => openHelp('effects')}
           />
         )}
 
@@ -1529,7 +1545,15 @@ export function Board() {
         </AnimatePresence>
 
         {/* the Field Manual, opened from the game menu */}
-        <Rulebook trigger={false} open={rulesOpen} onOpenChange={setRulesOpen} />
+        <Rulebook
+          trigger={false}
+          open={rulesOpen}
+          page={helpPage}
+          onOpenChange={(v) => {
+            setRulesOpen(v);
+            if (!v) setHelpPage(undefined);
+          }}
+        />
 
         {/* Game over (a winner) or PvP forfeit (opponent left) -> animated stats. */}
         {(game.winner || forfeit) && (

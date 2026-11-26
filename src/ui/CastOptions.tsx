@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { CardDef } from '../engine/types';
 import { effectText } from './effectText';
+import { HelpLink } from './HelpLink';
 import { spellEffect } from '../engine/rules';
 
 export interface CastOpts { x?: number; kicked?: boolean; mode?: number }
@@ -12,11 +13,13 @@ export function CastOptions({
   mana,
   onCast,
   onCancel,
+  onHelp,
 }: {
   def: CardDef;
   mana: number;
   onCast: (o: CastOpts) => void;
   onCancel: () => void;
+  onHelp?: () => void;
 }) {
   const [mode, setMode] = useState(0);
   const [kicked, setKicked] = useState(false);
@@ -39,6 +42,7 @@ export function CastOptions({
         <div className="zone-head">
           <span className="zone-title">{def.name}</span>
           <span className="zone-total">cost ◈ {total} of {mana}</span>
+          {onHelp && <HelpLink page="cast-options" onOpen={onHelp} />}
         </div>
         <div className="cast-opts">
           {def.modes && (

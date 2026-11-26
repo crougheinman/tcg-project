@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { CardView } from './CardView';
+import { HelpLink } from './HelpLink';
 import type { CardInstance } from '../engine/types';
 
 // The Scry decision: the card on top of your library, and where it goes. Shown only to the player who is scrying (it is hidden information).
@@ -9,12 +10,14 @@ export function ScryPrompt({
   total,
   onKeep,
   onBottom,
+  onHelp,
 }: {
   card: CardInstance;
   index: number; // 0-based position among the cards being looked at
   total: number;
   onKeep: () => void;
   onBottom: () => void;
+  onHelp?: () => void;
 }) {
   return (
     <div className="zone-overlay scry-overlay" role="dialog" aria-label="Scry">
@@ -29,6 +32,7 @@ export function ScryPrompt({
           <span className="zone-total">
             card {index + 1} of {total}
           </span>
+          {onHelp && <HelpLink page="effects" onOpen={onHelp} />}
         </div>
         <div className="scry-body">
           <CardView inst={card} />

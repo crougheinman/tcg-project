@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Rulebook } from '../Rulebook';
+import { ManualFigure } from '../ManualFigures';
+import { HelpLink } from '../HelpLink';
 import { PAGES } from '../../rulebook/content';
 
 afterEach(cleanup);
@@ -84,5 +86,51 @@ describe('the Field Manual', () => {
   it('can open at a given page', () => {
     render(<Rulebook trigger={false} open onOpenChange={() => {}} page="ninjutsu" />);
     expect(heading()).toBe('Ninjutsu');
+  });
+});
+
+describe('the Field Manual: figures and help links', () => {
+  const stubWide = (wide: boolean) => {
+    window.matchMedia = ((q: string) => ({ matches: wide && q.includes('861'), media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false })) as unknown as typeof window.matchMedia;
+  };
+  afterEach(() => {
+    // @ts-expect-error jsdom has no matchMedia until a test stubs one
+    delete window.matchMedia;
+  });
+
+  it('draws every figure from real card data without error', () => {
+    for (const id of ['turn', 'block', 'damage', 'twostep', 'blitz', 'equip', 'ninjutsu', 'board'] as const) {
+      const { container, unmount } = render(<ManualFigure id={id} caption="c" />);
+      expect(container.querySelector('.fg-' + id), id).toBeTruthy();
+      unmount();
+    }
+  });
+
+  it('shows the numbers from card data (Katana +2/+0 turns a 1/2 Ashigaru into 3/2)', () => {
+    const { container } = render(<ManualFigure id="equip" caption="c" />);
+    expect(container.textContent).toContain('3/2');
+    expect(container.textContent).toContain('Equip {2}');
+  });
+
+  it('puts a page’s figure on the right-hand page on a wide window, and in the text after the first paragraph on a narrow one', () => {
+    stubWide(true);
+    const wide = render(<Rulebook trigger={false} open onOpenChange={() => {}} page="blocking" />);
+    expect(document.querySelector('.fm-aside .fg-block')).toBeTruthy();
+    expect(document.querySelector('.fm-article .fg-block')).toBeNull();
+    wide.unmount();
+    stubWide(false);
+    render(<Rulebook trigger={false} open onOpenChange={() => {}} page="blocking" />);
+    expect(document.querySelector('.fm-aside .fg-block')).toBeNull();
+    const kids = [...(document.querySelector('.fm-article')?.children ?? [])];
+    const at = kids.findIndex((e) => e.classList.contains('fg'));
+    expect(at).toBeGreaterThan(0);
+    expect(kids[at - 1].tagName).toBe('P'); // right after the intro paragraph (the kicker and the title come first)
+  });
+
+  it('opens the manual at a page from a "?" link', () => {
+    const picked: string[] = [];
+    render(<HelpLink page="ninjutsu" onOpen={(p) => picked.push(p)} />);
+    fireEvent.click(screen.getByRole('button', { name: /how does this work/i }));
+    expect(picked).toEqual(['ninjutsu']);
   });
 });
