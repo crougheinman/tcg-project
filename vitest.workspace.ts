@@ -3,7 +3,7 @@ import { defineWorkspace } from 'vitest/config';
 // Two projects, because the code splits cleanly in two and the halves want
 // different environments:
 //
-//   engine — the pure, deterministic core (engine / ai / cards / net sequencing).
+//   engine — the pure, deterministic core (engine / ai / cards / net sequencing / rulebook content).
 //            Runs in `node`: no DOM, nothing to stub, fastest possible.
 //   ui     — everything that touches the browser. The store reads localStorage
 //            at module scope, so before this project existed it could not even be
@@ -18,7 +18,7 @@ export default defineWorkspace([
     test: {
       name: 'engine',
       environment: 'node',
-      include: ['src/{engine,ai,cards,net,audio}/**/*.test.{ts,tsx}'],
+      include: ['src/{engine,ai,cards,net,audio,rulebook}/**/*.test.{ts,tsx}'],
     },
   },
   {
