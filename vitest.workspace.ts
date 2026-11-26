@@ -18,7 +18,7 @@ export default defineWorkspace([
     test: {
       name: 'engine',
       environment: 'node',
-      include: ['src/{engine,ai,cards,net,audio,rulebook}/**/*.test.{ts,tsx}'],
+      include: ['src/{engine,ai,cards,net,audio,rulebook,stats}/**/*.test.{ts,tsx}'],
     },
   },
   {
