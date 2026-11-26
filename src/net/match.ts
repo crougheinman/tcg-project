@@ -1,10 +1,9 @@
-import type { RealtimeChannel } from '@supabase/supabase-js';
-import { supabase } from './supabase';
+import { getTransport, type RtChannel } from './transport';
 import type { Action, PlayerId } from '../engine/types';
 import { createLockstep, type LockstepOut } from './lockstep';
 import { clearMatch, saveMatch, type SavedMatch } from './resume';
 
-// PvP transport over a Supabase Realtime broadcast channel.
+// PvP transport over a realtime broadcast channel (Supabase in production; see transport.ts).
 // Lockstep: we relay *actions* only; both clients replay them through the same
 // deterministic engine starting from the same seed. No server compute.
 //
@@ -54,10 +53,11 @@ export interface MatchConnection {
   leave: () => void;
 }
 
-function randomRoom(): string {
+/** A room id from letters and digits that are hard to misread. 4 characters for a code a friend types; longer for a matched room nobody types. */
+export function randomRoom(length = 4): string {
   const alpha = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let s = '';
-  for (let i = 0; i < 4; i++) s += alpha[Math.floor(Math.random() * alpha.length)];
+  for (let i = 0; i < length; i++) s += alpha[Math.floor(Math.random() * alpha.length)];
   return s;
 }
 
@@ -72,8 +72,9 @@ const PING_MS = 3000;
 const PEER_STALE_MS = 9000;
 const PEER_GONE_MS = 45000;
 
-function makeConnection(
-  channel: RealtimeChannel,
+/** Start the lockstep connection of a match whose room channel is already joined (the ready room hands its channel over). */
+export function makeConnection(
+  channel: RtChannel,
   roomId: string,
   role: PlayerId,
   seed: number,
@@ -85,8 +86,7 @@ function makeConnection(
   let goneCb: ((reason: 'aborted' | 'disconnected') => void) | null = null;
   let statusCb: ((s: PeerStatus) => void) | null = null;
 
-  const send = (event: string, payload: unknown) =>
-    channel.send({ type: 'broadcast', event, payload });
+  const send = (event: string, payload: unknown) => channel.send(event, payload);
 
   // The pure sequencing core. Its outbound messages map 1:1 onto broadcast events.
   const ls = createLockstep({
@@ -132,7 +132,7 @@ function makeConnection(
     goneCb?.(reason);
   };
 
-  channel.on('broadcast', { event: 'action' }, ({ payload }) => {
+  channel.on('action', (payload) => {
     touch();
     ls.receive(payload.seq as number, payload.action as Action);
   });
@@ -140,7 +140,7 @@ function makeConnection(
   // Peer is missing [from, to); rebroadcast any of those we hold. Because the
   // core keeps the FULL log (not just what we originated), either client can
   // heal the other.
-  channel.on('broadcast', { event: 'resend' }, ({ payload }) => {
+  channel.on('resend', (payload) => {
     touch();
     ls.serveResend(payload.from as number, payload.to as number);
   });
@@ -148,7 +148,7 @@ function makeConnection(
   // A peer (re)appeared and told us how much it has. Send it the tail it is
   // missing; if it is somehow ahead of us, ask for ours through the resend path
   // (which cannot loop, unlike answering a rejoin with another rejoin).
-  channel.on('broadcast', { event: 'rejoin' }, ({ payload }) => {
+  channel.on('rejoin', (payload) => {
     touch();
     const have = payload.have as number;
     const { from, actions } = ls.catchupFor(have);
@@ -158,7 +158,7 @@ function makeConnection(
 
   // A contiguous run of actions after a reconnect. Replayed through the normal
   // receive path so dedup/ordering behave exactly as in steady state.
-  channel.on('broadcast', { event: 'catchup' }, ({ payload }) => {
+  channel.on('catchup', (payload) => {
     touch();
     const from = payload.from as number;
     const actions = (payload.actions ?? []) as Action[];
@@ -166,7 +166,7 @@ function makeConnection(
   });
 
   // Chat: deliver straight through, no ordering/dedup needed (cosmetic, best-effort).
-  channel.on('broadcast', { event: 'chat' }, ({ payload }) => {
+  channel.on('chat', (payload) => {
     touch();
     chatCb?.({
       from: payload.from as PlayerId,
@@ -176,9 +176,9 @@ function makeConnection(
   });
 
   // Liveness ping (keeps lastSeen fresh even when the peer isn't acting).
-  channel.on('broadcast', { event: 'ping' }, () => touch());
+  channel.on('ping', () => touch());
   // Peer explicitly forfeited (aborted the match).
-  channel.on('broadcast', { event: 'forfeit' }, () => {
+  channel.on('forfeit', () => {
     touch();
     declareGone('aborted');
   });
@@ -244,63 +244,9 @@ function makeConnection(
       clearInterval(retry);
       clearInterval(ping);
       clearInterval(watchdog);
-      supabase?.removeChannel(channel);
+      channel.close();
     },
   };
-}
-
-/** Host a match. Resolves once an opponent joins; A goes first. */
-export function createMatch(
-  hostDeck: string,
-  onStart: (conn: MatchConnection) => void,
-): { roomId: string; cancel: () => void } {
-  if (!supabase) throw new Error('Supabase not configured');
-  const roomId = randomRoom();
-  const seed = Math.floor(Math.random() * 0x7fffffff);
-  const channel = supabase.channel(`match:${roomId}`, {
-    config: { broadcast: { self: false } },
-  });
-
-  // Only the first joiner starts the match. A second 'join' (a stray client on the
-  // same 4-char code, or a retried packet) would otherwise build a second engine
-  // over the same channel and corrupt the match in progress.
-  let started = false;
-  channel.on('broadcast', { event: 'join' }, ({ payload }) => {
-    if (started) return;
-    started = true;
-    const joinDeck = (payload.deck as string) ?? 'skyward';
-    // Share seed + host deck so both build the identical game.
-    channel.send({ type: 'broadcast', event: 'init', payload: { seed, deck: hostDeck } });
-    onStart(makeConnection(channel, roomId, 'A', seed, hostDeck, joinDeck));
-  });
-  channel.subscribe();
-
-  return { roomId, cancel: () => supabase?.removeChannel(channel) };
-}
-
-/** Join an existing match by room code; B acts second. */
-export function joinMatch(
-  roomId: string,
-  joinDeck: string,
-  onStart: (conn: MatchConnection) => void,
-): void {
-  if (!supabase) throw new Error('Supabase not configured');
-  const channel = supabase.channel(`match:${roomId}`, {
-    config: { broadcast: { self: false } },
-  });
-
-  let started = false;
-  channel.on('broadcast', { event: 'init' }, ({ payload }) => {
-    if (started) return; // ignore a duplicate/retried init
-    started = true;
-    const hostDeck = (payload.deck as string) ?? 'emberwood';
-    onStart(makeConnection(channel, roomId, 'B', payload.seed as number, hostDeck, joinDeck));
-  });
-  channel.subscribe((status) => {
-    if (status === 'SUBSCRIBED') {
-      channel.send({ type: 'broadcast', event: 'join', payload: { deck: joinDeck } });
-    }
-  });
 }
 
 /**
@@ -310,10 +256,9 @@ export function joinMatch(
  * whatever the peer applied while we were away.
  */
 export function rejoinMatch(saved: SavedMatch, onStart: (conn: MatchConnection) => void): void {
-  if (!supabase) throw new Error('Supabase not configured');
-  const channel = supabase.channel(`match:${saved.roomId}`, {
-    config: { broadcast: { self: false } },
-  });
+  const transport = getTransport();
+  if (!transport) throw new Error('Online play is not configured');
+  const channel = transport.channel(`match:${saved.roomId}`);
 
   onStart(
     makeConnection(
@@ -328,8 +273,6 @@ export function rejoinMatch(saved: SavedMatch, onStart: (conn: MatchConnection) 
   );
 
   channel.subscribe((status) => {
-    if (status === 'SUBSCRIBED') {
-      channel.send({ type: 'broadcast', event: 'rejoin', payload: { have: saved.log.length } });
-    }
+    if (status === 'SUBSCRIBED') channel.send('rejoin', { have: saved.log.length });
   });
 }
