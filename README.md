@@ -40,6 +40,13 @@ npm run build    # type-check + production build into dist/
 
 No tables or auth setup needed for MVP — PvP uses Realtime broadcast channels only.
 
+## Match statistics (optional, for balancing)
+
+With the same two variables set, every finished match sends one anonymous record (decks, winner, turns, cards played; nothing about
+the player) to a `match_stats` table, so balance can be judged from real play. Create the table once: Supabase dashboard → **SQL Editor**
+→ paste `supabase/migrations/20261126000000_match_stats.sql` → **Run**. Players can switch it off in the game menu (**Share Stats**).
+What is recorded, who can read it, and how to query it: `docs/MATCH_STATS.md`. PvP itself needs no tables.
+
 ## Mobile (Capacitor)
 
 Requires Android Studio + SDK (free).
