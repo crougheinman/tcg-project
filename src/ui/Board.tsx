@@ -80,6 +80,8 @@ export function Board() {
   const guided = useGame((s) => s.guided);
   const depth = useGame((s) => s.depth);
   const setDepth = useGame((s) => s.setDepth);
+  const shareStats = useGame((s) => s.shareStats);
+  const setShareStats = useGame((s) => s.setShareStats);
   const muted = useGame((s) => s.muted);
   const setMuted = useGame((s) => s.setMuted);
   const setGuided = useGame((s) => s.setGuided);
@@ -1486,6 +1488,16 @@ export function Board() {
                   3D Table
                   <span className="toggle-pill" aria-hidden>
                     {depth ? 'ON' : 'OFF'}
+                  </span>
+                </button>
+                <button
+                  className={'game-menu-item toggle' + (shareStats ? ' on' : '')}
+                  onClick={() => setShareStats(!shareStats)}
+                  title="Send anonymous results of finished matches (decks, winner, turns, cards played) to help balance the game. Nothing about you is sent."
+                >
+                  Share Stats
+                  <span className="toggle-pill" aria-hidden>
+                    {shareStats ? 'ON' : 'OFF'}
                   </span>
                 </button>
                 <button

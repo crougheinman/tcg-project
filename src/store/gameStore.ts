@@ -5,13 +5,13 @@ import type { Action, CardInstance, GameState, PlayerId, Target } from '../engin
 import { actorOf, blitzCue, isFlashCast } from '../engine/rules';
 import { cuesFor } from '../audio/cues';
 import { isMuted, playCues, setMuted as persistMuted } from '../audio/sfx';
-import { deckById, randomDeck } from '../cards/decks';
-import { resolveDeck } from '../cards/customDecks';
+import { DECK_LIST, deckById, randomDeck } from '../cards/decks';
+import { isCustomId, resolveDeck } from '../cards/customDecks';
 import { readDepth, saveDepth } from '../ui/depth';
 import { combatHoldMs } from '../ui/firstStrike';
 import { isIaijutsuOnHana } from '../ui/cinematics';
 import { blockStepIsEmpty } from '../ui/phaseInfo';
-import { getDef } from '../cards/cards';
+import { CARDS, getDef } from '../cards/cards';
 import { aiShouldAct, pickAction } from '../ai/ai';
 import {
   CAST_MS,
@@ -33,6 +33,12 @@ import {
 } from '../ui/fxTiming';
 import type { MatchConnection } from '../net/match';
 import { rejoinMatch } from '../net/match';
+import { supabase } from '../net/supabase';
+import { contentHash } from '../stats/contentHash';
+import { isSharing, setSharing } from '../stats/prefs';
+import type { StatsClient } from '../stats/send';
+import { createStatsSession } from '../stats/session';
+import { APP_VERSION } from '../version';
 import { clearMatch, loadMatch } from '../net/resume';
 
 export type Mode = 'menu' | 'ai' | 'hotseat' | 'pvp';
@@ -64,6 +70,9 @@ interface Store {
   // Sound on/off. Persisted; the synth itself is a no-op while muted.
   muted: boolean;
   setMuted: (v: boolean) => void;
+  // Share anonymous match statistics (for balancing). Persisted; ON by default. See src/stats.
+  shareStats: boolean;
+  setShareStats: (v: boolean) => void;
   // Guided mode: contextual coach bubbles that teach the game. Persisted; ON by
   // default so newcomers get help immediately.
   guided: boolean;
@@ -124,6 +133,23 @@ export interface Spotlight {
 function castableCard(p: GameState['players'][PlayerId], iid: string): CardInstance | undefined {
   return p.hand.find((c) => c.iid === iid) ?? p.graveyard.find((c) => c.iid === iid);
 }
+
+// Match statistics for balancing (src/stats). Fire-and-forget: it watches the actions this store applies and, when a match
+// ends, sends one anonymous record to Supabase. It never touches the game, and a failure is invisible to the player.
+let balanceHash: string | undefined;
+const stats = createStatsSession({
+  client: supabase as unknown as StatsClient | null,
+  kv: typeof localStorage === 'undefined' ? null : localStorage,
+  sharing: () => isSharing(),
+  now: () => Date.now(),
+  gameVersion: APP_VERSION,
+  contentHash: () => (balanceHash ??= contentHash(CARDS, DECK_LIST)),
+  env: import.meta.env.MODE,
+  automated: typeof navigator !== 'undefined' && navigator.webdriver === true, // a scripted browser (the QA harness)
+  newKey: () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `m-${Date.now()}-${Math.random().toString(36).slice(2)}`),
+});
+/** The card list of a custom deck (a built-in deck is identified by its id alone). */
+const customCards = (id: string): string[] | null => (isCustomId(id) ? resolveDeck(id).cards : null);
 
 export const useGame = create<Store>((set, get) => {
   // Should this cast telegraph (delay its resolution so BoardFx can play a lead-in)?
@@ -220,6 +246,7 @@ export const useGame = create<Store>((set, get) => {
           try {
             const next = applyAction(cur.game, action);
             sfx(action, cur.game, next);
+            stats.step(action, cur.game, next);
             pause = phasePauseMs(cur.game, next);
             pause += combatHoldMs(cur.game, next); // let the clash and its banner play out
             set({ game: next, charging: null });
@@ -284,6 +311,11 @@ export const useGame = create<Store>((set, get) => {
       persistMuted(v);
       set({ muted: v });
     },
+    shareStats: isSharing(),
+    setShareStats: (v) => {
+      setSharing(v);
+      set({ shareStats: v });
+    },
     guided: localStorage.getItem('guided') !== '0', // default ON
     setGuided: (v) => {
       localStorage.setItem('guided', v ? '1' : '0');
@@ -307,6 +339,7 @@ export const useGame = create<Store>((set, get) => {
         lastAiDecks: { deck: deckId, oppDeck: aiDeck.id },
         game: createInitialState(seed, resolveDeck(deckId).cards, aiDeck.cards, { mulligan: true }),
       });
+      stats.begin({ mode: 'ai', humanA: true, humanB: false, deckA: resolveDeck(deckId).id, deckB: aiDeck.id, customA: customCards(deckId), customB: customCards(aiDeck.id) });
       scheduleAi(); // in case AI ever goes first (it doesn't on turn 1, but safe)
     },
 
@@ -323,6 +356,7 @@ export const useGame = create<Store>((set, get) => {
         spotlights: [],
         game: createInitialState(seed, resolveDeck(deckA).cards, resolveDeck(deckB).cards, { mulligan: true }),
       });
+      stats.begin({ mode: 'hotseat', humanA: true, humanB: true, deckA: resolveDeck(deckA).id, deckB: resolveDeck(deckB).id, customA: customCards(deckA), customB: customCards(deckB) });
     },
 
     startPvp: (net) => {
@@ -332,7 +366,13 @@ export const useGame = create<Store>((set, get) => {
       let game: GameState;
       try {
         game = createInitialState(net.seed, deckById(net.deckA).cards, deckById(net.deckB).cards, { mulligan: true });
-        for (const a of net.initialLog) game = applyAction(game, a);
+        // Both players' browsers use the same key, so the database keeps one row however many of them report the match.
+        stats.begin({ mode: 'pvp', humanA: true, humanB: true, deckA: net.deckA, deckB: net.deckB, matchKey: `pvp-${net.roomId}-${net.seed}`, rejoined: net.initialLog.length > 0 });
+        for (const a of net.initialLog) {
+          const next = applyAction(game, a);
+          stats.step(a, game, next);
+          game = next;
+        }
       } catch (e) {
         // A log that will not replay is a corrupt record, not a playable match.
         clearMatch();
@@ -348,6 +388,7 @@ export const useGame = create<Store>((set, get) => {
           const spot = spotlightFor(s.game, action, CAST_MS); // the opponent's cast, floated alongside
           const next = applyAction(s.game, action);
           sfx(action, s.game, next);
+          stats.step(action, s.game, next);
           if (next.winner) clearMatch(); // finished — nothing left to reconnect to
           set({ game: next });
           if (spot) pushSpotlight(spot);
@@ -364,6 +405,7 @@ export const useGame = create<Store>((set, get) => {
         const winner = s.myId;
         const why =
           reason === 'aborted' ? 'Your opponent aborted the match.' : 'Your opponent disconnected.';
+        if (s.game) stats.forfeit(s.game, winner, reason === 'aborted' ? 'forfeit' : 'disconnect');
         set({ forfeit: { winner, reason: why }, peerStale: false }); // terminal — stop the "reconnecting" banner
       });
       set({
@@ -416,6 +458,7 @@ export const useGame = create<Store>((set, get) => {
           return;
         }
         sfx(action, cur.game, next);
+        stats.step(action, cur.game, next);
         set({ game: next, error: null, charging: null });
         if (next.winner) clearMatch(); // finished — nothing left to reconnect to
         if (cur.mode === 'pvp' && cur.net) cur.net.sendAction(action);
@@ -458,6 +501,7 @@ export const useGame = create<Store>((set, get) => {
         s.net?.leave();
       }
       clearMatch(); // deliberately leaving — don't offer to reconnect
+      stats.stop(); // an unfinished match records nothing
       set({ mode: 'menu', game: null, net: null, aiId: null, error: null, chat: noChat(), forfeit: null, charging: null, spotlights: [], peerStale: false });
     },
 
@@ -470,12 +514,16 @@ export const useGame = create<Store>((set, get) => {
     toMenu: () => {
       get().net?.leave();
       clearMatch(); // deliberately leaving — don't offer to reconnect
+      stats.stop(); // an unfinished match records nothing
       set({ mode: 'menu', game: null, net: null, aiId: null, error: null, chat: noChat(), forfeit: null, charging: null, spotlights: [], peerStale: false });
     },
 
     clearError: () => set({ error: null }),
   };
 });
+
+// Send any statistics left over from an earlier failure (offline, or the table was not set up yet), once the page has settled.
+if (typeof window !== 'undefined') setTimeout(() => stats.flush(), 4000);
 
 // dev-only: expose the store on window for manual inspection / e2e checks.
 // ponytail: DEV guard strips this from production builds.
