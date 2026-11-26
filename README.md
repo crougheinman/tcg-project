@@ -36,7 +36,9 @@ npm run build    # type-check + production build into dist/
    public by design, and the "remove the public framework prefix" warning is only about that. Then
    **redeploy**: `VITE_` values are baked in at build time.
 3. Restart `npm run dev`. The "Online PvP" button is now enabled.
-4. One player **Hosts** (gets a 4-letter room code), the other **Joins** with that code.
+4. **Find a match**: pick a deck, press it, and you are paired with the next player searching (the screen shows how many are). Both players then see a ready screen, press **Ready**, and the game starts after a 3 second countdown.
+   Or play a friend: one player **Hosts** (gets a 4-letter room code), the other **Joins** with that code; the same ready screen follows.
+   To try online play with no Supabase project, run `npm run dev`, then in two tabs of the same browser run `localStorage.setItem('rt', 'local')` in the console and reload (development only).
 
 No tables or auth setup needed for MVP — PvP uses Realtime broadcast channels only.
 
