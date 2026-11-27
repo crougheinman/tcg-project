@@ -386,7 +386,7 @@ export const PAGES: readonly Page[] = [
     tags: ['hud', 'life', 'cyan', 'red', 'hover', 'hold', 'log', 'activity', 'card details'],
     blocks: [
       { kind: 'figure', id: 'board', caption: 'The battlefield: your side is cyan at the bottom, your opponent\u2019s red at the top.' },
-      { kind: 'list', items: ['Cyan is you; red is your opponent, everywhere on screen.', 'The bar above each side shows life and mana. Floating mana counts.', 'Hover a card, or press and hold it on a phone, to read its full details.', 'The activity log (bottom-right) lists every action, so you can follow what the opponent did.'] },
+      { kind: 'list', items: ['Cyan is you; red is your opponent, everywhere on screen.', 'The bar above each side shows life and mana. Floating mana counts.', 'Hover a card, or press and hold it on a phone, to read its full details.', 'The Activity panel (bottom-right) lists every action, so you can follow what the opponent did. Hide or show it with Activity in the game menu.'] },
     ],
   },
   {

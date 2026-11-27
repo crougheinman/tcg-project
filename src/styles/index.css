@@ -1960,6 +1960,14 @@ input {
   color: var(--vs-paper); background: var(--vs-ink); border: 3px solid var(--vs-yellow);
   box-shadow: 10px 10px 0 rgba(0, 0, 0, 0.55); font-family: 'Barlow Condensed', system-ui, sans-serif; font-weight: 600;
 }
+/* The menu has grown to seven rows: on a short screen (a phone held sideways) it scrolls inside the window and its rows pack tighter,
+   so every row, Sound included, can be reached. */
+.game-menu { max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; }
+@media (max-height: 560px) {
+  .game-menu { padding: 12px 20px 12px; gap: 6px; }
+  .game-menu-title { margin: 0 0 2px; padding-bottom: 4px; font-size: 22px; }
+  .game-menu-item { padding-top: 4px; padding-bottom: 4px; min-height: 40px; }
+}
 .game-menu-title {
   margin: 0 0 6px; padding-bottom: 8px; border-bottom: 4px solid var(--vs-yellow);
   font: italic 400 30px / 1.05 'Anton', sans-serif; text-transform: uppercase; letter-spacing: 0.04em; text-align: center;

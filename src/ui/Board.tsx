@@ -80,6 +80,8 @@ export function Board() {
   const guided = useGame((s) => s.guided);
   const depth = useGame((s) => s.depth);
   const setDepth = useGame((s) => s.setDepth);
+  const showLog = useGame((s) => s.showLog);
+  const setShowLog = useGame((s) => s.setShowLog);
   const shareStats = useGame((s) => s.shareStats);
   const setShareStats = useGame((s) => s.setShareStats);
   const muted = useGame((s) => s.muted);
@@ -1410,7 +1412,7 @@ export function Board() {
         </div>
 
         <div ref={dragBounds} className="drag-layer" />
-        <ActionLog log={game.log} myId={myId} boundsRef={dragBounds} />
+        {showLog && <ActionLog log={game.log} myId={myId} boundsRef={dragBounds} />}
         {mode === 'pvp' && <ChatDock />}
 
         {error && (
@@ -1488,6 +1490,16 @@ export function Board() {
                   3D Table
                   <span className="toggle-pill" aria-hidden>
                     {depth ? 'ON' : 'OFF'}
+                  </span>
+                </button>
+                <button
+                  className={'game-menu-item toggle' + (showLog ? ' on' : '')}
+                  onClick={() => setShowLog(!showLog)}
+                  title="Show or hide the Activity panel, the running log of what has happened"
+                >
+                  Activity
+                  <span className="toggle-pill" aria-hidden>
+                    {showLog ? 'ON' : 'OFF'}
                   </span>
                 </button>
                 <button

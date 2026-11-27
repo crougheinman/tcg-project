@@ -70,6 +70,9 @@ interface Store {
   // Sound on/off. Persisted; the synth itself is a no-op while muted.
   muted: boolean;
   setMuted: (v: boolean) => void;
+  // Show the Activity panel (the running log of what happened). Persisted; ON by default; switched in the game menu.
+  showLog: boolean;
+  setShowLog: (v: boolean) => void;
   // Share anonymous match statistics (for balancing). Persisted; ON by default. See src/stats.
   shareStats: boolean;
   setShareStats: (v: boolean) => void;
@@ -310,6 +313,11 @@ export const useGame = create<Store>((set, get) => {
     setMuted: (v) => {
       persistMuted(v);
       set({ muted: v });
+    },
+    showLog: localStorage.getItem('showLog') !== '0', // default ON
+    setShowLog: (v) => {
+      localStorage.setItem('showLog', v ? '1' : '0');
+      set({ showLog: v });
     },
     shareStats: isSharing(),
     setShareStats: (v) => {

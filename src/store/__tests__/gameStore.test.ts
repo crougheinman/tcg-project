@@ -534,3 +534,15 @@ describe('the opening hand decision', () => {
     expect(useGame.getState().game!.phase).toBe('main1');
   });
 });
+
+describe('the Activity panel switch', () => {
+  it('is on by default, and remembers the choice', () => {
+    expect(useGame.getState().showLog).toBe(true);
+    useGame.getState().setShowLog(false);
+    expect(useGame.getState().showLog).toBe(false);
+    expect(localStorage.getItem('showLog')).toBe('0');
+    useGame.getState().setShowLog(true);
+    expect(useGame.getState().showLog).toBe(true);
+    expect(localStorage.getItem('showLog')).toBe('1');
+  });
+});
