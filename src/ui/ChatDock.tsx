@@ -14,11 +14,17 @@ export function ChatDock() {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
 
+  // Sending anything, a typed line or a quick message, closes the panel: it covers the board, and the point of chat is a quick word.
+  function send(t: string) {
+    sendChat(t);
+    setText('');
+    setOpen(false);
+  }
+
   function submit() {
     const t = text.trim();
     if (!t) return;
-    sendChat(t);
-    setText('');
+    send(t);
   }
 
   return (
@@ -34,7 +40,7 @@ export function ChatDock() {
           >
             <div className="chat-emotes">
               {EMOTES.map((e) => (
-                <button key={e} className="chat-chip" onClick={() => sendChat(e)}>
+                <button key={e} className="chat-chip" onClick={() => send(e)}>
                   {e}
                 </button>
               ))}
